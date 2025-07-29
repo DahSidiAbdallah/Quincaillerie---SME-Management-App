@@ -1,6 +1,24 @@
 #!/usr/bin/env python3
 """
-Quick Setup for Quincaillerie & SME Management App
+Quick Setup for Quincailleriedef create_database():
+    """Create a basic SQLite database"""
+    print("\n🗄️  Creating basic database...")
+    
+    try:
+        import sqlite3
+        
+        # Create database directory
+        Path("app/data").mkdir(parents=True, exist_ok=True)
+        
+        # Get database path from environment or use default
+        env_path = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH')
+        if env_path and env_path.startswith('sqlite:///'):
+            env_path = env_path.replace('sqlite:///', '', 1)
+        db_path = env_path or "app/data/quincaillerie.db"
+        
+        # Create basic database
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()ment App
 Simplified version for Python 3.13 compatibility
 """
 
@@ -126,7 +144,12 @@ app.secret_key = 'quincaillerie-demo-key-change-in-production'
 
 def get_db():
     """Get database connection"""
-    return sqlite3.connect('data/quincaillerie.db')
+    # Get database path from environment or use default
+    env_path = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH')
+    if env_path and env_path.startswith('sqlite:///'):
+        env_path = env_path.replace('sqlite:///', '', 1)
+    db_path = env_path or "app/data/quincaillerie.db"
+    return sqlite3.connect(db_path)
 
 def login_required(f):
     """Decorator to require login"""
