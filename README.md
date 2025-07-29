@@ -42,6 +42,14 @@ http://localhost:5000
 - **Mémoire:** 512 MB RAM minimum
 - **Espace disque:** 100 MB minimum
 
+### Chemin de la base de données
+Par défaut, l'application utilise la base `app/db/quincaillerie.db`. Vous pouvez
+modifier cet emplacement en définissant la variable d'environnement `DATABASE_URL`
+ou `DATABASE_PATH` avant de lancer l'application. Exemple :
+```bash
+export DATABASE_URL=sqlite:///data/quincaillerie.db
+```
+
 ## 🏗️ Structure du Projet
 
 ```

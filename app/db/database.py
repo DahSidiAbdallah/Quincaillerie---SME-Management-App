@@ -16,8 +16,18 @@ import logging
 logger = logging.getLogger(__name__)
 
 class DatabaseManager:
-    def __init__(self, db_path='db/quincaillerie.db'):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
+        """Initialize with a consistent database path."""
+        env_path = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH')
+        if env_path and env_path.startswith('sqlite:///'):
+            env_path = env_path.replace('sqlite:///', '', 1)
+
+        if env_path:
+            self.db_path = os.path.abspath(env_path)
+        else:
+            default_path = os.path.join(os.path.dirname(__file__), 'quincaillerie.db')
+            self.db_path = os.path.abspath(db_path or default_path)
+
         self.ensure_db_directory()
     
     def ensure_db_directory(self):
