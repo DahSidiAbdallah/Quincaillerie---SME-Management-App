@@ -31,6 +31,66 @@ def list_customers():
         return jsonify({'success': False, 'error': str(e)})
 
 
+@customers_bp.route('/customers/<int:customer_id>', methods=['GET'])
+def get_customer(customer_id):
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    try:
+        customer = db_manager.get_customer_by_id(customer_id)
+        if customer:
+            return jsonify({'success': True, 'customer': customer})
+        return jsonify({'success': False, 'error': 'Client non trouvé'}), 404
+    except Exception as e:
+        logger.error(f"Error fetching customer {customer_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@customers_bp.route('/customers/<int:customer_id>', methods=['PUT'])
+def update_customer(customer_id):
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    data = request.get_json() or {}
+    name = data.get('name')
+    phone = data.get('phone', '')
+    email = data.get('email', '')
+    address = data.get('address', '')
+
+    if not name:
+        return jsonify({'success': False, 'error': 'Nom requis'}), 400
+    
+    # Basic email validation
+    if email and '@' not in email:
+        return jsonify({'success': False, 'error': 'Format email invalide'}), 400
+    
+    try:
+        success = db_manager.update_customer(customer_id, name, phone, email, address)
+        if success:
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Client non trouvé ou aucune modification'}), 404
+    except Exception as e:
+        logger.error(f"Error updating customer {customer_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@customers_bp.route('/customers/<int:customer_id>', methods=['DELETE'])
+def delete_customer(customer_id):
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
+    try:
+        success = db_manager.delete_customer(customer_id)
+        if success:
+            return jsonify({'success': True})
+        return jsonify({'success': False, 'error': 'Client non trouvé'}), 404
+    except Exception as e:
+        logger.error(f"Error deleting customer {customer_id}: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
 @customers_bp.route('/customers', methods=['POST'])
 def add_customer():
     auth_check = require_auth()

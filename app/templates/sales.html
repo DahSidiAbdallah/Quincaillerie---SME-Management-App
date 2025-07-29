@@ -315,6 +315,51 @@
                 </div>
             </div>
         </div>
+
+        <!-- Customer Modal -->
+        <div x-show="showCustomerModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Nouveau client</h3>
+                        <button @click="showCustomerModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="createCustomer()">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nom*</label>
+                                <input type="text" x-model="newCustomer.name" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
+                                <input type="text" x-model="newCustomer.phone" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                <input type="email" x-model="newCustomer.email" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Adresse</label>
+                                <textarea x-model="newCustomer.address" class="w-full border border-gray-300 rounded-md px-3 py-2" rows="3"></textarea>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3 mt-6">
+                            <button type="button" @click="showCustomerModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                                Annuler
+                            </button>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md" :disabled="isLoading">
+                                <i class="fas fa-spinner fa-spin mr-2" x-show="isLoading"></i>
+                                Ajouter
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- Footer -->
@@ -343,10 +388,17 @@
                 products: [],
                 showNewSaleModal: false,
                 showCustomerModal: false,
+                isLoading: false,
                 newSale: {
                     customer_id: '',
                     payment_method: 'cash',
                     items: []
+                },
+                newCustomer: {
+                    name: '',
+                    phone: '',
+                    email: '',
+                    address: ''
                 },
                 selectedProduct: '',
                 selectedQuantity: 1,
@@ -358,12 +410,13 @@
                 },
                 
                 loadData() {
-                    // Load sales data
+                    // Load today's sales data
                     fetch('/api/sales')
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
                                 this.sales = data.sales || [];
+                                console.log('Sales data loaded:', this.sales.length, 'sales found');
                             }
                         })
                         .catch(error => console.error('Error loading sales:', error));
@@ -374,6 +427,7 @@
                         .then(data => {
                             if (data.success) {
                                 this.stats = data.stats || this.stats;
+                                console.log('Sales stats loaded:', this.stats);
                             }
                         })
                         .catch(error => console.error('Error loading sales stats:', error));
@@ -504,6 +558,60 @@
                         'cancelled': 'Annulé'
                     };
                     return statusMap[status] || status;
+                },
+                
+                createCustomer() {
+                    if (!this.newCustomer.name) {
+                        alert('Le nom du client est requis');
+                        return;
+                    }
+                    
+                    // Basic email validation
+                    if (this.newCustomer.email && !this.newCustomer.email.includes('@')) {
+                        alert('Format d\'email invalide');
+                        return;
+                    }
+                    
+                    this.isLoading = true;
+                    
+                    fetch('/api/customers', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(this.newCustomer)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            // Reload customers list
+                            fetch('/api/customers')
+                                .then(response => response.json())
+                                .then(data => {
+                                    if (data.success) {
+                                        this.customers = data.customers || [];
+                                        
+                                        // Set the new customer as the selected one in the sale form
+                                        if (this.newSale && data.customer_id) {
+                                            this.newSale.customer_id = data.customer_id;
+                                        }
+                                    }
+                                })
+                                .catch(error => console.error('Error loading customers:', error));
+                                
+                            this.showCustomerModal = false;
+                            this.newCustomer = { name: '', phone: '', email: '', address: '' };
+                            alert('Client ajouté avec succès');
+                        } else {
+                            alert('Erreur: ' + data.error);
+                        }
+                        this.isLoading = false;
+                    })
+                    .catch(error => {
+                        console.error('Error creating customer:', error);
+                        alert('Erreur lors de la création du client');
+                        this.isLoading = false;
+                    });
                 }
             }
         }

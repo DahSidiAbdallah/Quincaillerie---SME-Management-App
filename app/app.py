@@ -361,6 +361,13 @@ def inventory():
     return render_template('inventory.html')
 
 
+@app.route('/customers')
+@login_required
+def customers():
+    """Customers management page"""
+    return render_template('customers.html')
+
+
 @app.route('/sales')
 @login_required
 def sales():

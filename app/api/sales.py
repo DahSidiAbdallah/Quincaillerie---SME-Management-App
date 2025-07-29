@@ -209,6 +209,11 @@ def get_sales():
         if start_date:
             query += ' AND DATE(s.sale_date) >= ?'
             params.append(start_date)
+        elif not end_date:
+            # Default: show only sales from today if no date filter specified
+            today_date = datetime.now().strftime('%Y-%m-%d')
+            query += ' AND DATE(s.sale_date) = ?'
+            params.append(today_date)
         
         if end_date:
             query += ' AND DATE(s.sale_date) <= ?'
@@ -301,12 +306,13 @@ def get_sales_stats():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        # Get today's sales count and amount
+        # Get today's sales count and amount using exact date
+        today_date = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as amount
             FROM sales
-            WHERE DATE(sale_date) = DATE('now')
-        ''')
+            WHERE DATE(sale_date) = ?
+        ''', (today_date,))
         today_sales = cursor.fetchone()
         
         # Get active customers (made purchases in last 30 days)

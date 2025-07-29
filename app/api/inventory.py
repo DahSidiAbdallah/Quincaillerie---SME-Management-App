@@ -21,6 +21,32 @@ def require_auth():
         return jsonify({'success': False, 'message': 'Non authentifié'}), 401
     return None
 
+@inventory_bp.route('/stats', methods=['GET'])
+def get_inventory_stats():
+    """Get inventory statistics"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
+    try:
+        # Get inventory stats from database manager
+        stats = db_manager.get_inventory_stats()
+        
+        # Return stats with metadata
+        return jsonify({
+            'success': True, 
+            'stats': stats,
+            'metadata': {
+                'timestamp': datetime.now().isoformat(),
+                'source': 'inventory/stats',
+                'description': 'Current inventory statistics'
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching inventory stats: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des statistiques d\'inventaire'}), 500
+
 @inventory_bp.route('/products', methods=['GET'])
 def get_products():
     """Get all products with optional filtering"""

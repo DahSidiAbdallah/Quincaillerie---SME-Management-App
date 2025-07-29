@@ -542,7 +542,10 @@ class DatabaseManager:
         """Get today's sales summary"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        today = datetime.now().date()
+        
+        # Format today's date as YYYY-MM-DD to ensure consistency
+        today = datetime.now().strftime('%Y-%m-%d')
+        
         cursor.execute('''
             SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as total
             FROM sales WHERE DATE(sale_date) = ?
@@ -797,26 +800,69 @@ class DatabaseManager:
         conn.commit()
         conn.close()
         return customer_id
+    
+    def get_customer_by_id(self, customer_id):
+        """Get a customer by ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT id, name, phone, email, address, created_at, updated_at
+            FROM customers
+            WHERE id = ? AND is_active = 1
+        ''', (customer_id,))
+        customer = cursor.fetchone()
+        conn.close()
+        return dict(customer) if customer else None
+    
+    def update_customer(self, customer_id, name, phone='', email='', address=''):
+        """Update an existing customer record"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE customers
+            SET name = ?, phone = ?, email = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_active = 1
+        ''', (name, phone, email, address, customer_id))
+        rows_affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return rows_affected > 0
+    
+    def delete_customer(self, customer_id):
+        """Soft delete a customer (mark as inactive)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            UPDATE customers
+            SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND is_active = 1
+        ''', (customer_id,))
+        rows_affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        return rows_affected > 0
         
     def get_sales_stats(self):
         """Get statistics for sales dashboard"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Today's sales
+        # Today's sales - explicitly using current date to avoid timezone issues
+        today_date = datetime.now().strftime('%Y-%m-%d')
         cursor.execute('''
             SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as amount
             FROM sales
-            WHERE DATE(sale_date) = DATE('now')
-        ''')
+            WHERE DATE(sale_date) = ?
+        ''', (today_date,))
         today = cursor.fetchone()
         
-        # This month's sales
+        # This month's sales - using current year and month
+        current_month = datetime.now().strftime('%Y-%m')
         cursor.execute('''
             SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as amount
             FROM sales
-            WHERE strftime('%Y-%m', sale_date) = strftime('%Y-%m', 'now')
-        ''')
+            WHERE strftime('%Y-%m', sale_date) = ?
+        ''', (current_month,))
         month = cursor.fetchone()
         
         # Credit sales

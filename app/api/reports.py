@@ -37,10 +37,20 @@ def generate_sales_report():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        # Get parameters
-        start_date = request.args.get('start_date', (date.today() - timedelta(days=30)).isoformat())
-        end_date = request.args.get('end_date', date.today().isoformat())
+        # Get parameters with clear defaults
+        today = date.today().isoformat()
+        # Default to all-time data for reports if no date range specified
+        start_date = request.args.get('start_date', '2000-01-01')
+        end_date = request.args.get('end_date', today)
         group_by = request.args.get('group_by', 'day')  # day, week, month
+        
+        # Add report metadata for clarity
+        report_metadata = {
+            'report_type': 'Sales Report',
+            'date_range': f'From {start_date} to {end_date}',
+            'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'report_notes': 'This report shows historical data across all time by default.'
+        }
         
         # Sales summary by period
         if group_by == 'day':
@@ -136,7 +146,9 @@ def generate_sales_report():
                 'sales_by_period': sales_by_period,
                 'top_products': top_products,
                 'sales_by_category': sales_by_category,
-                'generated_at': datetime.now().isoformat()
+                'generated_at': datetime.now().isoformat(),
+                'metadata': report_metadata,
+                'note': 'Report shows historical data across all time, which may differ from today\'s sales'
             }
         })
         
