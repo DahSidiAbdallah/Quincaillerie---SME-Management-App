@@ -10,6 +10,11 @@ function apiFetch(url, options = {}) {
     if (!options.headers) {
         options.headers = {};
     }
+
+    // Always send cookies for authentication
+    if (!options.credentials) {
+        options.credentials = 'same-origin';
+    }
     
     // Set content type if not provided and method is not GET
     if (options.method && options.method !== 'GET' && !options.headers['Content-Type']) {
