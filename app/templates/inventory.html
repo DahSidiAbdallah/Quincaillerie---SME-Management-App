@@ -514,14 +514,20 @@
                 params.append('low_stock', 'true');
             }
             
+            console.log('Fetching products with params:', params.toString());
             const response = await fetch(`/api/inventory/products?${params}`);
             const data = await response.json();
             
+            console.log('API Response:', data);
+            
             if (data.success) {
                 currentProducts = data.products;
+                console.log(`Loaded ${currentProducts.length} products`);
                 displayProducts();
                 updateStats(data.stats);
+                console.log('Stats updated:', data.stats);
             } else {
+                console.error('API error:', data.message);
                 showNotification('Erreur lors du chargement des produits', 'error');
             }
         } catch (error) {

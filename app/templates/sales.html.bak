@@ -78,7 +78,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="salesManager()" x-init="$nextTick(() => { filterDate = 'all'; loadData(); })">
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="salesManager()">
         <!-- Page Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Gestion des Ventes</h1>
@@ -168,12 +168,6 @@
                             <option value="paid">Payé</option>
                             <option value="pending">En attente</option>
                             <option value="cancelled">Annulé</option>
-                        </select>
-                        <select x-model="filterDate" @change="loadData()" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-                            <option value="all">Toutes les périodes</option>
-                            <option value="today">Aujourd'hui</option>
-                            <option value="week">7 derniers jours</option>
-                            <option value="month">30 derniers jours</option>
                         </select>
                     </div>
                 </div>
@@ -382,9 +376,7 @@
 
     <script>
         function salesManager() {
-                
-                    filterDate: 'all',
-            
+            return {
                 stats: {
                     today_sales: '0',
                     active_customers: 0,
@@ -418,8 +410,8 @@
                 },
                 
                 loadData() {
-                    // Load sales data with 'all' filter to get all sales
-                    fetch('/api/sales?limit=100')
+                    // Load today's sales data
+                    fetch('/api/sales')
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
@@ -462,9 +454,6 @@
                             console.log('Customers API response:', data);
                             if (data.success) {
                                 this.customers = data.customers || [];
-                                // Sort customers by ID to ensure consistent ordering
-                                this.customers.sort((a, b) => a.id - b.id);
-                                this.stats.active_customers = this.customers.length;
                                 console.log(`Loaded ${this.customers.length} customers:`, this.customers);
                             }
                         })
@@ -624,42 +613,7 @@
                         console.error('Error creating customer:', error);
                         alert('Erreur lors de la création du client');
                         this.isLoading = false;
-        
-                // Debug method to show API data
-                showDebugInfo() {
-                    console.log('Debug Info:');
-                  
-                <!-- Debug button (temporary) -->
-                <button @click="showDebugInfo()" 
-                        class="ml-2 px-2 py-1 bg-gray-600 text-white text-xs rounded hover:bg-gray-700"
-                        style="position: fixed; bottom: 10px; right: 10px; z-index: 999;">
-                    Debug
-                </button>
-              console.log('Sales:', this.sales);
-                    console.log('Customers:', this.customers);
-                    console.log('Stats:', this.stats);
-                    
-                    // Add a debug output to the page temporarily
-                    const debugDiv = document.createElement('div');
-                    debugDiv.style.position = 'fixed';
-                    debugDiv.style.bottom = '20px';
-                    debugDiv.style.right = '20px';
-                    debugDiv.style.backgroundColor = 'rgba(0,0,0,0.8)';
-                    debugDiv.style.color = 'white';
-                    debugDiv.style.padding = '10px';
-                    debugDiv.style.borderRadius = '5px';
-                    debugDiv.style.maxHeight = '300px';
-                    debugDiv.style.overflowY = 'auto';
-                    debugDiv.style.zIndex = '9999';
-                    debugDiv.innerHTML = `
-                        <h4>Debug Info (click to close)</h4>
-                        <p>Sales: ${this.sales.length}</p>
-                        <p>Customers: ${this.customers.length}</p>
-                        <pre>${JSON.stringify({sales: this.sales, stats: this.stats}, null, 2)}</pre>
-                    `;
-                    debugDiv.onclick = () => document.body.removeChild(debugDiv);
-                    document.body.appendChild(debugDiv);
-                },            });
+                    });
                 }
             }
         }

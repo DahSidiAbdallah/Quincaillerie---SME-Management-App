@@ -78,7 +78,7 @@
     </header>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="salesManager()" x-init="$nextTick(() => { filterDate = 'all'; loadData(); })">
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="salesManager()">
         <!-- Page Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Gestion des Ventes</h1>
@@ -168,12 +168,6 @@
                             <option value="paid">Payé</option>
                             <option value="pending">En attente</option>
                             <option value="cancelled">Annulé</option>
-                        </select>
-                        <select x-model="filterDate" @change="loadData()" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-                            <option value="all">Toutes les périodes</option>
-                            <option value="today">Aujourd'hui</option>
-                            <option value="week">7 derniers jours</option>
-                            <option value="month">30 derniers jours</option>
                         </select>
                     </div>
                 </div>
@@ -382,9 +376,7 @@
 
     <script>
         function salesManager() {
-                
-                    filterDate: 'all',
-            
+            return {
                 stats: {
                     today_sales: '0',
                     active_customers: 0,

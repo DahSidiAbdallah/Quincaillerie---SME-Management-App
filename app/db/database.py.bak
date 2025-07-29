@@ -782,22 +782,22 @@ class DatabaseManager:
         has_table = cursor.fetchone() is not None
 
         if has_table:
-            cursor.execute("""
+            cursor.execute('''
                 SELECT id, name, phone
                 FROM customers
                 WHERE is_active = 1
-                ORDER BY id
-            """)
+                ORDER BY name
+            ''')
         else:
             # Fallback: derive customers from sales table
-            cursor.execute("""
+            cursor.execute('''
                 SELECT MIN(rowid) as id, customer_name as name, customer_phone as phone
                 FROM sales
                 WHERE customer_name != ''
                 GROUP BY customer_name, customer_phone
                 ORDER BY customer_name
-            """)
-        
+            ''')
+
         customers = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return customers
