@@ -474,7 +474,19 @@ class DatabaseManager:
         """Return application settings as dict"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT key, value FROM app_settings')
+        try:
+            cursor.execute('SELECT key, value FROM app_settings')
+        except sqlite3.OperationalError:
+            # Table may be missing in older databases
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+            conn.commit()
+            return {}
+
         data = {row['key']: row['value'] for row in cursor.fetchall()}
         conn.close()
         return data
@@ -485,6 +497,16 @@ class DatabaseManager:
             return
         conn = self.get_connection()
         cursor = conn.cursor()
+        try:
+            cursor.execute('SELECT 1 FROM app_settings LIMIT 1')
+        except sqlite3.OperationalError:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+            conn.commit()
         for k, v in settings.items():
             cursor.execute('REPLACE INTO app_settings (key, value) VALUES (?, ?)', (k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)))
         conn.commit()
