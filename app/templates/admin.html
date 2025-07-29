@@ -4,10 +4,13 @@
 
 {% block extra_head %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="{{ url_for('static', filename='js/alpine-admin-extensions.js') }}"></script>
+<script src="{{ url_for('static', filename='js/alpine-realtime-patch.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin-diagnostics.js') }}" defer></script>
 {% endblock %}
 
 {% block content %}
-<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="adminManager()" x-init="init()">
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="adminManager()" x-init="init()" x-admin-fix>
         <!-- Page Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Panneau d'Administration</h1>
@@ -138,13 +141,13 @@
                             <select x-model="settings.default_language" class="w-full border border-gray-300 rounded-md px-3 py-2">
                                 <option value="fr">Français</option>
                                 <option value="ar">العربية</option>
-                                <option value="en">English</option>
+                                
                             </select>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Devise</label>
                             <select x-model="settings.currency" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                                <option value="MRU">Dirham (MRU)</option>
+                                <option value="MRU">Ouguiyas (MRU)</option>
                                 <option value="EUR">Euro (€)</option>
                                 <option value="USD">Dollar ($)</option>
                             </select>
@@ -383,20 +386,85 @@
                 },
                 
                 loadData() {
+                    console.log('Loading admin data...');
+                    
+                    // Helper function to store users in a global variable for backup access
+                    const storeGlobalData = (type, data) => {
+                        if (!window.__adminData) window.__adminData = {};
+                        window.__adminData[type] = data;
+                    };
+                    
+                    // Load users data
                     apiFetch('/api/auth/users')
                         .then(r => r.json())
-                        .then(data => { if (data.success) { this.users = data.users || []; } })
-                        .catch(err => console.error('Error loading users:', err));
+                        .then(data => { 
+                            if (data.success) { 
+                                this.users = data.users || []; 
+                                console.log('Users loaded:', this.users.length);
+                                // Store in global backup
+                                storeGlobalData('users', this.users);
+                                // Dispatch event for diagnostics tool
+                                document.dispatchEvent(new CustomEvent('admin-users-loaded', { detail: this.users }));
+                            } else {
+                                console.error('Error loading users:', data.message);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error loading users:', err);
+                            // Try to load from global backup if available
+                            if (window.__adminData && window.__adminData.users) {
+                                this.users = window.__adminData.users;
+                                console.log('Loaded users from backup cache');
+                            }
+                        });
 
+                    // Load settings data
                     apiFetch('/api/admin/settings')
                         .then(r => r.json())
-                        .then(data => { if (data.success) { this.settings = data.settings || {}; } })
-                        .catch(err => console.error('Error loading settings:', err));
+                        .then(data => { 
+                            if (data.success) { 
+                                this.settings = data.settings || {}; 
+                                console.log('Settings loaded:', Object.keys(this.settings).length);
+                                // Store in global backup
+                                storeGlobalData('settings', this.settings);
+                                // Dispatch event for diagnostics tool
+                                document.dispatchEvent(new CustomEvent('admin-settings-loaded', { detail: this.settings }));
+                            } else {
+                                console.error('Error loading settings:', data.message);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error loading settings:', err);
+                            // Try to load from global backup if available
+                            if (window.__adminData && window.__adminData.settings) {
+                                this.settings = window.__adminData.settings;
+                                console.log('Loaded settings from backup cache');
+                            }
+                        });
 
+                    // Load backups data
                     apiFetch('/api/admin/backups')
                         .then(r => r.json())
-                        .then(data => { if (data.success) { this.backups = data.backups || []; } })
-                        .catch(err => console.error('Error loading backups:', err));
+                        .then(data => { 
+                            if (data.success) { 
+                                this.backups = data.backups || []; 
+                                console.log('Backups loaded:', this.backups.length);
+                                // Store in global backup
+                                storeGlobalData('backups', this.backups);
+                                // Dispatch event for diagnostics tool
+                                document.dispatchEvent(new CustomEvent('admin-backups-loaded', { detail: this.backups }));
+                            } else {
+                                console.error('Error loading backups:', data.message);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error loading backups:', err);
+                            // Try to load from global backup if available
+                            if (window.__adminData && window.__adminData.backups) {
+                                this.backups = window.__adminData.backups;
+                                console.log('Loaded backups from backup cache');
+                            }
+                        });
                 },
                 
                 createUser() {
@@ -433,60 +501,164 @@
                 },
                 
                 toggleUserStatus(user) {
+                    console.log('Toggling user status for:', user.username);
+                    // Save the current status to revert in case of error
+                    const originalStatus = user.is_active;
+                    
+                    // Optimistic UI update - update UI immediately
+                    user.is_active = !user.is_active;
+                    
                     apiFetch(`/api/auth/users/${user.id}`, {
                         method: 'PUT',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({is_active: !user.is_active})
+                        body: JSON.stringify({is_active: user.is_active})
                     })
                         .then(r => r.json())
                         .then(data => {
                             if (data.success) {
-                                user.is_active = !user.is_active;
+                                console.log('User status updated successfully');
                             } else {
+                                // Revert the optimistic update if there was an error
+                                user.is_active = originalStatus;
                                 alert(data.message || 'Erreur de mise à jour');
                             }
                         })
-                        .catch(err => console.error('Error updating user:', err));
+                        .catch(err => {
+                            console.error('Error updating user:', err);
+                            // Revert the optimistic update on error
+                            user.is_active = originalStatus;
+                            alert('Erreur lors de la mise à jour. Veuillez réessayer.');
+                        });
                 },
                 
                 deleteUser(user) {
                     if (confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.username}?`)) {
+                        console.log('Deleting user:', user.username);
+                        
+                        // Store user for potential restoration
+                        const deletedUser = {...user};
+                        
+                        // Optimistic UI update - remove from list immediately
+                        this.users = this.users.filter(u => u.id !== user.id);
+                        
                         apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' })
                             .then(r => r.json())
                             .then(data => {
                                 if (data.success) {
-                                    this.users = this.users.filter(u => u.id !== user.id);
+                                    console.log('User deleted successfully');
                                 } else {
+                                    // Restore user to the list if deletion failed
+                                    this.users.push(deletedUser);
                                     alert(data.message || 'Erreur de suppression');
                                 }
                             })
-                            .catch(err => console.error('Error deleting user:', err));
+                            .catch(err => {
+                                console.error('Error deleting user:', err);
+                                // Restore user to the list on error
+                                this.users.push(deletedUser);
+                                alert('Erreur lors de la suppression. Veuillez réessayer.');
+                            });
                     }
                 },
                 
                 saveSettings() {
+                    console.log('Saving settings:', this.settings);
+                    
+                    // Save a copy of the settings before saving
+                    const originalSettings = JSON.parse(JSON.stringify(this.settings));
+                    
+                    // Show saving status
+                    const statusEl = document.createElement('div');
+                    statusEl.id = 'settings-save-status';
+                    statusEl.textContent = 'Sauvegarde des paramètres en cours...';
+                    statusEl.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white; padding: 10px; border-radius: 5px; z-index: 9999;';
+                    document.body.appendChild(statusEl);
+                    
                     apiFetch('/api/admin/settings', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(this.settings)
                     })
                         .then(r => r.json())
-                        .then(data => { if (data.success) alert('Paramètres sauvegardés'); else alert(data.message || 'Erreur'); })
-                        .catch(err => console.error('Error saving settings:', err));
+                        .then(data => { 
+                            if (data.success) {
+                                statusEl.textContent = 'Paramètres sauvegardés avec succès';
+                                statusEl.style.background = '#10b981';
+                                setTimeout(() => statusEl.remove(), 3000);
+                                
+                                // Show feedback without blocking alert
+                                const feedback = document.createElement('div');
+                                feedback.textContent = '✅ Paramètres sauvegardés';
+                                feedback.style.cssText = 'position: fixed; bottom: 20px; left: 20px; background: #10b981; color: white; padding: 10px; border-radius: 5px; z-index: 9998;';
+                                document.body.appendChild(feedback);
+                                setTimeout(() => feedback.remove(), 3000);
+                                
+                                console.log('Settings saved successfully');
+                            } else {
+                                // Restore original settings on error
+                                this.settings = originalSettings;
+                                
+                                statusEl.textContent = 'Erreur: ' + (data.message || 'Erreur lors de la sauvegarde des paramètres');
+                                statusEl.style.background = '#ef4444';
+                                setTimeout(() => statusEl.remove(), 3000);
+                                
+                                alert(data.message || 'Erreur lors de la sauvegarde des paramètres');
+                                console.error('Error saving settings:', data.message);
+                            }
+                        })
+                        .catch(err => {
+                            // Restore original settings on error
+                            this.settings = originalSettings;
+                            
+                            statusEl.textContent = 'Erreur lors de la sauvegarde des paramètres';
+                            statusEl.style.background = '#ef4444';
+                            setTimeout(() => statusEl.remove(), 3000);
+                            
+                            console.error('Error saving settings:', err);
+                            alert('Erreur lors de la sauvegarde des paramètres');
+                        });
                 },
                 
                 createBackup() {
+                    console.log('Creating backup...');
+                    
+                    // Show creating status
+                    const statusEl = document.createElement('div');
+                    statusEl.id = 'backup-status';
+                    statusEl.textContent = 'Création de la sauvegarde en cours...';
+                    statusEl.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white; padding: 10px; border-radius: 5px; z-index: 9999;';
+                    document.body.appendChild(statusEl);
+                    
                     apiFetch('/api/admin/backups', {method: 'POST'})
                         .then(r => r.json())
                         .then(data => {
                             if (data.success) {
+                                // Update status
+                                statusEl.textContent = 'Sauvegarde créée avec succès!';
+                                statusEl.style.background = '#10b981';
+                                
+                                // Refresh data immediately
                                 this.loadData();
-                                alert('Sauvegarde créée avec succès!');
+                                
+                                // Alert user
+                                setTimeout(() => alert('Sauvegarde créée avec succès!'), 500);
+                                
+                                // Remove status after 3 seconds
+                                setTimeout(() => statusEl.remove(), 3000);
                             } else {
+                                statusEl.textContent = 'Erreur: ' + (data.message || 'Erreur création sauvegarde');
+                                statusEl.style.background = '#ef4444';
+                                setTimeout(() => statusEl.remove(), 3000);
                                 alert(data.message || 'Erreur création sauvegarde');
                             }
                         })
-                        .catch(err => console.error('Error creating backup:', err));
+                        .catch(err => {
+                            console.error('Error creating backup:', err);
+                            statusEl.textContent = 'Erreur lors de la création de la sauvegarde';
+                            statusEl.style.background = '#ef4444';
+                            setTimeout(() => statusEl.remove(), 3000);
+                            alert('Erreur lors de la création de la sauvegarde');
+                        });
                 },
                 
                 scheduleBackup() {
@@ -499,10 +671,48 @@
                 
                 deleteBackup(backup) {
                     if (!confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) return;
+                    
+                    console.log('Deleting backup:', backup.id);
+                    
+                    // Store backup for potential restoration
+                    const deletedBackup = {...backup};
+                    
+                    // Optimistic UI update - remove from list immediately
+                    this.backups = this.backups.filter(b => b.id !== backup.id);
+                    
+                    // Show status notification
+                    const statusEl = document.createElement('div');
+                    statusEl.id = 'delete-backup-status';
+                    statusEl.textContent = 'Suppression en cours...';
+                    statusEl.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white; padding: 10px; border-radius: 5px; z-index: 9999;';
+                    document.body.appendChild(statusEl);
+                    
                     apiFetch(`/api/admin/backups/${backup.id}`, {method: 'DELETE'})
                         .then(r => r.json())
-                        .then(data => { if (data.success) { this.backups = this.backups.filter(b => b.id !== backup.id); } else { alert(data.message || 'Erreur'); } })
-                        .catch(err => console.error('Error deleting backup:', err));
+                        .then(data => { 
+                            if (data.success) { 
+                                console.log('Backup deleted successfully');
+                                statusEl.textContent = 'Sauvegarde supprimée avec succès';
+                                statusEl.style.background = '#10b981';
+                                setTimeout(() => statusEl.remove(), 3000);
+                            } else { 
+                                // Restore backup to the list if deletion failed
+                                this.backups.push(deletedBackup);
+                                statusEl.textContent = 'Erreur: ' + (data.message || 'Erreur de suppression');
+                                statusEl.style.background = '#ef4444';
+                                setTimeout(() => statusEl.remove(), 3000);
+                                alert(data.message || 'Erreur'); 
+                            } 
+                        })
+                        .catch(err => {
+                            console.error('Error deleting backup:', err);
+                            // Restore backup to the list on error
+                            this.backups.push(deletedBackup);
+                            statusEl.textContent = 'Erreur lors de la suppression';
+                            statusEl.style.background = '#ef4444';
+                            setTimeout(() => statusEl.remove(), 3000);
+                            alert('Erreur lors de la suppression. Veuillez réessayer.');
+                        });
                 }
             }
         }

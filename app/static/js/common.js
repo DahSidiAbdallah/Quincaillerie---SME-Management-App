@@ -3,6 +3,35 @@
  * For use across all templates
  */
 
+// Safe apiFetch function for authenticated API calls
+function apiFetch(url, options = {}) {
+    // Add auth token to headers if needed
+    // Set defaults if options not provided
+    if (!options.headers) {
+        options.headers = {};
+    }
+    
+    // Set content type if not provided and method is not GET
+    if (options.method && options.method !== 'GET' && !options.headers['Content-Type']) {
+        options.headers['Content-Type'] = 'application/json';
+    }
+    
+    // Return the fetch promise
+    return fetch(url, options)
+        .then(response => {
+            if (response.status === 401) {
+                // Redirect to login on auth failure
+                window.location.href = '/login';
+                throw new Error('Not authenticated');
+            }
+            return response;
+        })
+        .catch(error => {
+            console.error('API fetch error:', error);
+            throw error;
+        });
+}
+
 // Change language function - redirects to language change endpoint
 function changeLanguage(lang) {
     // Save current path for redirect back
