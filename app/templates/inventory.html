@@ -369,8 +369,8 @@
                 </div>
                 
                 <div>
-                    <label for="sellPrice" class="block text-sm font-medium text-gray-700">Prix de Vente (MRU) *</label>
-                    <input type="number" id="sellPrice" name="sell_price" step="0.01" min="0" required 
+                    <label for="salePrice" class="block text-sm font-medium text-gray-700">Prix de Vente (MRU) *</label>
+                    <input type="number" id="salePrice" name="sale_price" step="0.01" min="0" required
                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
                 
@@ -489,7 +489,7 @@
         
         // Price calculation
         document.getElementById('purchasePrice').addEventListener('input', calculateMargin);
-        document.getElementById('sellPrice').addEventListener('input', calculateMargin);
+        document.getElementById('salePrice').addEventListener('input', calculateMargin);
         
         // Form submission
         document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
@@ -603,7 +603,7 @@
                 
                 <div class="flex items-center justify-between">
                     <span class="text-sm text-gray-600">Prix:</span>
-                    <span class="text-lg font-bold text-gray-900">${product.sell_price} MRU</span>
+                    <span class="text-lg font-bold text-gray-900">${product.sale_price} MRU</span>
                 </div>
                 
                 ${product.description ? `
@@ -668,7 +668,7 @@
                 </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${product.sell_price} MRU
+                ${product.sale_price} MRU
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="flex space-x-2">
@@ -767,7 +767,7 @@
                 document.getElementById('productUnit').value = product.unit;
                 document.getElementById('productDescription').value = product.description || '';
                 document.getElementById('purchasePrice').value = product.purchase_price || '';
-                document.getElementById('sellPrice').value = product.sell_price;
+                document.getElementById('salePrice').value = product.sale_price;
                 document.getElementById('currentStock').value = product.current_stock;
                 document.getElementById('minStock').value = product.min_stock || '';
                 document.getElementById('maxStock').value = product.max_stock || '';
@@ -823,11 +823,11 @@
     
     function calculateMargin() {
         const purchasePrice = parseFloat(document.getElementById('purchasePrice').value) || 0;
-        const sellPrice = parseFloat(document.getElementById('sellPrice').value) || 0;
-        
+        const salePriceValue = parseFloat(document.getElementById('salePrice').value) || 0;
+
         let margin = 0;
-        if (purchasePrice > 0 && sellPrice > 0) {
-            margin = ((sellPrice - purchasePrice) / purchasePrice * 100).toFixed(2);
+        if (purchasePrice > 0 && salePriceValue > 0) {
+            margin = ((salePriceValue - purchasePrice) / purchasePrice * 100).toFixed(2);
         }
         
         document.getElementById('marginDisplay').value = margin + '%';
