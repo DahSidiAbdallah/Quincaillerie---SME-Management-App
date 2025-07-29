@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Minimal API Test</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        button { padding: 10px; margin: 10px 0; }
+        #result { border: 1px solid #ccc; padding: 10px; margin-top: 10px; min-height: 100px; }
+        .product { margin-bottom: 10px; padding: 10px; border: 1px solid #eee; }
+    </style>
+</head>
+<body>
+    <h1>Minimal API Test</h1>
+    <p>This tests the direct API connection to make sure it's working.</p>
+    
+    <button id="loginBtn">1. Login</button>
+    <button id="testApiBtn">2. Test API</button>
+    <button id="clearBtn">Clear Results</button>
+    
+    <div id="result">Results will appear here...</div>
+    
+    <script>
+        // Simple logging function
+        function log(message) {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML += `<p>${message}</p>`;
+        }
+        
+        // Login function
+        async function login() {
+            try {
+                log('Logging in...');
+                
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        username: 'admin',
+                        pin: '1234'
+                    })
+                });
+                
+                if (!response.ok) {
+                    log(`❌ Login failed with status: ${response.status}`);
+                    return;
+                }
+                
+                const data = await response.json();
+                log(`✅ Login ${data.success ? 'successful' : 'failed'}: ${data.message || ''}`);
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Test API function
+        async function testApi() {
+            try {
+                log('Testing API...');
+                
+                const response = await fetch('/api/inventory/products', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    log(`❌ API request failed with status: ${response.status}`);
+                    return;
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    log(`✅ API call successful! Found ${data.products.length} products`);
+                    
+                    // Display first 3 products
+                    const productsToShow = data.products.slice(0, 3);
+                    productsToShow.forEach(product => {
+                        const productDiv = document.createElement('div');
+                        productDiv.className = 'product';
+                        productDiv.innerHTML = `
+                            <strong>${product.name}</strong><br>
+                            Price: ${product.sale_price}<br>
+                            Stock: ${product.current_stock}
+                        `;
+                        document.getElementById('result').appendChild(productDiv);
+                    });
+                } else {
+                    log(`❌ API returned error: ${data.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`);
+            }
+        }
+        
+        // Add event listeners
+        document.getElementById('loginBtn').addEventListener('click', login);
+        document.getElementById('testApiBtn').addEventListener('click', testApi);
+        document.getElementById('clearBtn').addEventListener('click', () => {
+            document.getElementById('result').innerHTML = '';
+        });
+    </script>
+</body>
+</html>

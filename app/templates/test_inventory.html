@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Inventory API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+        }
+        .product-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            transition: all 0.3s ease;
+        }
+        .product-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+            border-color: #3b82f6;
+        }
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #3b82f6;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .log-info { background-color: #e1f5fe; }
+        .log-error { background-color: #ffebee; }
+        .log-success { background-color: #e8f5e9; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6">Test d'Inventaire API</h1>
+        
+        <div class="grid grid-cols-1 gap-6 mb-6">
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">1. Authentification</h2>
+                <div class="flex space-x-4 mb-4">
+                    <input type="text" id="username" placeholder="Nom d'utilisateur" value="admin" 
+                           class="border rounded px-3 py-2 w-1/3">
+                    <input type="text" id="pin" placeholder="PIN" value="1234"
+                           class="border rounded px-3 py-2 w-1/3">
+                    <button id="loginBtn" class="bg-blue-600 text-white px-4 py-2 rounded">
+                        Se connecter
+                    </button>
+                </div>
+                <div id="authStatus" class="text-sm text-gray-600">Non connecté</div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">2. Requête API</h2>
+                <div class="flex space-x-4 mb-4">
+                    <button id="fetchProductsBtn" class="bg-green-600 text-white px-4 py-2 rounded">
+                        Obtenir Produits (Fetch)
+                    </button>
+                </div>
+                <div id="apiStatus" class="text-sm text-gray-600">En attente...</div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">3. Produits</h2>
+                <div id="loading" class="loading hidden">
+                    <div class="spinner"></div>
+                </div>
+                <div id="productsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                <div id="emptyState" class="text-center py-8 text-gray-500 hidden">
+                    Aucun produit trouvé.
+                </div>
+            </div>
+            
+            <div class="bg-white p-6 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4">Console de Débogage</h2>
+                <button id="clearLogsBtn" class="bg-gray-600 text-white px-4 py-2 rounded mb-4">
+                    Effacer les logs
+                </button>
+                <div id="logContainer" class="bg-gray-100 p-4 rounded font-mono text-sm h-64 overflow-y-auto"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize variables
+        let isLoggedIn = false;
+        
+        // DOM Elements
+        const loginBtn = document.getElementById('loginBtn');
+        const fetchProductsBtn = document.getElementById('fetchProductsBtn');
+        const authStatus = document.getElementById('authStatus');
+        const apiStatus = document.getElementById('apiStatus');
+        const productsContainer = document.getElementById('productsContainer');
+        const loadingElement = document.getElementById('loading');
+        const emptyState = document.getElementById('emptyState');
+        const logContainer = document.getElementById('logContainer');
+        const clearLogsBtn = document.getElementById('clearLogsBtn');
+        
+        // Custom logging function
+        function logMessage(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+        
+        // Clear logs
+        clearLogsBtn.addEventListener('click', () => {
+            logContainer.innerHTML = '';
+        });
+        
+        // Show/hide loading
+        function showLoading() {
+            loadingElement.classList.remove('hidden');
+            productsContainer.classList.add('hidden');
+            emptyState.classList.add('hidden');
+        }
+        
+        function hideLoading() {
+            loadingElement.classList.add('hidden');
+        }
+        
+        // Login
+        loginBtn.addEventListener('click', async () => {
+            const username = document.getElementById('username').value;
+            const pin = document.getElementById('pin').value;
+            
+            if (!username || !pin) {
+                logMessage('Nom d\'utilisateur et PIN requis', 'error');
+                return;
+            }
+            
+            logMessage(`Tentative de connexion avec ${username}...`);
+            authStatus.textContent = 'Connexion en cours...';
+            authStatus.className = 'text-sm text-blue-600';
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ username, pin })
+                });
+                
+                logMessage(`Statut de réponse: ${response.status}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        isLoggedIn = true;
+                        authStatus.textContent = `Connecté en tant que ${username}`;
+                        authStatus.className = 'text-sm text-green-600';
+                        logMessage('Connexion réussie', 'success');
+                    } else {
+                        authStatus.textContent = data.message || 'Échec de connexion';
+                        authStatus.className = 'text-sm text-red-600';
+                        logMessage(`Échec de connexion: ${data.message}`, 'error');
+                    }
+                } else {
+                    authStatus.textContent = `Erreur: ${response.status}`;
+                    authStatus.className = 'text-sm text-red-600';
+                    logMessage(`Erreur HTTP: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                authStatus.textContent = 'Erreur de connexion';
+                authStatus.className = 'text-sm text-red-600';
+                logMessage(`Erreur: ${error.message}`, 'error');
+            }
+        });
+        
+        // Fetch products
+        fetchProductsBtn.addEventListener('click', async () => {
+            logMessage('Chargement des produits...');
+            apiStatus.textContent = 'Chargement...';
+            apiStatus.className = 'text-sm text-blue-600';
+            showLoading();
+            
+            try {
+                const response = await fetch('/api/inventory/products', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    cache: 'no-store'
+                });
+                
+                logMessage(`Statut de réponse: ${response.status}`);
+                
+                // Check for redirect (HTML response)
+                const contentType = response.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) {
+                    logMessage('Reçu HTML au lieu de JSON - problème d\'authentification', 'error');
+                    apiStatus.textContent = 'Erreur: Redirection détectée, veuillez vous connecter';
+                    apiStatus.className = 'text-sm text-red-600';
+                    hideLoading();
+                    return;
+                }
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const products = data.products || [];
+                        logMessage(`${products.length} produits reçus`, 'success');
+                        apiStatus.textContent = `${products.length} produits chargés`;
+                        apiStatus.className = 'text-sm text-green-600';
+                        
+                        // Display products
+                        displayProducts(products);
+                    } else {
+                        logMessage(`Erreur API: ${data.message}`, 'error');
+                        apiStatus.textContent = `Erreur: ${data.message}`;
+                        apiStatus.className = 'text-sm text-red-600';
+                        hideLoading();
+                        emptyState.classList.remove('hidden');
+                    }
+                } else {
+                    logMessage(`Erreur HTTP: ${response.status}`, 'error');
+                    apiStatus.textContent = `Erreur: ${response.status}`;
+                    apiStatus.className = 'text-sm text-red-600';
+                    hideLoading();
+                    emptyState.classList.remove('hidden');
+                }
+            } catch (error) {
+                logMessage(`Erreur: ${error.message}`, 'error');
+                apiStatus.textContent = `Erreur: ${error.message}`;
+                apiStatus.className = 'text-sm text-red-600';
+                hideLoading();
+                emptyState.classList.remove('hidden');
+            }
+        });
+        
+        // Display products
+        function displayProducts(products) {
+            hideLoading();
+            productsContainer.innerHTML = '';
+            
+            if (products.length === 0) {
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            productsContainer.classList.remove('hidden');
+            
+            products.forEach(product => {
+                const stockStatus = getStockStatus(product.current_stock, product.min_stock_alert);
+                
+                const card = document.createElement('div');
+                card.className = 'product-card';
+                card.innerHTML = `
+                    <h3 class="font-bold text-lg">${product.name}</h3>
+                    <p class="text-gray-600 text-sm">${product.category}</p>
+                    <div class="flex justify-between items-center mt-2">
+                        <span class="font-semibold">${formatPrice(product.sale_price)}</span>
+                        <span class="${stockStatus.class} text-sm px-2 py-1 rounded-full">
+                            Stock: ${product.current_stock}
+                        </span>
+                    </div>
+                    <p class="text-sm text-gray-500 mt-2">${product.description || 'Pas de description'}</p>
+                `;
+                productsContainer.appendChild(card);
+            });
+        }
+        
+        // Helper function to format price
+        function formatPrice(price) {
+            return price.toLocaleString('fr-MR', { 
+                style: 'currency', 
+                currency: 'MRU',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            });
+        }
+        
+        // Helper function to get stock status
+        function getStockStatus(current, min) {
+            if (current <= 0) {
+                return { class: 'bg-red-100 text-red-800', label: 'Rupture' };
+            } else if (current <= min) {
+                return { class: 'bg-yellow-100 text-yellow-800', label: 'Bas' };
+            } else {
+                return { class: 'bg-green-100 text-green-800', label: 'OK' };
+            }
+        }
+        
+        // Init
+        document.addEventListener('DOMContentLoaded', () => {
+            logMessage('Page chargée', 'info');
+        });
+    </script>
+</body>
+</html>

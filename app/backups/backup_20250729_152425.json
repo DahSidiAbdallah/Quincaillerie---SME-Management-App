@@ -1,0 +1,425 @@
+{
+  "products": {
+    "columns": [
+      "id",
+      "name",
+      "description",
+      "purchase_price",
+      "sale_price",
+      "current_stock",
+      "min_stock_alert",
+      "category",
+      "supplier",
+      "barcode",
+      "created_at",
+      "updated_at",
+      "created_by",
+      "is_active"
+    ],
+    "data": [
+      {
+        "id": 1,
+        "name": "Marteau",
+        "description": "Marteau de charpentier standard",
+        "purchase_price": 250.0,
+        "sale_price": 350.0,
+        "current_stock": 48,
+        "min_stock_alert": 10,
+        "category": "Outils",
+        "supplier": "Fournisseur A",
+        "barcode": "62000001",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 2,
+        "name": "Tournevis cruciforme",
+        "description": "Tournevis Phillips PH2",
+        "purchase_price": 120.0,
+        "sale_price": 180.0,
+        "current_stock": 97,
+        "min_stock_alert": 20,
+        "category": "Outils",
+        "supplier": "Fournisseur B",
+        "barcode": "62000002",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 3,
+        "name": "Ciment 50kg",
+        "description": "Sac de ciment Portland 50kg",
+        "purchase_price": 2800.0,
+        "sale_price": 3200.0,
+        "current_stock": 199,
+        "min_stock_alert": 20,
+        "category": "Matériaux",
+        "supplier": "Cimenterie NKC",
+        "barcode": "62000003",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 4,
+        "name": "Fer à béton 12m (8mm)",
+        "description": "Barre de fer pour construction",
+        "purchase_price": 1500.0,
+        "sale_price": 1800.0,
+        "current_stock": 300,
+        "min_stock_alert": 50,
+        "category": "Matériaux",
+        "supplier": "SONASID",
+        "barcode": "62000004",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 5,
+        "name": "Peinture blanche 5L",
+        "description": "Pot de peinture acrylique blanche",
+        "purchase_price": 1800.0,
+        "sale_price": 2500.0,
+        "current_stock": 29,
+        "min_stock_alert": 5,
+        "category": "Finition",
+        "supplier": "Global Peinture",
+        "barcode": "62000005",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 6,
+        "name": "Ampoule LED 9W",
+        "description": "Ampoule à économie d'énergie",
+        "purchase_price": 150.0,
+        "sale_price": 250.0,
+        "current_stock": 195,
+        "min_stock_alert": 30,
+        "category": "Électricité",
+        "supplier": "Philips",
+        "barcode": "62000006",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 7,
+        "name": "Robinet mélangeur",
+        "description": "Robinet pour lavabo",
+        "purchase_price": 800.0,
+        "sale_price": 1200.0,
+        "current_stock": 40,
+        "min_stock_alert": 10,
+        "category": "Plomberie",
+        "supplier": "Fournisseur C",
+        "barcode": "62000007",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 8,
+        "name": "Scie à main",
+        "description": "Scie égoïne pour bois",
+        "purchase_price": 450.0,
+        "sale_price": 600.0,
+        "current_stock": 25,
+        "min_stock_alert": 5,
+        "category": "Outils",
+        "supplier": "Fournisseur A",
+        "barcode": "62000008",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 9,
+        "name": "Carrelage 30x30cm (m²)",
+        "description": "Carrelage sol et mur",
+        "purchase_price": 2200.0,
+        "sale_price": 2800.0,
+        "current_stock": 100,
+        "min_stock_alert": 10,
+        "category": "Finition",
+        "supplier": "Carreaux de Mauritanie",
+        "barcode": "62000009",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      },
+      {
+        "id": 10,
+        "name": "Brouette",
+        "description": "Brouette de chantier",
+        "purchase_price": 3500.0,
+        "sale_price": 4500.0,
+        "current_stock": 15,
+        "min_stock_alert": 3,
+        "category": "Équipement",
+        "supplier": "Fournisseur B",
+        "barcode": "62000010",
+        "created_at": "2025-07-29 13:27:54",
+        "updated_at": "2025-07-29 13:27:54",
+        "created_by": null,
+        "is_active": 1
+      }
+    ]
+  },
+  "sales": {
+    "columns": [
+      "id",
+      "sale_date",
+      "customer_name",
+      "customer_phone",
+      "total_amount",
+      "paid_amount",
+      "payment_method",
+      "is_credit",
+      "credit_due_date",
+      "status",
+      "notes",
+      "created_at",
+      "created_by",
+      "invoice_number",
+      "customer_id"
+    ],
+    "data": [
+      {
+        "id": 1,
+        "sale_date": "2025-07-24 13:27:54.649860",
+        "customer_name": "Ahmed Fall",
+        "customer_phone": "45251122",
+        "total_amount": 4200.0,
+        "paid_amount": 4200.0,
+        "payment_method": "cash",
+        "is_credit": 0,
+        "credit_due_date": null,
+        "status": "completed",
+        "notes": null,
+        "created_at": "2025-07-29 13:27:54",
+        "created_by": 1,
+        "invoice_number": "INV001",
+        "customer_id": 1
+      },
+      {
+        "id": 2,
+        "sale_date": "2025-07-26 13:27:54.649868",
+        "customer_name": "Fatimetou Mint Mohamed",
+        "customer_phone": "36301122",
+        "total_amount": 3430.0,
+        "paid_amount": 3000.0,
+        "payment_method": "credit",
+        "is_credit": 0,
+        "credit_due_date": null,
+        "status": "completed",
+        "notes": null,
+        "created_at": "2025-07-29 13:27:54",
+        "created_by": 1,
+        "invoice_number": "INV002",
+        "customer_id": 2
+      },
+      {
+        "id": 3,
+        "sale_date": "2025-07-28 13:27:54.649869",
+        "customer_name": "Sidi Ould Cheikh",
+        "customer_phone": "22405566",
+        "total_amount": 750.0,
+        "paid_amount": 750.0,
+        "payment_method": "mobile",
+        "is_credit": 0,
+        "credit_due_date": null,
+        "status": "completed",
+        "notes": null,
+        "created_at": "2025-07-29 13:27:54",
+        "created_by": 1,
+        "invoice_number": "INV003",
+        "customer_id": 3
+      }
+    ]
+  },
+  "sale_items": {
+    "columns": [
+      "id",
+      "sale_id",
+      "product_id",
+      "quantity",
+      "unit_price",
+      "total_price",
+      "profit_margin"
+    ],
+    "data": [
+      {
+        "id": 1,
+        "sale_id": 1,
+        "product_id": 3,
+        "quantity": 1,
+        "unit_price": 3200.0,
+        "total_price": 3200.0,
+        "profit_margin": null
+      },
+      {
+        "id": 2,
+        "sale_id": 1,
+        "product_id": 1,
+        "quantity": 2,
+        "unit_price": 350.0,
+        "total_price": 700.0,
+        "profit_margin": null
+      },
+      {
+        "id": 3,
+        "sale_id": 2,
+        "product_id": 5,
+        "quantity": 1,
+        "unit_price": 2500.0,
+        "total_price": 2500.0,
+        "profit_margin": null
+      },
+      {
+        "id": 4,
+        "sale_id": 2,
+        "product_id": 2,
+        "quantity": 3,
+        "unit_price": 180.0,
+        "total_price": 540.0,
+        "profit_margin": null
+      },
+      {
+        "id": 5,
+        "sale_id": 2,
+        "product_id": 6,
+        "quantity": 2,
+        "unit_price": 250.0,
+        "total_price": 500.0,
+        "profit_margin": null
+      },
+      {
+        "id": 6,
+        "sale_id": 3,
+        "product_id": 6,
+        "quantity": 3,
+        "unit_price": 250.0,
+        "total_price": 750.0,
+        "profit_margin": null
+      }
+    ]
+  },
+  "expenses": {
+    "columns": [
+      "id",
+      "amount",
+      "category",
+      "subcategory",
+      "description",
+      "has_receipt",
+      "receipt_image",
+      "expense_date",
+      "created_at",
+      "created_by"
+    ],
+    "data": []
+  },
+  "capital_entries": {
+    "columns": [
+      "id",
+      "amount",
+      "source",
+      "justification",
+      "has_receipt",
+      "receipt_image",
+      "entry_date",
+      "created_at",
+      "created_by"
+    ],
+    "data": []
+  },
+  "client_debts": {
+    "columns": [
+      "id",
+      "client_name",
+      "client_phone",
+      "client_address",
+      "sale_id",
+      "total_amount",
+      "paid_amount",
+      "remaining_amount",
+      "due_date",
+      "status",
+      "created_at",
+      "updated_at",
+      "created_by"
+    ],
+    "data": []
+  },
+  "supplier_debts": {
+    "columns": [
+      "id",
+      "supplier_name",
+      "supplier_phone",
+      "supplier_address",
+      "invoice_reference",
+      "total_amount",
+      "paid_amount",
+      "remaining_amount",
+      "due_date",
+      "status",
+      "created_at",
+      "updated_at",
+      "created_by"
+    ],
+    "data": []
+  },
+  "stock_movements": {
+    "columns": [
+      "id",
+      "product_id",
+      "movement_type",
+      "quantity",
+      "unit_price",
+      "total_amount",
+      "reference",
+      "notes",
+      "created_at",
+      "created_by"
+    ],
+    "data": []
+  },
+  "cash_register": {
+    "columns": [
+      "id",
+      "register_date",
+      "opening_balance",
+      "closing_balance",
+      "total_sales",
+      "total_expenses",
+      "cash_in",
+      "cash_out",
+      "notes",
+      "is_closed",
+      "created_at",
+      "closed_at",
+      "created_by"
+    ],
+    "data": []
+  },
+  "_metadata": {
+    "export_date": "2025-07-29T15:24:25.701063",
+    "app_version": "1.0.0",
+    "total_tables": 9,
+    "total_records": 19
+  }
+}

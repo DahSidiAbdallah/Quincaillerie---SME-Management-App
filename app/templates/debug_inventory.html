@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Inventory API</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1, h2, h3 {
+            margin-top: 2rem;
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            cursor: pointer;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        pre {
+            background-color: #f1f5f9;
+            padding: 1rem;
+            border-radius: 0.25rem;
+            overflow: auto;
+            max-height: 400px;
+        }
+        .card {
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .panel {
+            margin-bottom: 2rem;
+            padding: 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 0.5rem;
+        }
+        .products-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .loading {
+            display: inline-block;
+            width: 1rem;
+            height: 1rem;
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3b82f6;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Inventory API</h1>
+    
+    <div class="panel">
+        <h2>Authentication Status</h2>
+        <div id="authStatus">Checking authentication status...</div>
+        <div id="authActions">
+            <button id="checkAuthBtn">Check Auth Status</button>
+            <button id="loginBtn">Login as Admin</button>
+            <button id="logoutBtn">Logout</button>
+        </div>
+    </div>
+    
+    <div class="panel">
+        <h2>Inventory Products</h2>
+        <div id="productActions">
+            <button id="loadProductsBtn">Load Products</button>
+            <button id="loadProductsWithCredentials">Load Products (with credentials)</button>
+            <button id="loadProductsDirectFetch">Load Products (direct fetch)</button>
+        </div>
+        <div id="productsCount"></div>
+        <div id="productsData"></div>
+        <div id="productsGrid" class="products-grid"></div>
+    </div>
+    
+    <div class="panel">
+        <h2>Debug Info</h2>
+        <pre id="debugOutput">Debug information will appear here</pre>
+    </div>
+    
+    <script>
+        // Utility functions
+        function logDebug(message, data) {
+            const debugOutput = document.getElementById('debugOutput');
+            const timestamp = new Date().toISOString().substring(11, 19);
+            
+            let logMessage = `[${timestamp}] ${message}\n`;
+            if (data) {
+                if (typeof data === 'object') {
+                    logMessage += JSON.stringify(data, null, 2) + '\n';
+                } else {
+                    logMessage += data + '\n';
+                }
+            }
+            
+            debugOutput.textContent = logMessage + debugOutput.textContent;
+        }
+        
+        function showLoading(elementId) {
+            const element = document.getElementById(elementId);
+            element.innerHTML = '<div class="loading"></div> Loading...';
+        }
+        
+        // Auth functions
+        async function checkAuthStatus() {
+            showLoading('authStatus');
+            
+            try {
+                const response = await fetch('/api/auth/status', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                logDebug('Auth status response', data);
+                
+                const authStatusElement = document.getElementById('authStatus');
+                if (data.authenticated) {
+                    authStatusElement.innerHTML = `
+                        <div style="color: green; font-weight: bold;">
+                            ✓ Authenticated as ${data.user.username} (${data.user.role})
+                        </div>
+                    `;
+                } else {
+                    authStatusElement.innerHTML = `
+                        <div style="color: red; font-weight: bold;">
+                            ✗ Not authenticated
+                        </div>
+                    `;
+                }
+                
+                return data;
+            } catch (error) {
+                logDebug('Error checking auth status', error);
+                document.getElementById('authStatus').innerHTML = `
+                    <div style="color: red; font-weight: bold;">
+                        ✗ Error checking authentication: ${error.message}
+                    </div>
+                `;
+                return { authenticated: false };
+            }
+        }
+        
+        async function login() {
+            showLoading('authStatus');
+            
+            try {
+                const loginData = {
+                    username: 'admin',
+                    pin: '1234'
+                };
+                
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify(loginData),
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                logDebug('Login response', data);
+                
+                if (data.success) {
+                    document.getElementById('authStatus').innerHTML = `
+                        <div style="color: green; font-weight: bold;">
+                            ✓ Login successful as ${data.user.username}
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('authStatus').innerHTML = `
+                        <div style="color: red; font-weight: bold;">
+                            ✗ Login failed: ${data.message || 'Unknown error'}
+                        </div>
+                    `;
+                }
+                
+                return data;
+            } catch (error) {
+                logDebug('Error during login', error);
+                document.getElementById('authStatus').innerHTML = `
+                    <div style="color: red; font-weight: bold;">
+                        ✗ Login error: ${error.message}
+                    </div>
+                `;
+                throw error;
+            }
+        }
+        
+        async function logout() {
+            try {
+                const response = await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                logDebug('Logout response', data);
+                
+                checkAuthStatus();
+                return data;
+            } catch (error) {
+                logDebug('Error during logout', error);
+                throw error;
+            }
+        }
+        
+        // Inventory functions
+        async function loadProducts(method = 'default') {
+            showLoading('productsData');
+            document.getElementById('productsGrid').innerHTML = '';
+            
+            try {
+                let fetchOptions = {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                };
+                
+                if (method === 'default' || method === 'withCredentials') {
+                    fetchOptions.credentials = 'same-origin';
+                }
+                
+                // For the direct fetch method, don't specify credentials
+                
+                logDebug(`Loading products (method: ${method})`, fetchOptions);
+                
+                const response = await fetch('/api/inventory/products', fetchOptions);
+                
+                logDebug('Products response status', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries([...response.headers.entries()])
+                });
+                
+                if (response.status === 401) {
+                    document.getElementById('productsData').innerHTML = `
+                        <div style="color: red; font-weight: bold;">
+                            ✗ Authentication required. Please log in.
+                        </div>
+                    `;
+                    return;
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`API responded with status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                logDebug('Products response data', data);
+                
+                if (data.success) {
+                    const productsCount = document.getElementById('productsCount');
+                    productsCount.innerHTML = `
+                        <div style="margin: 1rem 0;">
+                            Found <strong>${data.products.length}</strong> products
+                            (Total: ${data.stats.total}, 
+                             In Stock: ${data.stats.in_stock}, 
+                             Low Stock: ${data.stats.low_stock})
+                        </div>
+                    `;
+                    
+                    document.getElementById('productsData').innerHTML = '';
+                    
+                    const productsGrid = document.getElementById('productsGrid');
+                    productsGrid.innerHTML = '';
+                    
+                    data.products.forEach(product => {
+                        const card = document.createElement('div');
+                        card.className = 'card';
+                        card.innerHTML = `
+                            <h3>${product.name}</h3>
+                            <p>${product.description || 'No description'}</p>
+                            <div>Category: ${product.category}</div>
+                            <div>Stock: ${product.current_stock}</div>
+                            <div>Price: ${product.sale_price} MRU</div>
+                        `;
+                        productsGrid.appendChild(card);
+                    });
+                } else {
+                    document.getElementById('productsData').innerHTML = `
+                        <div style="color: red; font-weight: bold;">
+                            ✗ Error: ${data.message || 'Unknown error'}
+                        </div>
+                    `;
+                }
+                
+                return data;
+            } catch (error) {
+                logDebug('Error loading products', error);
+                document.getElementById('productsData').innerHTML = `
+                    <div style="color: red; font-weight: bold;">
+                        ✗ Error: ${error.message}
+                    </div>
+                `;
+                throw error;
+            }
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check initial auth status
+            await checkAuthStatus();
+            
+            // Set up event listeners
+            document.getElementById('checkAuthBtn').addEventListener('click', checkAuthStatus);
+            document.getElementById('loginBtn').addEventListener('click', login);
+            document.getElementById('logoutBtn').addEventListener('click', logout);
+            
+            document.getElementById('loadProductsBtn').addEventListener('click', () => loadProducts('default'));
+            document.getElementById('loadProductsWithCredentials').addEventListener('click', () => loadProducts('withCredentials'));
+            document.getElementById('loadProductsDirectFetch').addEventListener('click', () => loadProducts('direct'));
+            
+            logDebug('Debug page initialized');
+        });
+    </script>
+</body>
+</html>

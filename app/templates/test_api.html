@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test API Requests</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            line-height: 1.6;
+            padding: 1.5rem;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .panel {
+            background-color: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        h1, h2, h3 {
+            color: #111827;
+        }
+        button {
+            background-color: #2563eb;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            margin-right: 0.5rem;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #1d4ed8;
+        }
+        button.secondary {
+            background-color: #4b5563;
+        }
+        button.secondary:hover {
+            background-color: #374151;
+        }
+        button.danger {
+            background-color: #dc2626;
+        }
+        button.danger:hover {
+            background-color: #b91c1c;
+        }
+        pre {
+            background-color: #1f2937;
+            color: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.375rem;
+            overflow: auto;
+            max-height: 300px;
+        }
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+        .badge.success {
+            background-color: #d1fae5;
+            color: #065f46;
+        }
+        .badge.warning {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .badge.error {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 0.75rem;
+            text-align: left;
+        }
+        th {
+            background-color: #f3f4f6;
+        }
+        .card {
+            border: 1px solid #e5e7eb;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+        .actions {
+            margin-top: 1rem;
+        }
+        .input-group {
+            margin-bottom: 0.5rem;
+        }
+        .input-group label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-weight: 500;
+        }
+        .input-group input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test API Requests</h1>
+    <p>Use this page to test API requests and debug authentication issues</p>
+
+    <div class="panel">
+        <h2>Authentication</h2>
+        <div id="authStatus">Checking authentication status...</div>
+        
+        <div class="actions">
+            <button id="checkAuthBtn">Check Auth Status</button>
+            <button id="loginBtn">Login as Admin</button>
+            <button id="logoutBtn" class="secondary">Logout</button>
+        </div>
+
+        <div class="card" style="margin-top: 1rem;">
+            <h3>Custom Login</h3>
+            <div class="input-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" value="admin">
+            </div>
+            <div class="input-group">
+                <label for="pin">PIN:</label>
+                <input type="password" id="pin" value="1234">
+            </div>
+            <button id="customLoginBtn">Login with Credentials</button>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>Inventory API</h2>
+        <div class="actions">
+            <button id="getProductsBtn">Get Products</button>
+            <button id="getProductsXHRBtn">Get Products (XHR)</button>
+            <button id="getProductsFetchBtn">Get Products (Fetch)</button>
+            <button id="runFullTestBtn">Run Full Test</button>
+        </div>
+        
+        <h3>Results</h3>
+        <div id="productsCount"></div>
+        <pre id="resultsOutput">Results will appear here</pre>
+    </div>
+    
+    <div class="panel">
+        <h2>Session & Cookie Information</h2>
+        <button id="refreshCookiesBtn">Refresh Cookie Info</button>
+        <pre id="cookieOutput">Loading cookie information...</pre>
+    </div>
+
+    <div class="panel">
+        <h2>Console Output</h2>
+        <p>Open your browser's developer tools (F12) to see detailed console output</p>
+    </div>
+
+    <!-- Include network debugging script -->
+    <script src="{{ url_for('static', filename='js/network-debug.js') }}"></script>
+    
+    <!-- Include API tester -->
+    <script src="{{ url_for('static', filename='js/api-tester.js') }}"></script>
+    
+    <script>
+        // Display cookie information
+        function showCookieInfo() {
+            const cookieOutput = document.getElementById('cookieOutput');
+            cookieOutput.textContent = 'Document Cookies:\n' + 
+                document.cookie || '(no cookies found)';
+        }
+        
+        // Update authentication status display
+        async function updateAuthStatus() {
+            const authStatus = document.getElementById('authStatus');
+            authStatus.innerHTML = 'Checking authentication status...';
+            
+            try {
+                const response = await fetch('/api/auth/status', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Auth check failed with status ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    authStatus.innerHTML = `
+                        <div>
+                            Status: <span class="badge success">Authenticated</span>
+                        </div>
+                        <div>
+                            User: <strong>${data.user.username}</strong> (${data.user.role})
+                        </div>
+                        <div>
+                            User ID: ${data.user.id}
+                        </div>
+                    `;
+                } else {
+                    authStatus.innerHTML = `
+                        <div>
+                            Status: <span class="badge error">Not Authenticated</span>
+                        </div>
+                        <div>
+                            <em>Please login to continue</em>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                authStatus.innerHTML = `
+                    <div>
+                        Status: <span class="badge error">Error</span>
+                    </div>
+                    <div>
+                        <em>${error.message}</em>
+                    </div>
+                `;
+            }
+        }
+        
+        // Display results in the output area
+        function showResults(title, data) {
+            const resultsOutput = document.getElementById('resultsOutput');
+            resultsOutput.textContent = `${title}:\n${JSON.stringify(data, null, 2)}`;
+            
+            // Update products count if available
+            if (data && data.products) {
+                const productsCount = document.getElementById('productsCount');
+                productsCount.innerHTML = `
+                    <div>
+                        Found <strong>${data.products.length}</strong> products
+                        ${data.stats ? `(Total: ${data.stats.total}, In Stock: ${data.stats.in_stock}, Low Stock: ${data.stats.low_stock})` : ''}
+                    </div>
+                `;
+            }
+        }
+        
+        // Make a request using XMLHttpRequest with simplified implementation
+        function xhrRequest(url, method = 'GET', body = null) {
+            return new Promise((resolve, reject) => {
+                try {
+                    console.log(`XHR request starting: ${method} ${url}`);
+                    
+                    // Create a fresh XHR instance
+                    const xhr = new XMLHttpRequest();
+                    
+                    // Configure basic settings
+                    xhr.open(method, url, true); // async=true
+                    xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                    xhr.setRequestHeader('Accept', 'application/json');
+                    xhr.withCredentials = true; // Include cookies
+                    
+                    // Set up response handler
+                    xhr.onreadystatechange = function() {
+                        if (xhr.readyState !== 4) return; // Only process completed requests
+                        
+                        console.log(`XHR response received: status ${xhr.status}`);
+                        
+                        if (xhr.status >= 200 && xhr.status < 300) {
+                            try {
+                                const data = JSON.parse(xhr.responseText);
+                                resolve(data);
+                            } catch (e) {
+                                console.error('Error parsing JSON:', e);
+                                reject(new Error('Invalid JSON response'));
+                            }
+                        } else {
+                            reject(new Error(`Request failed with status ${xhr.status}`));
+                        }
+                    };
+                    
+                    // Set up error handler
+                    xhr.onerror = function(e) {
+                        console.error('XHR network error:', e);
+                        reject(new Error('Network error'));
+                    };
+                    
+                    // Send the request
+                    if (body) {
+                        xhr.setRequestHeader('Content-Type', 'application/json');
+                        xhr.send(JSON.stringify(body));
+                    } else {
+                        xhr.send();
+                    }
+                } catch (e) {
+                    console.error('Error setting up XHR:', e);
+                    reject(e);
+                }
+            });
+        }
+        
+        // Initialize the page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize display
+            updateAuthStatus();
+            showCookieInfo();
+            
+            // Set up event listeners
+            document.getElementById('checkAuthBtn').addEventListener('click', updateAuthStatus);
+            document.getElementById('refreshCookiesBtn').addEventListener('click', showCookieInfo);
+            
+            // Login button
+            document.getElementById('loginBtn').addEventListener('click', async () => {
+                try {
+                    const result = await APITester.login();
+                    updateAuthStatus();
+                    showCookieInfo();
+                    showResults('Login Result', result);
+                } catch (error) {
+                    console.error('Login error:', error);
+                    showResults('Login Error', { error: error.message });
+                }
+            });
+            
+            // Custom login button
+            document.getElementById('customLoginBtn').addEventListener('click', async () => {
+                const username = document.getElementById('username').value;
+                const pin = document.getElementById('pin').value;
+                
+                try {
+                    const result = await APITester.login(username, pin);
+                    updateAuthStatus();
+                    showCookieInfo();
+                    showResults('Login Result', result);
+                } catch (error) {
+                    console.error('Login error:', error);
+                    showResults('Login Error', { error: error.message });
+                }
+            });
+            
+            // Logout button
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/auth/logout', {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    });
+                    
+                    const result = await response.json();
+                    updateAuthStatus();
+                    showCookieInfo();
+                    showResults('Logout Result', result);
+                } catch (error) {
+                    console.error('Logout error:', error);
+                    showResults('Logout Error', { error: error.message });
+                }
+            });
+            
+            // Get products button
+            document.getElementById('getProductsBtn').addEventListener('click', async () => {
+                try {
+                    const result = await APITester.getProducts();
+                    showResults('Products Result', result);
+                } catch (error) {
+                    console.error('Products error:', error);
+                    showResults('Products Error', { error: error.message });
+                }
+            });
+            
+            // Get products with XHR
+            document.getElementById('getProductsXHRBtn').addEventListener('click', async () => {
+                try {
+                    const result = await xhrRequest('/api/inventory/products');
+                    showResults('Products (XHR) Result', result);
+                } catch (error) {
+                    console.error('Products XHR error:', error);
+                    showResults('Products XHR Error', { error: error.message });
+                }
+            });
+            
+            // Get products with Fetch
+            document.getElementById('getProductsFetchBtn').addEventListener('click', async () => {
+                try {
+                    const response = await fetch('/api/inventory/products', {
+                        method: 'GET',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        credentials: 'same-origin'
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Request failed with status ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    showResults('Products (Fetch) Result', result);
+                } catch (error) {
+                    console.error('Products Fetch error:', error);
+                    showResults('Products Fetch Error', { error: error.message });
+                }
+            });
+            
+            // Run full test
+            document.getElementById('runFullTestBtn').addEventListener('click', async () => {
+                try {
+                    const result = await APITester.runFullTest();
+                    showResults('Full Test Result', { success: result });
+                    updateAuthStatus();
+                    showCookieInfo();
+                } catch (error) {
+                    console.error('Full test error:', error);
+                    showResults('Full Test Error', { error: error.message });
+                }
+            });
+        });
+    </script>
+</body>
+</html>

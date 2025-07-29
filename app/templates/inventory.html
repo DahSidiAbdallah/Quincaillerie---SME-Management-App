@@ -53,6 +53,55 @@
         justify-content: center;
     }
     
+    /* Notification styles */
+    .notification {
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        width: 300px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+    }
+    
+    .notification.info {
+        background-color: #ebf5ff;
+        border-left: 4px solid #3b82f6;
+    }
+    
+    .notification.success {
+        background-color: #d1fae5;
+        border-left: 4px solid #059669;
+    }
+    
+    .notification.error {
+        background-color: #fee2e2;
+        border-left: 4px solid #dc2626;
+    }
+    
+    .notification.warning {
+        background-color: #fef3c7;
+        border-left: 4px solid #d97706;
+    }
+    
+    .animate-fade-in {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+    
+    .animate-fade-out {
+        animation: fadeOut 0.3s ease-in-out;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes fadeOut {
+        from { opacity: 1; transform: translateY(0); }
+        to { opacity: 0; transform: translateY(-20px); }
+    }
+    
     @media (max-width: 768px) {
         .product-grid {
             grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
@@ -62,6 +111,9 @@
 {% endblock %}
 
 {% block content %}
+<!-- Diagnostic Script - Will show a red panel in top right -->
+<script src="{{ url_for('static', filename='js/inventory-diagnostics.js') }}"></script>
+
 <div class="space-y-6">
     <!-- Header Section -->
     <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
@@ -467,16 +519,42 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Network debugging script -->
+<!-- Network debugging script (safe version) -->
+<script src="{{ url_for('static', filename='js/network-debug.js') }}"></script>
+
+<!-- Direct API test button (emergency debug) -->
+<div id="debugPanel" style="position: fixed; top: 10px; right: 10px; z-index: 9999; background: #fff; border: 2px solid #f00; padding: 10px; border-radius: 5px; max-width: 300px;">
+    <h3 style="margin-top: 0; color: #f00;">⚠️ Debug Panel</h3>
+    <button id="directApiTestBtn" style="background: #f00; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
+        Test API Directly
+    </button>
+    <div id="apiTestResult" style="margin-top: 10px; font-size: 12px; max-height: 150px; overflow-y: auto;"></div>
+</div>
+
 <script>
+    // Debug info - log when page loads
+    console.log('📝 Inventory page loaded at:', new Date().toISOString());
+    
     let currentView = 'grid';
     let currentProducts = [];
     let isLoading = false;
     
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
-        loadProducts();
-        setupEventListeners();
+        console.log('DOM content loaded, setting up event listeners...');
+        
+        // Force immediate product loading for testing
+        console.log('🚨 FORCING IMMEDIATE PRODUCT LOADING');
+        isLoading = false; // Reset loading state
+        loadProductsWithAuth(); // Direct API call
+        
+        // Continue with normal setup
+        setupEventListeners(); // This will trigger checkAuthAndLoadProducts
         calculateMargin(); // Initialize margin calculation
+        
+        // Show loading initially
+        showLoading();
     });
     
     function setupEventListeners() {
@@ -493,42 +571,292 @@
         
         // Form submission
         document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
+        
+        // Check authentication status on page load
+        checkAuthAndLoadProducts();
     }
     
-    // Load products from API
-    async function loadProducts() {
-        if (isLoading) return;
+    // Check authentication status before loading products
+    async function checkAuthAndLoadProducts() {
+        try {
+            console.log('🔑 Checking authentication status...');
+            
+            // Track the request start time for debugging
+            const startTime = new Date().getTime();
+            
+            const authCheck = await fetch('/api/auth/status', {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin' // Explicitly include cookies
+            });
+            
+            // Calculate response time
+            const responseTime = new Date().getTime() - startTime;
+            console.log(`Auth check response received in ${responseTime}ms with status:`, authCheck.status);
+            
+            // Log all response headers for debugging
+            console.log('Auth check response headers:', Object.fromEntries([...authCheck.headers.entries()]));
+            
+            if (!authCheck.ok) {
+                console.error('❌ Auth check failed with status:', authCheck.status);
+                
+                // Check if it's a redirect (HTML response)
+                const contentType = authCheck.headers.get('content-type') || '';
+                if (contentType.includes('text/html')) {
+                    console.error('⚠️ Received HTML response for auth check - likely a redirect');
+                    const htmlPreview = await authCheck.text();
+                    console.error('HTML preview:', htmlPreview.substring(0, 200));
+                    
+                    // Show a notification explaining the issue
+                    showNotification('Session invalide, redirection vers la page de connexion...', 'warning');
+                    
+                    // Redirect to the API test page to debug
+                    window.location.href = '/test-api';
+                    return;
+                }
+                
+                tryLoginAndLoadProducts();
+                return;
+            }
+            
+            const authData = await authCheck.json();
+            console.log('Authentication status check:', authData);
+            
+            if (authData.authenticated === true) {
+                console.log('✅ User is authenticated as', authData.user.username, '- loading products...');
+                loadProductsWithAuth();
+            } else {
+                console.log('⚠️ User is not authenticated, trying login...');
+                tryLoginAndLoadProducts();
+            }
+        } catch (error) {
+            console.error('❌ Error checking authentication:', error);
+            showNotification('Erreur lors de la vérification de l\'authentification', 'error');
+            tryLoginAndLoadProducts();
+        }
+    }
+    
+    // Try to login with default credentials and then load products
+    async function tryLoginAndLoadProducts() {
+        try {
+            console.log('Attempting auto-login with admin credentials...');
+            
+            const loginResponse = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({
+                    username: 'admin',
+                    pin: '1234'
+                }),
+                credentials: 'same-origin' // Explicitly include cookies
+            });
+            
+            console.log('Login response status:', loginResponse.status);
+            
+            if (!loginResponse.ok) {
+                console.error('Login failed with status:', loginResponse.status);
+                showLoginRedirect();
+                return;
+            }
+            
+            const loginData = await loginResponse.json();
+            console.log('Login response:', loginData);
+            
+            if (loginData.success) {
+                console.log('Auto-login successful, loading products...');
+                loadProductsWithAuth();
+            } else {
+                console.error('Auto-login failed:', loginData.message);
+                showLoginRedirect();
+            }
+        } catch (error) {
+            console.error('Error during auto-login:', error);
+            showLoginRedirect();
+        }
+    }
+    
+    // Show login redirect message and redirect to login page
+    function showLoginRedirect() {
+        console.log('Showing login redirect message...');
+        showNotification('Veuillez vous connecter pour accéder à l\'inventaire', 'info');
+        setTimeout(() => {
+            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+        }, 2000);
+    }
+    
+    // Load products with authentication - FIXED VERSION
+    async function loadProductsWithAuth() {
+        if (isLoading) {
+            console.log('⚠️ Already loading products, skipping duplicate request');
+            return;
+        }
         
+        console.log('🔄 loadProductsWithAuth() called - starting product loading');
         isLoading = true;
         showLoading();
         
         try {
-            const searchTerm = document.getElementById('searchInput').value;
-            const category = document.getElementById('categoryFilter').value;
-            const stockFilter = document.getElementById('stockFilter').value;
+            // Check if search elements exist
+            const searchInput = document.getElementById('searchInput');
+            const categoryFilter = document.getElementById('categoryFilter');
+            const stockFilter = document.getElementById('stockFilter');
 
             const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
-            if (category) params.append('category', category);
-            if (stockFilter === 'low_stock' || stockFilter === 'out_of_stock') {
+            if (searchInput && searchInput.value) params.append('search', searchInput.value);
+            if (categoryFilter && categoryFilter.value) params.append('category', categoryFilter.value);
+            if (stockFilter && stockFilter.value && 
+                (stockFilter.value === 'low_stock' || stockFilter.value === 'out_of_stock')) {
                 params.append('low_stock', 'true');
             }
             
-            console.log('Fetching products with params:', params.toString());
-            const response = await fetch(`/api/inventory/products?${params}`);
-            const data = await response.json();
+            console.log('🔍 Fetching products with params:', params.toString());
+            
+            // Add headers and credentials for auth - FIXED IMPLEMENTATION
+            const headers = new Headers({
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'  // Explicitly request JSON
+            });
+            
+            // Debug: Show current cookies
+            console.log('🍪 Current document cookies:', document.cookie);
+            
+            const apiUrl = `/api/inventory/products?${params}`;
+            console.log('🚀 Sending request to:', apiUrl);
+            
+            // Use direct fetch call without any interceptors
+            const fetchPromise = window.fetch(apiUrl, {
+                method: 'GET',
+                headers: headers,
+                credentials: 'same-origin', // Explicitly include cookies
+                cache: 'no-store' // Prevent caching
+            });
+            
+            // Set a timeout to ensure we don't hang indefinitely
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Request timed out after 10s')), 10000)
+            );
+            
+            // Race the fetch against a timeout
+            const response = await Promise.race([fetchPromise, timeoutPromise]);
+            
+            console.log('✅ Response received:', response);
+            console.log('📊 Response status:', response.status);
+            console.log('🔤 Response headers:', Object.fromEntries([...response.headers.entries()]));
+            
+            // Check response content type to see if it's HTML (redirect) or JSON (expected)
+            const contentType = response.headers.get('content-type') || '';
+            if (contentType.includes('text/html')) {
+                console.error('⚠️ Received HTML response instead of JSON. This likely means a redirect occurred.');
+                const text = await response.text();
+                console.error('HTML response preview:', text.substring(0, 200) + '...');
+                
+                // Try login again and return - don't throw error
+                console.log('Attempting login and retry...');
+                await tryLoginAndLoadProducts();
+                return;
+            }
+            
+            // Check if response is OK
+            if (!response.ok) {
+                console.error('API response not OK:', response.status, response.statusText);
+                
+                if (response.status === 401) {
+                    console.log('Authentication error detected, retrying login...');
+                    await tryLoginAndLoadProducts();
+                    return;
+                } else {
+                    throw new Error(`API responded with status: ${response.status}`);
+                }
+            }
+            
+            // Parse response - wrap in try/catch
+            let data;
+            try {
+                data = await response.json();
+                console.log('Successfully parsed JSON response:', data);
+            } catch (jsonError) {
+                console.error('Failed to parse JSON response:', jsonError);
+                throw new Error('Failed to parse API response as JSON');
+            }
             
             console.log('API Response:', data);
             
             if (data.success) {
-                currentProducts = data.products;
-                console.log(`Loaded ${currentProducts.length} products`);
-                displayProducts();
-                updateStats(data.stats);
-                console.log('Stats updated:', data.stats);
+                if (!data.products || !Array.isArray(data.products)) {
+                    console.error('❌ Products data is not an array:', data.products);
+                    currentProducts = [];
+                } else {
+                    console.log('✅ Successfully loaded products:', data.products.length);
+                    currentProducts = data.products;
+                }
+                console.log(`✨ Loaded ${currentProducts.length} products - now updating UI`);
+                
+                // Update UI with improved error handling
+                try {
+                    // Make sure we have the grid container
+                    const gridView = document.getElementById('gridView');
+                    if (!gridView) {
+                        console.error('❌ Grid view container not found!');
+                        throw new Error('Grid view container not found');
+                    }
+                    
+                    // Try regular display
+                    displayProducts();
+                    console.log('✅ Products displayed successfully');
+                    
+                    // Make sure loading state is hidden
+                    hideLoading();
+                    
+                    // Fallback: If products aren't displaying, try direct DOM manipulation
+                    const visibleProducts = document.querySelectorAll('#gridView .product-card');
+                    if (visibleProducts.length === 0 && currentProducts.length > 0) {
+                        console.warn('⚠️ No product cards found after displayProducts(), using fallback rendering');
+                        
+                        // Clear container
+                        gridView.innerHTML = '';
+                        
+                        // Manually create product cards
+                        currentProducts.forEach(product => {
+                            const card = document.createElement('div');
+                            card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+                            card.innerHTML = `
+                                <h3 class="font-bold text-lg">${product.name}</h3>
+                                <p class="text-gray-600 text-sm">${product.category}</p>
+                                <div class="flex justify-between items-center mt-2">
+                                    <span class="font-semibold">${product.sale_price}</span>
+                                    <span>Stock: ${product.current_stock}</span>
+                                </div>
+                            `;
+                            gridView.appendChild(card);
+                        });
+                        
+                        console.log('✅ Products displayed using fallback method');
+                    }
+                } catch (displayError) {
+                    console.error('❌ Error displaying products:', displayError);
+                    showNotification('Erreur lors de l\'affichage des produits', 'error');
+                }
+                
+                if (data.stats) {
+                    try {
+                        updateStats(data.stats);
+                        console.log('✅ Stats updated successfully:', data.stats);
+                    } catch (statsError) {
+                        console.error('❌ Error updating stats:', statsError);
+                    }
+                }
             } else {
                 console.error('API error:', data.message);
-                showNotification('Erreur lors du chargement des produits', 'error');
+                showNotification('Erreur lors du chargement des produits: ' + (data.message || 'Erreur inconnue'), 'error');
+                // Show empty state since we have no products
+                currentProducts = [];
+                displayProducts();
             }
         } catch (error) {
             console.error('Error loading products:', error);
@@ -536,42 +864,159 @@
         } finally {
             isLoading = false;
             hideLoading();
+            console.log('Request handling completed');
         }
+    }
+    
+    // Legacy function - now calls loadProductsWithAuth
+    async function loadProducts() {
+        loadProductsWithAuth();
     }
     
     // Display products based on current view
     function displayProducts() {
-        if (currentProducts.length === 0) {
-            showEmptyState();
-            return;
-        }
-        
-        hideEmptyState();
-        
-        if (currentView === 'grid') {
-            displayGridView();
-        } else {
-            displayListView();
+        try {
+            console.log('⚙️ displayProducts() called with', currentProducts.length, 'products');
+            
+            if (currentProducts.length === 0) {
+                console.log('📊 No products to display, showing empty state');
+                showEmptyState();
+                return;
+            }
+            
+            hideEmptyState();
+            
+            if (currentView === 'grid') {
+                console.log('📊 Displaying grid view');
+                displayGridView();
+            } else {
+                console.log('📊 Displaying list view');
+                displayListView();
+            }
+        } catch (error) {
+            console.error('❌ Error in displayProducts():', error);
+            showNotification('Erreur lors de l\'affichage des produits', 'error');
         }
     }
     
-    // Display products in grid view
+    // Display products in grid view - FIXED VERSION
     function displayGridView() {
-        const container = document.getElementById('gridView');
-        container.innerHTML = '';
-        
-        currentProducts.forEach(product => {
-            const productCard = createProductCard(product);
-            container.appendChild(productCard);
-        });
+        try {
+            const container = document.getElementById('gridView');
+            if (!container) {
+                console.error('❌ Grid view container not found');
+                throw new Error('Grid view container not found');
+            }
+            
+            console.log('⚙️ Clearing grid view container');
+            container.innerHTML = '';
+            
+            console.log(`⚙️ Creating ${currentProducts.length} product cards for grid view`);
+            
+            if (currentProducts.length === 0) {
+                console.log('No products to display, showing empty state');
+                showEmptyState();
+                return;
+            }
+            
+            // Direct approach instead of using createProductCard
+            currentProducts.forEach((product, index) => {
+                try {
+                    console.log(`⚙️ Creating card for product ${index + 1}/${currentProducts.length}: ${product.name}`);
+                    
+                    // Create card directly with simplified approach
+                    const card = document.createElement('div');
+                    card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+                    
+                    // Make sure we have the required properties with defaults
+                    const currentStock = product.current_stock || 0;
+                    const minStock = product.min_stock_alert || 0;
+                    const name = product.name || 'Unnamed Product';
+                    const category = product.category || 'No Category';
+                    const price = product.sale_price || 0;
+                    
+                    // Determine stock level class
+                    let stockClass = 'bg-green-100 text-green-800';
+                    if (currentStock <= 0) {
+                        stockClass = 'bg-red-100 text-red-800';
+                    } else if (currentStock <= minStock) {
+                        stockClass = 'bg-yellow-100 text-yellow-800';
+                    }
+                    
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between mb-4">
+                            <div class="flex-1">
+                                <h3 class="font-bold text-lg">${name}</h3>
+                                <p class="text-gray-600 text-sm">${category}</p>
+                            </div>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="font-bold text-lg">${price} MRU</span>
+                            <span class="${stockClass} text-sm px-2 py-1 rounded-full">
+                                Stock: ${currentStock}
+                            </span>
+                        </div>
+                    `;
+                    
+                    // Add click handler
+                    card.addEventListener('click', () => openEditModal(product));
+                    
+                    container.appendChild(card);
+                } catch (cardError) {
+                    console.error(`❌ Error creating card for product ${index}:`, cardError);
+                }
+            });
+            
+            // Hide empty state and show products
+            hideEmptyState();
+            document.getElementById('productsContainer').classList.remove('hidden');
+            
+            console.log('✅ Grid view displayed successfully');
+        } catch (error) {
+            console.error('❌ Error in displayGridView():', error);
+            
+            // Try direct method as fallback
+            try {
+                console.log('Attempting fallback display method...');
+                const container = document.getElementById('gridView');
+                if (container && currentProducts && currentProducts.length > 0) {
+                    container.innerHTML = '';
+                    currentProducts.forEach(product => {
+                        const card = document.createElement('div');
+                        card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+                        card.innerHTML = `
+                            <h3 class="font-bold text-lg">${product.name || 'Unnamed Product'}</h3>
+                            <p class="text-gray-600 text-sm">${product.category || 'No Category'}</p>
+                            <div class="flex justify-between items-center mt-2">
+                                <span class="font-semibold">${product.sale_price || 0} MRU</span>
+                                <span>Stock: ${product.current_stock || 0}</span>
+                            </div>
+                        `;
+                        container.appendChild(card);
+                    });
+                    console.log('✅ Fallback display successful');
+                }
+            } catch (fallbackError) {
+                console.error('❌ Fallback display also failed:', fallbackError);
+            }
+        }
     }
     
     // Create product card element
     function createProductCard(product) {
+        if (!product) {
+            console.error('Attempted to create product card with undefined product');
+            return document.createElement('div'); // Return empty div
+        }
+        
         const div = document.createElement('div');
         div.className = 'product-card bg-white rounded-lg shadow-lg p-6';
         
-        const stockLevel = getStockLevel(product.current_stock, product.min_stock);
+        // Make sure we have the required properties
+        const currentStock = product.current_stock || 0;
+        const minStock = product.min_stock_alert || 0;
+        
+        const stockLevel = getStockLevel(currentStock, minStock);
         const stockClass = getStockClass(stockLevel);
         
         div.innerHTML = `
@@ -647,10 +1092,19 @@
     
     // Create product table row
     function createProductRow(product) {
+        if (!product) {
+            console.error('Attempted to create product row with undefined product');
+            return document.createElement('tr'); // Return empty row
+        }
+        
         const tr = document.createElement('tr');
         tr.className = 'table-row';
         
-        const stockLevel = getStockLevel(product.current_stock, product.min_stock);
+        // Make sure we have the required properties
+        const currentStock = product.current_stock || 0;
+        const minStock = product.min_stock_alert || 0;
+        
+        const stockLevel = getStockLevel(currentStock, minStock);
         const stockClass = getStockClass(stockLevel);
         
         tr.innerHTML = `
@@ -693,9 +1147,13 @@
     
     // Utility functions
     function getStockLevel(currentStock, minStock) {
-        if (currentStock === 0) return 'out';
-        if (currentStock <= minStock) return 'low';
-        if (currentStock <= minStock * 2) return 'medium';
+        // Convert to numbers and handle undefined/null values
+        const stock = Number(currentStock) || 0;
+        const threshold = Number(minStock) || 0;
+        
+        if (stock === 0) return 'out';
+        if (threshold > 0 && stock <= threshold) return 'low';
+        if (threshold > 0 && stock <= threshold * 2) return 'medium';
         return 'good';
     }
     
@@ -911,13 +1369,31 @@
     
     // Utility functions
     function showLoading() {
-        document.getElementById('loadingState').classList.remove('hidden');
-        document.getElementById('productsContainer').classList.add('hidden');
+        try {
+            const loadingElement = document.getElementById('loadingState');
+            const productsElement = document.getElementById('productsContainer');
+            
+            if (loadingElement) loadingElement.classList.remove('hidden');
+            if (productsElement) productsElement.classList.add('hidden');
+            
+            console.log('⚙️ showLoading() - Loading state visible');
+        } catch (error) {
+            console.error('❌ Error in showLoading():', error);
+        }
     }
     
     function hideLoading() {
-        document.getElementById('loadingState').classList.add('hidden');
-        document.getElementById('productsContainer').classList.remove('hidden');
+        try {
+            const loadingElement = document.getElementById('loadingState');
+            const productsElement = document.getElementById('productsContainer');
+            
+            if (loadingElement) loadingElement.classList.add('hidden');
+            if (productsElement) productsElement.classList.remove('hidden');
+            
+            console.log('⚙️ hideLoading() - Loading state hidden');
+        } catch (error) {
+            console.error('❌ Error in hideLoading():', error);
+        }
     }
     
     function showEmptyState() {
@@ -950,5 +1426,97 @@
             timeout = setTimeout(later, wait);
         };
     }
+    
+    // Display notifications
+    function showNotification(message, type = 'info') {
+        const notificationContainer = document.getElementById('notificationContainer') || createNotificationContainer();
+        
+        const notification = document.createElement('div');
+        notification.className = `notification ${type} animate-fade-in`;
+        notification.innerHTML = `
+            <div class="notification-content">
+                <p>${message}</p>
+            </div>
+        `;
+        
+        notificationContainer.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.classList.add('animate-fade-out');
+            setTimeout(() => {
+                notification.remove();
+            }, 300);
+        }, 5000);
+    }
+    
+    function createNotificationContainer() {
+        const container = document.createElement('div');
+        container.id = 'notificationContainer';
+        container.className = 'fixed top-5 right-5 z-50 flex flex-col space-y-2';
+        document.body.appendChild(container);
+        return container;
+    }
+    
+    // Setup emergency debug panel functionality
+    document.addEventListener('DOMContentLoaded', function() {
+        // Set up direct API test button
+        document.getElementById('directApiTestBtn').addEventListener('click', async function() {
+            const resultDiv = document.getElementById('apiTestResult');
+            resultDiv.innerHTML = '<p>Testing API...</p>';
+            
+            try {
+                // First try to login
+                resultDiv.innerHTML += '<p>Logging in...</p>';
+                
+                const loginResponse = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ username: 'admin', pin: '1234' })
+                });
+                
+                if (!loginResponse.ok) {
+                    resultDiv.innerHTML += `<p style="color:red">Login failed: ${loginResponse.status}</p>`;
+                    return;
+                }
+                
+                const loginData = await loginResponse.json();
+                resultDiv.innerHTML += `<p style="color:${loginData.success ? 'green' : 'red'}">Login: ${loginData.success ? 'Success' : 'Failed'}</p>`;
+                
+                // Then fetch products
+                resultDiv.innerHTML += '<p>Fetching products...</p>';
+                
+                const productsResponse = await fetch('/api/inventory/products', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                if (!productsResponse.ok) {
+                    resultDiv.innerHTML += `<p style="color:red">API call failed: ${productsResponse.status}</p>`;
+                    return;
+                }
+                
+                const data = await productsResponse.json();
+                
+                if (data.success && data.products) {
+                    resultDiv.innerHTML += `<p style="color:green">Success! Found ${data.products.length} products</p>`;
+                    resultDiv.innerHTML += `<p>First product: ${data.products[0]?.name || 'N/A'}</p>`;
+                } else {
+                    resultDiv.innerHTML += `<p style="color:red">API returned no products</p>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML += `<p style="color:red">Error: ${error.message}</p>`;
+                console.error('Debug API test error:', error);
+            }
+        });
+    });
 </script>
 {% endblock %}

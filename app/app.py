@@ -65,6 +65,7 @@ if MODULES_AVAILABLE:
         from api.settings import settings_bp, init_settings_routes
         from models.ml_forecasting import StockPredictor, SalesForecaster
         from offline.sync_manager import SyncManager
+        from autologin import register_autologin_blueprint
         
         db_manager = DatabaseManager()
         db_manager.init_database()
@@ -103,6 +104,9 @@ if MODULES_AVAILABLE:
         app.register_blueprint(ai_bp, url_prefix='/api/ai')
         app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
         app.register_blueprint(admin_bp, url_prefix='/api/admin')
+        
+        # Register auto-login blueprint
+        register_autologin_blueprint(app)
         
         # Initialize settings routes with necessary dependencies
         SUPPORTED_LANGUAGES = {'fr': 'Français', 'ar': 'العربية'}
@@ -359,6 +363,34 @@ def dashboard():
 def inventory():
     """Inventory management page"""
     return render_template('inventory.html')
+
+
+@app.route('/inventory-launcher')
+def inventory_launcher():
+    """Inventory launcher page with auto-login option"""
+    return render_template('inventory_launcher.html')
+
+
+@app.route('/debug/inventory')
+def debug_inventory():
+    """Debug page for inventory API"""
+    return render_template('debug_inventory.html')
+
+
+@app.route('/test-api')
+def test_api():
+    """Test API functionality directly"""
+    return render_template('test_api.html')
+
+@app.route('/test-inventory')
+def test_inventory():
+    """Test inventory API functionality"""
+    return render_template('test_inventory.html')
+
+@app.route('/minimal-test')
+def minimal_test():
+    """Minimal test for inventory API"""
+    return render_template('minimal_test.html')
 
 
 @app.route('/customers')
