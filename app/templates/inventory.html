@@ -518,7 +518,7 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
+{% block extra_scripts %}
 <!-- Network debugging script -->
 <!-- Network debugging script (safe version) -->
 <script src="{{ url_for('static', filename='js/network-debug.js') }}"></script>
@@ -543,11 +543,6 @@
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
         console.log('DOM content loaded, setting up event listeners...');
-        
-        // Force immediate product loading for testing
-        console.log('🚨 FORCING IMMEDIATE PRODUCT LOADING');
-        isLoading = false; // Reset loading state
-        loadProductsWithAuth(); // Direct API call
         
         // Continue with normal setup
         setupEventListeners(); // This will trigger checkAuthAndLoadProducts
