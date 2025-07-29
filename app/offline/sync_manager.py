@@ -8,6 +8,7 @@ Handles offline data storage and cloud synchronization when available
 import json
 import sqlite3
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 import uuid
@@ -17,9 +18,13 @@ logger = logging.getLogger(__name__)
 
 class SyncManager:
     """Manages offline-first data synchronization"""
-    
-    def __init__(self, db_path='db/quincaillerie.db'):
-        self.db_path = db_path
+
+    def __init__(self, db_path=None):
+        env_path = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH')
+        if env_path and env_path.startswith('sqlite:///'):
+            env_path = env_path.replace('sqlite:///', '', 1)
+        default_path = os.path.join(os.path.dirname(__file__), '../db/quincaillerie.db')
+        self.db_path = os.path.abspath(env_path or db_path or default_path)
         self.cloud_enabled = False  # Will be True when Firebase is configured
         
     def get_connection(self):
