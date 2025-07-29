@@ -502,6 +502,41 @@ class DatabaseManager:
         items = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return items
+
+    def get_inventory_stats(self):
+        """Return inventory statistics for dashboard and inventory pages"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT COUNT(*) FROM products WHERE is_active = 1')
+        total = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM products
+            WHERE is_active = 1 AND current_stock > 0
+        ''')
+        in_stock = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COUNT(*) FROM products
+            WHERE is_active = 1 AND current_stock <= min_stock_alert
+        ''')
+        low_stock = cursor.fetchone()[0]
+
+        cursor.execute('''
+            SELECT COALESCE(SUM(purchase_price * current_stock), 0)
+            FROM products WHERE is_active = 1
+        ''')
+        total_value = cursor.fetchone()[0]
+
+        conn.close()
+
+        return {
+            'total': total,
+            'in_stock': in_stock,
+            'low_stock': low_stock,
+            'total_value': round(total_value or 0, 2)
+        }
     
     def get_today_sales(self):
         """Get today's sales summary"""

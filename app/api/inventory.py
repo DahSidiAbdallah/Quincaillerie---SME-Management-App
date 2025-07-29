@@ -63,9 +63,13 @@ def get_products():
         
         cursor.execute(query, params)
         products = [dict(row) for row in cursor.fetchall()]
+
+        # Fetch inventory stats for the page
+        stats = db_manager.get_inventory_stats()
+
         conn.close()
-        
-        return jsonify({'success': True, 'products': products})
+
+        return jsonify({'success': True, 'products': products, 'stats': stats})
         
     except Exception as e:
         logger.error(f"Error fetching products: {e}")
