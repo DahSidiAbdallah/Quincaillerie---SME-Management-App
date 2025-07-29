@@ -1,72 +1,13 @@
-<!DOCTYPE html>
-<html lang="{{ current_language }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Administration - Quincaillerie Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-50">
-    <!-- Header Navigation -->
-    <header class="bg-slate-800 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center">
-                    <i class="fas fa-wrench mr-2"></i>
-                    <h1 class="text-xl font-bold">Quincaillerie</h1>
-                </div>
-                
-                <!-- Main Navigation -->
-                <nav class="hidden md:flex space-x-6">
-                    <a href="/dashboard" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-tachometer-alt mr-2"></i>Tableau de bord
-                    </a>
-                    <a href="/inventory" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-boxes mr-2"></i>Inventaire
-                    </a>
-                    <a href="/sales" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-shopping-cart mr-2"></i>Ventes
-                    </a>
-                    <a href="/finance" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-chart-line mr-2"></i>Finance
-                    </a>
-                    <a href="/reports" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-chart-bar mr-2"></i>Rapports
-                    </a>
-                    <a href="/admin" class="flex items-center px-3 py-2 rounded-md text-sm font-medium bg-blue-600">
-                        <i class="fas fa-cog mr-2"></i>Admin
-                    </a>
-                </nav>
-                
-                <!-- User Menu -->
-                <div class="flex items-center space-x-4">
-                    <span class="text-green-400"><i class="fas fa-circle text-xs"></i> Synchronisé</span>
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-globe"></i>
-                        <select class="bg-slate-700 text-white rounded px-2 py-1 text-sm" onchange="changeLanguage(this.value)">
-                            <option value="fr" {{ 'selected' if current_language == 'fr' }}>Français</option>
-                            <option value="ar" {{ 'selected' if current_language == 'ar' }}>العربية</option>
-                            <option value="en" {{ 'selected' if current_language == 'en' }}>English</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-user"></i>
-                        <span class="text-sm">{{ current_user }}</span>
-                        <span class="bg-blue-600 text-xs px-2 py-1 rounded">{{ user_role }}</span>
-                    </div>
-                    <button onclick="handleLogout()" class="text-red-400 hover:text-red-300">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </header>
+{% extends 'base.html' %}
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="adminManager()">
+{% block title %}Administration - Quincaillerie Management{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="adminManager()" x-init="init()">
         <!-- Page Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Panneau d'Administration</h1>
@@ -428,7 +369,9 @@
             </div>
         </div>
     </footer>
+{% endblock %}
 
+{% block extra_scripts %}
     <script>
         function adminManager() {
             return {
@@ -450,17 +393,17 @@
                 },
                 
                 loadData() {
-                    fetch('/api/auth/users')
+                    apiFetch('/api/auth/users')
                         .then(r => r.json())
                         .then(data => { if (data.success) { this.users = data.users || []; } })
                         .catch(err => console.error('Error loading users:', err));
 
-                    fetch('/api/admin/settings')
+                    apiFetch('/api/admin/settings')
                         .then(r => r.json())
                         .then(data => { if (data.success) { this.settings = data.settings || {}; } })
                         .catch(err => console.error('Error loading settings:', err));
 
-                    fetch('/api/admin/backups')
+                    apiFetch('/api/admin/backups')
                         .then(r => r.json())
                         .then(data => { if (data.success) { this.backups = data.backups || []; } })
                         .catch(err => console.error('Error loading backups:', err));
@@ -473,7 +416,7 @@
                     const url = isEdit ? `/api/auth/users/${this.editingUserId}` : '/api/auth/create-user';
                     const method = isEdit ? 'PUT' : 'POST';
 
-                    fetch(url, {
+                    apiFetch(url, {
                         method: method,
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
@@ -500,7 +443,7 @@
                 },
                 
                 toggleUserStatus(user) {
-                    fetch(`/api/auth/users/${user.id}`, {
+                    apiFetch(`/api/auth/users/${user.id}`, {
                         method: 'PUT',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({is_active: !user.is_active})
@@ -518,7 +461,7 @@
                 
                 deleteUser(user) {
                     if (confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.username}?`)) {
-                        fetch(`/api/auth/users/${user.id}`, { method: 'DELETE' })
+                        apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' })
                             .then(r => r.json())
                             .then(data => {
                                 if (data.success) {
@@ -532,7 +475,7 @@
                 },
                 
                 saveSettings() {
-                    fetch('/api/admin/settings', {
+                    apiFetch('/api/admin/settings', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(this.settings)
@@ -543,7 +486,7 @@
                 },
                 
                 createBackup() {
-                    fetch('/api/admin/backups', {method: 'POST'})
+                    apiFetch('/api/admin/backups', {method: 'POST'})
                         .then(r => r.json())
                         .then(data => {
                             if (data.success) {
@@ -566,7 +509,7 @@
                 
                 deleteBackup(backup) {
                     if (!confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) return;
-                    fetch(`/api/admin/backups/${backup.id}`, {method: 'DELETE'})
+                    apiFetch(`/api/admin/backups/${backup.id}`, {method: 'DELETE'})
                         .then(r => r.json())
                         .then(data => { if (data.success) { this.backups = this.backups.filter(b => b.id !== backup.id); } else { alert(data.message || 'Erreur'); } })
                         .catch(err => console.error('Error deleting backup:', err));
@@ -578,9 +521,7 @@
             window.location.href = `/set-language/${lang}`;
         }
     </script>
-    
     <style>
         [x-cloak] { display: none !important; }
     </style>
-</body>
-</html>
+{% endblock %}
