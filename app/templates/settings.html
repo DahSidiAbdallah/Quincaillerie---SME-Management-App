@@ -1,72 +1,13 @@
-<!DOCTYPE html>
-<html lang="{{ current_language }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Paramètres - Quincaillerie Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-50">
-    <!-- Header Navigation -->
-    <header class="bg-slate-800 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center">
-                    <i class="fas fa-wrench mr-2"></i>
-                    <h1 class="text-xl font-bold">Quincaillerie</h1>
-                </div>
-                
-                <!-- Main Navigation -->
-                <nav class="hidden md:flex space-x-6">
-                    <a href="/dashboard" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-tachometer-alt mr-2"></i>Tableau de bord
-                    </a>
-                    <a href="/inventory" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-boxes mr-2"></i>Inventaire
-                    </a>
-                    <a href="/sales" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-shopping-cart mr-2"></i>Ventes
-                    </a>
-                    <a href="/finance" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-chart-line mr-2"></i>Finance
-                    </a>
-                    <a href="/reports" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-chart-bar mr-2"></i>Rapports
-                    </a>
-                    <a href="/admin" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-cog mr-2"></i>Admin
-                    </a>
-                </nav>
-                
-                <!-- User Menu -->
-                <div class="flex items-center space-x-4">
-                    <span class="text-green-400"><i class="fas fa-circle text-xs"></i> Synchronisé</span>
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-globe"></i>
-                        <select class="bg-slate-700 text-white rounded px-2 py-1 text-sm" onchange="changeLanguage(this.value)">
-                            <option value="fr" {{ 'selected' if current_language == 'fr' }}>Français</option>
-                            <option value="ar" {{ 'selected' if current_language == 'ar' }}>العربية</option>
-                            <option value="en" {{ 'selected' if current_language == 'en' }}>English</option>
-                        </select>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-user"></i>
-                        <span class="text-sm">{{ current_user }}</span>
-                        <span class="bg-blue-600 text-xs px-2 py-1 rounded">{{ user_role }}</span>
-                    </div>
-                    <button onclick="handleLogout()" class="text-red-400 hover:text-red-300">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </header>
+{% extends 'base.html' %}
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="settingsManager()">
+{% block title %}Paramètres - Quincaillerie Management{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="settingsManager()" x-init="init()">
         <!-- Page Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Paramètres Utilisateur</h1>
@@ -456,6 +397,7 @@
             </div>
         </div>
     </main>
+{% endblock %}
 
     <!-- Footer -->
     <footer class="bg-slate-800 text-white py-4 mt-12">
@@ -468,7 +410,7 @@
             </div>
         </div>
     </footer>
-
+{% block extra_scripts %}
     <script>
         function settingsManager() {
             return {
@@ -527,7 +469,7 @@
                 loadSettings() {
                     this.isLoading = true;
                     // Fetch user information from API
-                    fetch('/api/settings/user-info')
+                    apiFetch('/api/settings/user-info')
                         .then(response => response.json())
                         .then(data => {
                             if (data.success) {
@@ -583,7 +525,7 @@
                     };
                     
                     // Send the update request
-                    fetch('/api/settings/update-profile', {
+                    apiFetch('/api/settings/update-profile', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -626,7 +568,7 @@
                     };
                     
                     // Send the update request
-                    fetch('/api/settings/update-preferences', {
+                    apiFetch('/api/settings/update-preferences', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -662,7 +604,7 @@
                 changeLanguage(lang) {
                     const loadingToast = showToast('Changement de langue...', 'info', -1);
                     
-                    fetch('/api/settings/update-language', {
+                    apiFetch('/api/settings/update-language', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -702,7 +644,7 @@
                     
                     const loadingToast = showToast('Mise à jour du PIN...', 'info', -1);
                     
-                    fetch('/api/settings/update-pin', {
+                    apiFetch('/api/settings/update-pin', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -739,7 +681,7 @@
                     const formData = new FormData();
                     formData.append('photo', file);
 
-                    fetch('/api/settings/upload-photo', {
+                    apiFetch('/api/settings/upload-photo', {
                         method: 'POST',
                         body: formData
                     })
@@ -760,7 +702,7 @@
                 saveNotifications() {
                     const loadingToast = showToast('Sauvegarde des préférences de notification...', 'info', -1);
                     
-                    fetch('/api/settings/update-notifications', {
+                    apiFetch('/api/settings/update-notifications', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
@@ -846,5 +788,4 @@
         .toast-enter { animation: slideIn 0.3s ease forwards; }
         .toast-exit { animation: slideOut 0.3s ease forwards; }
     </style>
-</body>
-</html>
+{% endblock %}
