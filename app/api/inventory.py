@@ -5,7 +5,7 @@ Inventory Management API Blueprint
 Handles product management, stock movements, and inventory operations
 """
 
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, redirect, url_for
 from db.database import DatabaseManager
 import logging
 from datetime import datetime
@@ -63,9 +63,13 @@ def get_products():
         
         cursor.execute(query, params)
         products = [dict(row) for row in cursor.fetchall()]
+
+        # Fetch inventory stats for the page
+        stats = db_manager.get_inventory_stats()
+
         conn.close()
-        
-        return jsonify({'success': True, 'products': products})
+
+        return jsonify({'success': True, 'products': products, 'stats': stats})
         
     except Exception as e:
         logger.error(f"Error fetching products: {e}")
@@ -511,9 +515,21 @@ def get_low_stock_items():
         
         products = [dict(row) for row in cursor.fetchall()]
         conn.close()
-        
+
         return jsonify({'success': True, 'products': products})
-        
+
     except Exception as e:
         logger.error(f"Error fetching low stock items: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits en rupture'}), 500
+
+
+@inventory_bp.route('/export', methods=['GET'])
+def export_inventory():
+    """Export inventory as CSV using reports blueprint"""
+    return redirect(url_for('reports.export_report', report_type='products'))
+
+
+@inventory_bp.route('/report', methods=['GET'])
+def inventory_report_file():
+    """Download inventory report (CSV)"""
+    return redirect(url_for('reports.export_report', report_type='products'))

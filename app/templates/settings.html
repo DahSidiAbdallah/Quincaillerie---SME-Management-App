@@ -124,10 +124,9 @@
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         <!-- Profile Photo -->
                         <div class="flex flex-col items-center">
-                            <div class="h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center mb-4">
-                                <i class="fas fa-user text-3xl text-blue-600"></i>
-                            </div>
-                            <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+                            <img :src="profile.photo_url || '/static/default-user.png'" class="h-24 w-24 rounded-full object-cover mb-4" alt="Photo">
+                            <input type="file" id="photoInput" class="hidden" accept="image/*" @change="uploadPhoto">
+                            <button type="button" onclick="document.getElementById('photoInput').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
                                 <i class="fas fa-camera mr-2"></i>
                                 Changer Photo
                             </button>
@@ -480,7 +479,8 @@
                     first_name: '',
                     last_name: '',
                     email: '',
-                    phone: ''
+                    phone: '',
+                    photo_url: ''
                 },
                 preferences: {
                     language: '{{ current_language }}',
@@ -538,6 +538,7 @@
                                 this.profile.last_name = data.user.last_name || '';
                                 this.profile.email = data.user.email || '';
                                 this.profile.phone = data.user.phone || '';
+                                this.profile.photo_url = data.user.photo_url || '';
                                 
                                 // Update preferences
                                 this.preferences.language = data.user.language || '{{ current_language }}';
@@ -729,6 +730,31 @@
                         console.error('Error changing PIN:', error);
                         showToast('Erreur de connexion au serveur', 'error');
                     });
+                },
+
+                uploadPhoto(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const formData = new FormData();
+                    formData.append('photo', file);
+
+                    fetch('/api/settings/upload-photo', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.profile.photo_url = data.photo_url;
+                            } else {
+                                showToast(data.error || 'Erreur upload', 'error');
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error uploading photo:', err);
+                            showToast('Erreur de connexion', 'error');
+                        });
                 },
                 
                 saveNotifications() {

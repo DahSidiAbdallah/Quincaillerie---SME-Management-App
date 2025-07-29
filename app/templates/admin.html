@@ -377,7 +377,7 @@
             <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
                 <div class="mt-3">
                     <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-medium text-gray-900">Nouvel Utilisateur</h3>
+                        <h3 class="text-lg font-medium text-gray-900" x-text="editingUserId ? 'Modifier Utilisateur' : 'Nouvel Utilisateur'"></h3>
                         <button @click="showUserModal = false" class="text-gray-400 hover:text-gray-600">
                             <i class="fas fa-times"></i>
                         </button>
@@ -389,9 +389,9 @@
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Nom d'utilisateur</label>
                                 <input type="text" x-model="newUser.username" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
                             </div>
-                            <div>
+                            <div x-show="!editingUserId">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">PIN</label>
-                                <input type="password" x-model="newUser.pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                <input type="password" x-model="newUser.pin" class="w-full border border-gray-300 rounded-md px-3 py-2" :required="!editingUserId">
                             </div>
                         </div>
                         
@@ -408,8 +408,7 @@
                             <button type="button" @click="showUserModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
                                 Annuler
                             </button>
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
-                                Créer Utilisateur
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md" x-text="editingUserId ? 'Enregistrer' : 'Créer Utilisateur'">
                             </button>
                         </div>
                     </form>
@@ -435,91 +434,126 @@
             return {
                 activeTab: 'users',
                 showUserModal: false,
-                users: [
-                    {id: 1, username: 'admin', role: 'admin', last_login: '2025-07-24 10:30', is_active: true},
-                    {id: 2, username: 'manager1', role: 'manager', last_login: '2025-07-23 16:45', is_active: true},
-                    {id: 3, username: 'employee1', role: 'employee', last_login: '2025-07-24 09:15', is_active: true}
-                ],
+                users: [],
                 newUser: {
                     username: '',
                     pin: '',
                     role: 'employee'
                 },
-                settings: {
-                    company_name: 'Ma Quincaillerie',
-                    default_language: 'fr',
-                    currency: 'MRU',
-                    enable_notifications: true,
-                    session_timeout: 60,
-                    max_login_attempts: 5,
-                    require_strong_passwords: false,
-                    enable_audit_log: true
-                },
-                backups: [
-                    {id: 1, date: '2025-07-24', size: '2.3 MB', type: 'Automatique'},
-                    {id: 2, date: '2025-07-23', size: '2.1 MB', type: 'Manuel'},
-                    {id: 3, date: '2025-07-22', size: '2.0 MB', type: 'Automatique'}
-                ],
-                systemInfo: {
-                    python_version: '3.13.5',
-                    uptime: '2h 34m'
-                },
+                editingUserId: null,
+                settings: {},
+                backups: [],
+                systemInfo: {},
                 
                 init() {
                     this.loadData();
                 },
                 
                 loadData() {
-                    // Load users and settings from API
-                    console.log('Loading admin data...');
+                    fetch('/api/auth/users')
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.users = data.users || []; } })
+                        .catch(err => console.error('Error loading users:', err));
+
+                    fetch('/api/admin/settings')
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.settings = data.settings || {}; } })
+                        .catch(err => console.error('Error loading settings:', err));
+
+                    fetch('/api/admin/backups')
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.backups = data.backups || []; } })
+                        .catch(err => console.error('Error loading backups:', err));
                 },
                 
                 createUser() {
-                    // Mock user creation
-                    const newUserId = Date.now();
-                    this.users.push({
-                        id: newUserId,
-                        username: this.newUser.username,
-                        role: this.newUser.role,
-                        last_login: null,
-                        is_active: true
-                    });
-                    
-                    this.showUserModal = false;
-                    this.newUser = {username: '', pin: '', role: 'employee'};
-                    alert('Utilisateur créé avec succès!');
+                    const isEdit = this.editingUserId !== null;
+                    const payload = { username: this.newUser.username, role: this.newUser.role };
+                    if (!isEdit) { payload.pin = this.newUser.pin; }
+                    const url = isEdit ? `/api/auth/users/${this.editingUserId}` : '/api/auth/create-user';
+                    const method = isEdit ? 'PUT' : 'POST';
+
+                    fetch(url, {
+                        method: method,
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.loadData();
+                                this.showUserModal = false;
+                                this.newUser = {username: '', pin: '', role: 'employee'};
+                                this.editingUserId = null;
+                                alert(isEdit ? 'Utilisateur mis à jour' : 'Utilisateur créé avec succès!');
+                            } else {
+                                alert(data.message || 'Erreur');
+                            }
+                        })
+                        .catch(err => console.error('Error saving user:', err));
                 },
-                
+
                 editUser(user) {
-                    alert('Éditer utilisateur: ' + user.username);
+                    this.editingUserId = user.id;
+                    this.newUser = { username: user.username, pin: '', role: user.role };
+                    this.showUserModal = true;
                 },
                 
                 toggleUserStatus(user) {
-                    user.is_active = !user.is_active;
-                    alert(`Utilisateur ${user.username} ${user.is_active ? 'activé' : 'désactivé'}`);
+                    fetch(`/api/auth/users/${user.id}`, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({is_active: !user.is_active})
+                    })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                user.is_active = !user.is_active;
+                            } else {
+                                alert(data.message || 'Erreur de mise à jour');
+                            }
+                        })
+                        .catch(err => console.error('Error updating user:', err));
                 },
                 
                 deleteUser(user) {
                     if (confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.username}?`)) {
-                        this.users = this.users.filter(u => u.id !== user.id);
+                        fetch(`/api/auth/users/${user.id}`, { method: 'DELETE' })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.success) {
+                                    this.users = this.users.filter(u => u.id !== user.id);
+                                } else {
+                                    alert(data.message || 'Erreur de suppression');
+                                }
+                            })
+                            .catch(err => console.error('Error deleting user:', err));
                     }
                 },
                 
                 saveSettings() {
-                    alert('Paramètres sauvegardés avec succès!');
+                    fetch('/api/admin/settings', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.settings)
+                    })
+                        .then(r => r.json())
+                        .then(data => { if (data.success) alert('Paramètres sauvegardés'); else alert(data.message || 'Erreur'); })
+                        .catch(err => console.error('Error saving settings:', err));
                 },
                 
                 createBackup() {
-                    alert('Création de la sauvegarde en cours...');
-                    setTimeout(() => {
-                        this.backups.unshift({
-                            id: Date.now(),
-                            date: new Date().toISOString().split('T')[0],
-                            size: '2.4 MB',
-                            type: 'Manuel'
-                        });
-                        alert('Sauvegarde créée avec succès!');
-                    }, 2000);
+                    fetch('/api/admin/backups', {method: 'POST'})
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.loadData();
+                                alert('Sauvegarde créée avec succès!');
+                            } else {
+                                alert(data.message || 'Erreur création sauvegarde');
+                            }
+                        })
+                        .catch(err => console.error('Error creating backup:', err));
                 },
                 
                 scheduleBackup() {
@@ -527,13 +561,15 @@
                 },
                 
                 downloadBackup(backup) {
-                    alert('Téléchargement de la sauvegarde du ' + backup.date);
+                    window.open(`/api/admin/backups/${backup.id}`, '_blank');
                 },
                 
                 deleteBackup(backup) {
-                    if (confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) {
-                        this.backups = this.backups.filter(b => b.id !== backup.id);
-                    }
+                    if (!confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) return;
+                    fetch(`/api/admin/backups/${backup.id}`, {method: 'DELETE'})
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.backups = this.backups.filter(b => b.id !== backup.id); } else { alert(data.message || 'Erreur'); } })
+                        .catch(err => console.error('Error deleting backup:', err));
                 }
             }
         }
