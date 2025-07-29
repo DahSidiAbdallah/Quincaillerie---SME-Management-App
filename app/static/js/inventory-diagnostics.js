@@ -233,42 +233,48 @@
                     logResult(`Example product: ${product.name}, Price: ${product.sale_price}, Stock: ${product.current_stock}`);
                 }
                 
-                // Manually update the page if we can find the container
-                try {
-                    const container = document.getElementById('gridView');
-                    if (container) {
-                        logResult('Attempting to manually update UI with products', 'info');
-                        container.innerHTML = '';
-                        
-                        // Simple display of products
-                        data.products.forEach(product => {
-                            const card = document.createElement('div');
-                            card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-                            card.innerHTML = `
-                                <h3 class="font-bold text-lg">${product.name}</h3>
-                                <p class="text-gray-600 text-sm">${product.category}</p>
-                                <div class="flex justify-between items-center mt-2">
-                                    <span class="font-semibold">${product.sale_price}</span>
-                                    <span>Stock: ${product.current_stock}</span>
-                                </div>
-                            `;
-                            container.appendChild(card);
-                        });
-                        
-                        // Hide loading state
-                        const loadingElement = document.getElementById('loadingState');
-                        if (loadingElement) loadingElement.classList.add('hidden');
-                        
-                        // Show products container
-                        const productsContainer = document.getElementById('productsContainer');
-                        if (productsContainer) productsContainer.classList.remove('hidden');
-                        
-                        logResult('Successfully updated UI with products', 'success');
-                    } else {
-                        logResult('Could not find gridView container to update UI', 'warning');
+                // Try to update existing inventory UI if functions are available
+                if (window.displayProducts && window.updateStats) {
+                    if (typeof window.currentProducts !== 'undefined') {
+                        window.currentProducts = data.products;
                     }
-                } catch (displayError) {
-                    logResult(`Error updating UI: ${displayError.message}`, 'error');
+                    try {
+                        window.updateStats(data.stats);
+                        window.displayProducts();
+                        logResult('UI updated using page functions', 'success');
+                    } catch (uiErr) {
+                        logResult(`Error using page UI functions: ${uiErr.message}`, 'warning');
+                    }
+                } else {
+                    // Fallback: manually render a simple list of products
+                    try {
+                        const container = document.getElementById('gridView');
+                        if (container) {
+                            logResult('Attempting manual UI update', 'info');
+                            container.innerHTML = '';
+                            data.products.forEach(product => {
+                                const card = document.createElement('div');
+                                card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+                                card.innerHTML = `
+                                    <h3 class="font-bold text-lg">${product.name}</h3>
+                                    <p class="text-gray-600 text-sm">${product.category}</p>
+                                    <div class="flex justify-between items-center mt-2">
+                                        <span class="font-semibold">${product.sale_price}</span>
+                                        <span>Stock: ${product.current_stock}</span>
+                                    </div>`;
+                                container.appendChild(card);
+                            });
+                            const loadingElement = document.getElementById('loadingState');
+                            if (loadingElement) loadingElement.classList.add('hidden');
+                            const productsContainer = document.getElementById('productsContainer');
+                            if (productsContainer) productsContainer.classList.remove('hidden');
+                            logResult('Successfully updated UI with products', 'success');
+                        } else {
+                            logResult('Could not find gridView container to update UI', 'warning');
+                        }
+                    } catch (displayError) {
+                        logResult(`Error updating UI: ${displayError.message}`, 'error');
+                    }
                 }
             } else {
                 updateStatus(`API error: ${data.message}`, 'error');
