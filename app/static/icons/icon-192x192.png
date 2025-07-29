@@ -1,0 +1,6 @@
+<svg width="192" height="192" xmlns="http://www.w3.org/2000/svg">
+  <rect width="192" height="192" fill="#1f2937"/>
+  <path d="M50 50h20v40h-20z M80 40h40v20h-40z M80 70h40v20h-40z M80 100h40v20h-40z M130 50h20v40h-20z" fill="#3b82f6"/>
+  <circle cx="96" cy="140" r="15" fill="#ef4444"/>
+  <text x="96" y="35" text-anchor="middle" fill="white" font-family="Arial" font-size="12" font-weight="bold">QM</text>
+</svg>

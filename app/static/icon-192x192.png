@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" fill="#1e293b" rx="24"/>
+  <g fill="#f8fafc" transform="translate(48, 48)">
+    <path d="M72 24L64 8L56 24H72Z"/>
+    <path d="M24 32L8 24L24 16V32Z"/>
+    <path d="M32 8L16 16L32 24V8Z"/>
+    <circle cx="48" cy="48" r="8"/>
+    <rect x="32" y="56" width="32" height="32" rx="4"/>
+    <path d="M16 72L8 64L16 56L24 64L16 72Z"/>
+    <rect x="56" y="72" width="16" height="8" rx="2"/>
+    <rect x="72" y="56" width="8" height="16" rx="2"/>
+  </g>
+  <text x="96" y="152" text-anchor="middle" fill="#94a3b8" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Q</text>
+</svg>

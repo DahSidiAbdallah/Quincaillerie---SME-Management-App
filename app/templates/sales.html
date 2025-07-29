@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ventes - Quincaillerie Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-wrench mr-2"></i>
+                    <h1 class="text-xl font-bold">Quincaillerie</h1>
+                </div>
+                
+                <!-- Main Navigation -->
+                <nav class="hidden md:flex space-x-6">
+                    <a href="/dashboard" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-tachometer-alt mr-2"></i>Tableau de bord
+                    </a>
+                    <a href="/inventory" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-boxes mr-2"></i>Inventaire
+                    </a>
+                    <a href="/sales" class="flex items-center px-3 py-2 rounded-md text-sm font-medium bg-blue-600">
+                        <i class="fas fa-shopping-cart mr-2"></i>Ventes
+                    </a>
+                    <a href="/finance" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-chart-line mr-2"></i>Finance
+                    </a>
+                    <a href="/reports" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-chart-bar mr-2"></i>Rapports
+                    </a>
+                    <a href="/admin" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-cog mr-2"></i>Admin
+                    </a>
+                </nav>
+                
+                <!-- User Menu -->
+                <div class="flex items-center space-x-4">
+                    <span class="text-green-400"><i class="fas fa-circle text-xs"></i> Synchronisé</span>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-globe"></i>
+                        <div class="relative" x-data="{ open: false }">
+                            <button @click="open = !open" class="bg-slate-700 text-white rounded px-2 py-1 text-sm flex items-center">
+                                {{ supported_languages[current_language] }}
+                                <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                </svg>
+                            </button>
+                            <div x-show="open" @click.away="open = false" 
+                                 class="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg py-1 z-50">
+                                {% for lang_code, lang_name in supported_languages.items() %}
+                                <button onclick="changeLanguage('{{ lang_code }}')"
+                                   class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {{ 'bg-gray-100' if lang_code == current_language else '' }}">
+                                    {{ lang_name }}
+                                </button>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-user"></i>
+                        <span class="text-sm">{{ current_user }}</span>
+                        <span class="bg-blue-600 text-xs px-2 py-1 rounded">{{ user_role }}</span>
+                    </div>
+                    <button onclick="handleLogout()" class="text-red-400 hover:text-red-300">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="salesManager()">
+        <!-- Page Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Gestion des Ventes</h1>
+            <p class="text-gray-600 mt-2">Gérez vos transactions, clients et paiements</p>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-shopping-cart text-2xl text-blue-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-500">Ventes Aujourd'hui</h3>
+                        <p class="text-2xl font-bold text-gray-900" x-text="stats.today_sales">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-users text-2xl text-green-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-500">Clients Actifs</h3>
+                        <p class="text-2xl font-bold text-gray-900" x-text="stats.active_customers">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-credit-card text-2xl text-yellow-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-500">En Attente</h3>
+                        <p class="text-2xl font-bold text-gray-900" x-text="stats.pending_payments">0</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-chart-line text-2xl text-purple-600"></i>
+                    </div>
+                    <div class="ml-4">
+                        <h3 class="text-sm font-medium text-gray-500">Revenus Mensuel</h3>
+                        <p class="text-2xl font-bold text-gray-900" x-text="stats.monthly_revenue">0 MRU</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex flex-wrap gap-4 mb-6">
+            <button @click="showNewSaleModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-plus mr-2"></i>
+                Nouvelle Vente
+            </button>
+            <button @click="showCustomerModal = true" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-user-plus mr-2"></i>
+                Nouveau Client
+            </button>
+            <button @click="generateReport()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-file-alt mr-2"></i>
+                Rapport de Ventes
+            </button>
+            <button @click="exportData()" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-download mr-2"></i>
+                Exporter
+            </button>
+        </div>
+
+        <!-- Sales Table -->
+        <div class="bg-white shadow rounded-lg overflow-hidden">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-medium text-gray-900">Transactions Récentes</h3>
+                    <div class="flex space-x-2">
+                        <input type="text" x-model="searchTerm" placeholder="Rechercher..." class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <select x-model="filterStatus" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                            <option value="">Tous les statuts</option>
+                            <option value="paid">Payé</option>
+                            <option value="pending">En attente</option>
+                            <option value="cancelled">Annulé</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Mode Paiement</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="sale in filteredSales" :key="sale.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="sale.id"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="sale.customer_name"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(sale.date)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="sale.total + ' MRU'"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="sale.payment_method"></td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="{
+                                              'bg-green-100 text-green-800': sale.status === 'paid',
+                                              'bg-yellow-100 text-yellow-800': sale.status === 'pending',
+                                              'bg-red-100 text-red-800': sale.status === 'cancelled'
+                                          }"
+                                          x-text="getStatusText(sale.status)">
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button @click="viewSale(sale)" class="text-blue-600 hover:text-blue-900 mr-3">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button @click="editSale(sale)" class="text-green-600 hover:text-green-900 mr-3">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button @click="printInvoice(sale)" class="text-purple-600 hover:text-purple-900">
+                                        <i class="fas fa-print"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        
+                        <tr x-show="filteredSales.length === 0">
+                            <td colspan="7" class="px-6 py-4 text-center text-gray-500">
+                                <div class="flex flex-col items-center">
+                                    <i class="fas fa-inbox text-4xl text-gray-300 mb-2"></i>
+                                    <p>Aucune vente trouvée</p>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- New Sale Modal -->
+        <div x-show="showNewSaleModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Nouvelle Vente</h3>
+                        <button @click="showNewSaleModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="createSale()">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Client</label>
+                                <select x-model="newSale.customer_id" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                    <option value="">Sélectionner un client</option>
+                                    <template x-for="customer in customers" :key="customer.id">
+                                        <option :value="customer.id" x-text="customer.name"></option>
+                                    </template>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Mode de Paiement</label>
+                                <select x-model="newSale.payment_method" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                    <option value="cash">Espèces</option>
+                                    <option value="card">Carte</option>
+                                    <option value="check">Chèque</option>
+                                    <option value="credit">Crédit</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Produits</label>
+                            <div class="border border-gray-300 rounded-md p-4">
+                                <div class="flex gap-2 mb-2">
+                                    <select x-model="selectedProduct" class="flex-1 border border-gray-300 rounded-md px-3 py-2">
+                                        <option value="">Sélectionner un produit</option>
+                                        <template x-for="product in products" :key="product.id">
+                                            <option :value="product" x-text="product.name + ' - ' + product.price + ' MRU'"></option>
+                                        </template>
+                                    </select>
+                                    <input type="number" x-model="selectedQuantity" placeholder="Quantité" min="1" class="w-24 border border-gray-300 rounded-md px-3 py-2">
+                                    <button type="button" @click="addProduct()" class="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                
+                                <div class="space-y-2">
+                                    <template x-for="(item, index) in newSale.items" :key="index">
+                                        <div class="flex justify-between items-center bg-gray-50 p-2 rounded">
+                                            <span x-text="item.name + ' x' + item.quantity"></span>
+                                            <div class="flex items-center gap-2">
+                                                <span x-text="(item.price * item.quantity) + ' MRU'"></span>
+                                                <button type="button" @click="removeProduct(index)" class="text-red-600 hover:text-red-800">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                                
+                                <div class="mt-4 pt-4 border-t border-gray-200">
+                                    <div class="flex justify-between text-lg font-bold">
+                                        <span>Total:</span>
+                                        <span x-text="calculateTotal() + ' MRU'"></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" @click="showNewSaleModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                                Annuler
+                            </button>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                                Créer la Vente
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-white py-4 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <p>&copy; {{ current_year }} Quincaillerie Management v{{ app_version }}</p>
+            <div class="flex items-center space-x-4">
+                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
+                <span>Mode: {{ user_role|title }}</span>
+                <span>Utilisateur: {{ current_user }}</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function salesManager() {
+            return {
+                stats: {
+                    today_sales: '0',
+                    active_customers: 0,
+                    pending_payments: 0,
+                    monthly_revenue: '0'
+                },
+                sales: [],
+                customers: [],
+                products: [],
+                showNewSaleModal: false,
+                showCustomerModal: false,
+                newSale: {
+                    customer_id: '',
+                    payment_method: 'cash',
+                    items: []
+                },
+                selectedProduct: '',
+                selectedQuantity: 1,
+                searchTerm: '',
+                filterStatus: '',
+                
+                init() {
+                    this.loadData();
+                },
+                
+                loadData() {
+                    // Load sales data
+                    fetch('/api/sales')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.sales = data.sales || [];
+                            }
+                        })
+                        .catch(error => console.error('Error loading sales:', error));
+                    
+                    // Load sales statistics
+                    fetch('/api/sales/stats')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.stats = data.stats || this.stats;
+                            }
+                        })
+                        .catch(error => console.error('Error loading sales stats:', error));
+                    
+                    // Load products for sales
+                    fetch('/api/inventory/products')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.products = data.products.map(p => ({
+                                    id: p.id,
+                                    name: p.name,
+                                    price: p.sale_price,
+                                    stock: p.current_stock
+                                })) || [];
+                            }
+                        })
+                        .catch(error => console.error('Error loading products:', error));
+                },
+                
+                get filteredSales() {
+                    return this.sales.filter(sale => {
+                        const matchesSearch = !this.searchTerm || 
+                            sale.customer_name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                            sale.id.toString().includes(this.searchTerm);
+                        const matchesStatus = !this.filterStatus || sale.status === this.filterStatus;
+                        return matchesSearch && matchesStatus;
+                    });
+                },
+                
+                addProduct() {
+                    if (!this.selectedProduct || this.selectedQuantity < 1) return;
+                    
+                    this.newSale.items.push({
+                        id: this.selectedProduct.id,
+                        name: this.selectedProduct.name,
+                        price: this.selectedProduct.price,
+                        quantity: parseInt(this.selectedQuantity)
+                    });
+                    
+                    this.selectedProduct = '';
+                    this.selectedQuantity = 1;
+                },
+                
+                removeProduct(index) {
+                    this.newSale.items.splice(index, 1);
+                },
+                
+                calculateTotal() {
+                    return this.newSale.items.reduce((total, item) => {
+                        return total + (item.price * item.quantity);
+                    }, 0).toFixed(2);
+                },
+                
+                createSale() {
+                    if (this.newSale.items.length === 0) {
+                        alert('Veuillez ajouter au moins un produit');
+                        return;
+                    }
+                    
+                    const saleData = {
+                        ...this.newSale,
+                        total: this.calculateTotal()
+                    };
+                    
+                    fetch('/api/sales/transactions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(saleData)
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.showNewSaleModal = false;
+                                this.newSale = {customer_id: '', payment_method: 'cash', items: []};
+                                this.loadData();
+                                alert('Vente créée avec succès!');
+                            } else {
+                                alert('Erreur: ' + data.error);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error creating sale:', error);
+                            alert('Erreur lors de la création de la vente');
+                        });
+                },
+                
+                viewSale(sale) {
+                    alert('Voir détails de la vente #' + sale.id);
+                },
+                
+                editSale(sale) {
+                    alert('Éditer vente #' + sale.id);
+                },
+                
+                printInvoice(sale) {
+                    alert('Imprimer facture #' + sale.id);
+                },
+                
+                generateReport() {
+                    alert('Génération du rapport de ventes...');
+                },
+                
+                exportData() {
+                    alert('Export des données...');
+                },
+                
+                formatDate(dateString) {
+                    return new Date(dateString).toLocaleDateString('fr-FR');
+                },
+                
+                getStatusText(status) {
+                    const statusMap = {
+                        'paid': 'Payé',
+                        'pending': 'En attente',
+                        'cancelled': 'Annulé'
+                    };
+                    return statusMap[status] || status;
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</body>
+</html>

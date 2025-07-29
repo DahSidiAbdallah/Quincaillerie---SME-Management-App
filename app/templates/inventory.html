@@ -1,0 +1,946 @@
+{% extends "base.html" %}
+
+{% block title %}Gestion d'Inventaire - Quincaillerie Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    
+    .product-card {
+        transition: all 0.3s ease;
+        border: 1px solid #e5e7eb;
+    }
+    
+    .product-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        border-color: #3b82f6;
+    }
+    
+    .stock-level-low {
+        color: #dc2626;
+        background-color: #fee2e2;
+    }
+    
+    .stock-level-medium {
+        color: #d97706;
+        background-color: #fef3c7;
+    }
+    
+    .stock-level-good {
+        color: #059669;
+        background-color: #d1fae5;
+    }
+    
+    .table-row:hover {
+        background-color: #f9fafb;
+    }
+    
+    .barcode-scanner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    @media (max-width: 768px) {
+        .product-grid {
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Header Section -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+        <div>
+            <h1 class="text-3xl font-bold text-gray-900">Gestion d'Inventaire</h1>
+            <p class="text-gray-600 mt-1">Gérez vos produits, stock et approvisionnements</p>
+        </div>
+        
+        <div class="mt-4 sm:mt-0 flex space-x-3">
+            <!-- Add Product Button -->
+            <button onclick="openProductModal()" 
+                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                </svg>
+                Ajouter Produit
+            </button>
+            
+            <!-- Barcode Scanner -->
+            <button onclick="openBarcodeScanner()" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
+                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                </svg>
+                Scanner
+            </button>
+            
+            <!-- Import/Export -->
+            <div class="relative" x-data="{ open: false }">
+                <button @click="open = !open" 
+                        class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
+                    </svg>
+                    Import/Export
+                </button>
+                
+                <div x-show="open" @click.away="open = false" 
+                     class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
+                    <div class="py-1">
+                        <a href="#" onclick="exportInventory()" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            📤 Exporter Inventaire
+                        </a>
+                        <a href="#" onclick="openImportModal()" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            📥 Importer Produits
+                        </a>
+                        <a href="#" onclick="generateReport()" 
+                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            📊 Rapport d'Inventaire
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Quick Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Total Produits</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="totalProducts">{{ total_products or '0' }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">En Stock</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="inStockProducts">{{ in_stock_products or '0' }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Stock Faible</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="lowStockProducts">{{ low_stock_products or '0' }}</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Valeur Stock</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="stockValue">{{ stock_value or '0,00' }} MRU</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Search and Filters -->
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+            <!-- Search Bar -->
+            <div class="flex-1 max-w-lg">
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                        </svg>
+                    </div>
+                    <input type="text" id="searchInput" 
+                           class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                           placeholder="Rechercher produits (nom, code, catégorie...)">
+                </div>
+            </div>
+            
+            <!-- View Toggle -->
+            <div class="flex items-center space-x-4">
+                <div class="flex bg-gray-100 rounded-lg p-1">
+                    <button onclick="setView('grid')" id="gridViewBtn"
+                            class="px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                        </svg>
+                    </button>
+                    <button onclick="setView('list')" id="listViewBtn"
+                            class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Filters -->
+                <select id="categoryFilter" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="">Toutes catégories</option>
+                    <option value="outils">Outils</option>
+                    <option value="quincaillerie">Quincaillerie</option>
+                    <option value="peinture">Peinture</option>
+                    <option value="plomberie">Plomberie</option>
+                    <option value="electricite">Électricité</option>
+                </select>
+                
+                <select id="stockFilter" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                    <option value="">Tous les stocks</option>
+                    <option value="in_stock">En stock</option>
+                    <option value="low_stock">Stock faible</option>
+                    <option value="out_of_stock">Rupture</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Products Display -->
+    <div id="productsContainer">
+        <!-- Grid View -->
+        <div id="gridView" class="product-grid">
+            <!-- Products will be loaded here -->
+        </div>
+        
+        <!-- List View -->
+        <div id="listView" class="hidden bg-white rounded-lg shadow overflow-hidden">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Produit
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Code/Référence
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Catégorie
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Stock
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Prix
+                        </th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="productTableBody" class="bg-white divide-y divide-gray-200">
+                    <!-- Table rows will be loaded here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- Loading State -->
+    <div id="loadingState" class="text-center py-12">
+        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <p class="mt-4 text-gray-600">Chargement des produits...</p>
+    </div>
+    
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden text-center py-12">
+        <div class="text-6xl mb-4">📦</div>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">Aucun produit trouvé</h3>
+        <p class="text-gray-600 mb-6">Commencez par ajouter votre premier produit à l'inventaire.</p>
+        <button onclick="openProductModal()" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">
+            Ajouter votre premier produit
+        </button>
+    </div>
+</div>
+
+<!-- Product Modal -->
+<div id="productModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-medium text-gray-900" id="modalTitle">Ajouter un Produit</h3>
+            <button onclick="closeProductModal()" class="text-gray-400 hover:text-gray-600">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+            </button>
+        </div>
+        
+        <form id="productForm" class="space-y-4">
+            <input type="hidden" id="productId" name="product_id">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="productName" class="block text-sm font-medium text-gray-700">Nom du Produit *</label>
+                    <input type="text" id="productName" name="name" required 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="productCode" class="block text-sm font-medium text-gray-700">Code Produit</label>
+                    <input type="text" id="productCode" name="code" 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="productCategory" class="block text-sm font-medium text-gray-700">Catégorie *</label>
+                    <select id="productCategory" name="category" required 
+                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Sélectionner une catégorie</option>
+                        <option value="outils">Outils</option>
+                        <option value="quincaillerie">Quincaillerie</option>
+                        <option value="peinture">Peinture</option>
+                        <option value="plomberie">Plomberie</option>
+                        <option value="electricite">Électricité</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label for="productUnit" class="block text-sm font-medium text-gray-700">Unité</label>
+                    <select id="productUnit" name="unit" 
+                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                        <option value="pièce">Pièce</option>
+                        <option value="kg">Kilogramme</option>
+                        <option value="litre">Litre</option>
+                        <option value="mètre">Mètre</option>
+                        <option value="boîte">Boîte</option>
+                        <option value="paquet">Paquet</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <label for="productDescription" class="block text-sm font-medium text-gray-700">Description</label>
+                <textarea id="productDescription" name="description" rows="3" 
+                          class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label for="purchasePrice" class="block text-sm font-medium text-gray-700">Prix d'Achat (MRU)</label>
+                    <input type="number" id="purchasePrice" name="purchase_price" step="0.01" min="0" 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="sellPrice" class="block text-sm font-medium text-gray-700">Prix de Vente (MRU) *</label>
+                    <input type="number" id="sellPrice" name="sell_price" step="0.01" min="0" required 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="marginDisplay" class="block text-sm font-medium text-gray-700">Marge (%)</label>
+                    <input type="text" id="marginDisplay" readonly 
+                           class="mt-1 block w-full border border-gray-200 rounded-md px-3 py-2 bg-gray-50 text-gray-600">
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label for="currentStock" class="block text-sm font-medium text-gray-700">Stock Actuel *</label>
+                    <input type="number" id="currentStock" name="current_stock" min="0" required 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="minStock" class="block text-sm font-medium text-gray-700">Stock Minimum</label>
+                    <input type="number" id="minStock" name="min_stock" min="0" 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="maxStock" class="block text-sm font-medium text-gray-700">Stock Maximum</label>
+                    <input type="number" id="maxStock" name="max_stock" min="0" 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label for="supplier" class="block text-sm font-medium text-gray-700">Fournisseur</label>
+                    <input type="text" id="supplier" name="supplier" 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="location" class="block text-sm font-medium text-gray-700">Emplacement</label>
+                    <input type="text" id="location" name="location" placeholder="Ex: A1, B2, Entrepôt..." 
+                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+            </div>
+            
+            <div class="flex items-center justify-end space-x-3 pt-4">
+                <button type="button" onclick="closeProductModal()" 
+                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    Annuler
+                </button>
+                <button type="submit" 
+                        class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
+                    <span id="submitButtonText">Enregistrer</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Barcode Scanner Modal -->
+<div id="barcodeScannerModal" class="barcode-scanner hidden">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <div class="text-center">
+            <div class="text-4xl mb-4">📱</div>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Scanner Code-barres</h3>
+            <p class="text-gray-600 mb-4">Positionnez le code-barres dans le cadre</p>
+            
+            <div class="bg-gray-100 rounded-lg p-8 mb-4">
+                <div class="border-2 border-dashed border-gray-400 rounded-lg p-8">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
+                    </svg>
+                    <p class="mt-2 text-sm text-gray-500">Code-barres détecté apparaîtra ici</p>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <input type="text" id="manualBarcode" placeholder="Ou saisir manuellement le code" 
+                       class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                
+                <div class="flex space-x-3">
+                    <button onclick="searchByBarcode()" 
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md">
+                        Rechercher
+                    </button>
+                    <button onclick="closeBarcodeScanner()" 
+                            class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-md">
+                        Fermer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentView = 'grid';
+    let currentProducts = [];
+    let isLoading = false;
+    
+    // Initialize
+    document.addEventListener('DOMContentLoaded', function() {
+        loadProducts();
+        setupEventListeners();
+        calculateMargin(); // Initialize margin calculation
+    });
+    
+    function setupEventListeners() {
+        // Search input
+        document.getElementById('searchInput').addEventListener('input', debounce(handleSearch, 300));
+        
+        // Filters
+        document.getElementById('categoryFilter').addEventListener('change', loadProducts);
+        document.getElementById('stockFilter').addEventListener('change', loadProducts);
+        
+        // Price calculation
+        document.getElementById('purchasePrice').addEventListener('input', calculateMargin);
+        document.getElementById('sellPrice').addEventListener('input', calculateMargin);
+        
+        // Form submission
+        document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
+    }
+    
+    // Load products from API
+    async function loadProducts() {
+        if (isLoading) return;
+        
+        isLoading = true;
+        showLoading();
+        
+        try {
+            const searchTerm = document.getElementById('searchInput').value;
+            const category = document.getElementById('categoryFilter').value;
+            const stockFilter = document.getElementById('stockFilter').value;
+            
+            const params = new URLSearchParams();
+            if (searchTerm) params.append('search', searchTerm);
+            if (category) params.append('category', category);
+            if (stockFilter) params.append('stock_filter', stockFilter);
+            
+            const response = await fetch(`/api/inventory/products?${params}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                currentProducts = data.products;
+                displayProducts();
+                updateStats(data.stats);
+            } else {
+                showNotification('Erreur lors du chargement des produits', 'error');
+            }
+        } catch (error) {
+            console.error('Error loading products:', error);
+            showNotification('Erreur de connexion', 'error');
+        } finally {
+            isLoading = false;
+            hideLoading();
+        }
+    }
+    
+    // Display products based on current view
+    function displayProducts() {
+        if (currentProducts.length === 0) {
+            showEmptyState();
+            return;
+        }
+        
+        hideEmptyState();
+        
+        if (currentView === 'grid') {
+            displayGridView();
+        } else {
+            displayListView();
+        }
+    }
+    
+    // Display products in grid view
+    function displayGridView() {
+        const container = document.getElementById('gridView');
+        container.innerHTML = '';
+        
+        currentProducts.forEach(product => {
+            const productCard = createProductCard(product);
+            container.appendChild(productCard);
+        });
+    }
+    
+    // Create product card element
+    function createProductCard(product) {
+        const div = document.createElement('div');
+        div.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+        
+        const stockLevel = getStockLevel(product.current_stock, product.min_stock);
+        const stockClass = getStockClass(stockLevel);
+        
+        div.innerHTML = `
+            <div class="flex items-start justify-between mb-4">
+                <div class="flex-1">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-1">${product.name}</h3>
+                    <p class="text-sm text-gray-600">${product.code || 'N/A'}</p>
+                    <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full mt-2">
+                        ${product.category}
+                    </span>
+                </div>
+                <div class="flex space-x-2">
+                    <button onclick="editProduct(${product.id})" 
+                            class="text-blue-600 hover:text-blue-800">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
+                        </svg>
+                    </button>
+                    <button onclick="deleteProduct(${product.id})" 
+                            class="text-red-600 hover:text-red-800">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-600">Stock:</span>
+                    <span class="text-sm font-medium ${stockClass} px-2 py-1 rounded-full">
+                        ${product.current_stock} ${product.unit}
+                    </span>
+                </div>
+                
+                <div class="flex items-center justify-between">
+                    <span class="text-sm text-gray-600">Prix:</span>
+                    <span class="text-lg font-bold text-gray-900">${product.sell_price} MRU</span>
+                </div>
+                
+                ${product.description ? `
+                <div class="text-sm text-gray-600 border-t pt-3">
+                    ${product.description.substring(0, 100)}${product.description.length > 100 ? '...' : ''}
+                </div>
+                ` : ''}
+                
+                <div class="flex space-x-2 pt-3 border-t">
+                    <button onclick="adjustStock(${product.id})" 
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-md text-sm">
+                        Ajuster Stock
+                    </button>
+                    <button onclick="viewDetails(${product.id})" 
+                            class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-3 rounded-md text-sm">
+                        Détails
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        return div;
+    }
+    
+    // Display products in list view
+    function displayListView() {
+        const tbody = document.getElementById('productTableBody');
+        tbody.innerHTML = '';
+        
+        currentProducts.forEach(product => {
+            const row = createProductRow(product);
+            tbody.appendChild(row);
+        });
+    }
+    
+    // Create product table row
+    function createProductRow(product) {
+        const tr = document.createElement('tr');
+        tr.className = 'table-row';
+        
+        const stockLevel = getStockLevel(product.current_stock, product.min_stock);
+        const stockClass = getStockClass(stockLevel);
+        
+        tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">
+                <div>
+                    <div class="text-sm font-medium text-gray-900">${product.name}</div>
+                    <div class="text-sm text-gray-500">${product.description || ''}</div>
+                </div>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                ${product.code || 'N/A'}
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                    ${product.category}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="text-sm font-medium ${stockClass} px-2 py-1 rounded-full">
+                    ${product.current_stock} ${product.unit}
+                </span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                ${product.sell_price} MRU
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                <div class="flex space-x-2">
+                    <button onclick="editProduct(${product.id})" 
+                            class="text-blue-600 hover:text-blue-900">Modifier</button>
+                    <button onclick="adjustStock(${product.id})" 
+                            class="text-green-600 hover:text-green-900">Stock</button>
+                    <button onclick="deleteProduct(${product.id})" 
+                            class="text-red-600 hover:text-red-900">Supprimer</button>
+                </div>
+            </td>
+        `;
+        
+        return tr;
+    }
+    
+    // Utility functions
+    function getStockLevel(currentStock, minStock) {
+        if (currentStock === 0) return 'out';
+        if (currentStock <= minStock) return 'low';
+        if (currentStock <= minStock * 2) return 'medium';
+        return 'good';
+    }
+    
+    function getStockClass(level) {
+        const classes = {
+            'out': 'stock-level-low',
+            'low': 'stock-level-low',
+            'medium': 'stock-level-medium',
+            'good': 'stock-level-good'
+        };
+        return classes[level] || '';
+    }
+    
+    // View management
+    function setView(view) {
+        currentView = view;
+        
+        // Update buttons
+        document.getElementById('gridViewBtn').className = view === 'grid' 
+            ? 'px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm'
+            : 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900';
+            
+        document.getElementById('listViewBtn').className = view === 'list' 
+            ? 'px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm'
+            : 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900';
+        
+        // Show/hide views
+        document.getElementById('gridView').classList.toggle('hidden', view !== 'grid');
+        document.getElementById('listView').classList.toggle('hidden', view !== 'list');
+        
+        displayProducts();
+    }
+    
+    // Search functionality
+    function handleSearch() {
+        loadProducts();
+    }
+    
+    // Modal management
+    function openProductModal(productId = null) {
+        const modal = document.getElementById('productModal');
+        const title = document.getElementById('modalTitle');
+        const form = document.getElementById('productForm');
+        
+        if (productId) {
+            title.textContent = 'Modifier le Produit';
+            loadProductData(productId);
+        } else {
+            title.textContent = 'Ajouter un Produit';
+            form.reset();
+            document.getElementById('productId').value = '';
+        }
+        
+        modal.classList.remove('hidden');
+    }
+    
+    function closeProductModal() {
+        document.getElementById('productModal').classList.add('hidden');
+    }
+    
+    // Product operations
+    async function loadProductData(productId) {
+        try {
+            const response = await fetch(`/api/inventory/products/${productId}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const product = data.product;
+                
+                // Fill form fields
+                document.getElementById('productId').value = product.id;
+                document.getElementById('productName').value = product.name;
+                document.getElementById('productCode').value = product.code || '';
+                document.getElementById('productCategory').value = product.category;
+                document.getElementById('productUnit').value = product.unit;
+                document.getElementById('productDescription').value = product.description || '';
+                document.getElementById('purchasePrice').value = product.purchase_price || '';
+                document.getElementById('sellPrice').value = product.sell_price;
+                document.getElementById('currentStock').value = product.current_stock;
+                document.getElementById('minStock').value = product.min_stock || '';
+                document.getElementById('maxStock').value = product.max_stock || '';
+                document.getElementById('supplier').value = product.supplier || '';
+                document.getElementById('location').value = product.location || '';
+                
+                calculateMargin();
+            }
+        } catch (error) {
+            console.error('Error loading product:', error);
+            showNotification('Erreur lors du chargement du produit', 'error');
+        }
+    }
+    
+    async function handleProductSubmit(e) {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const productData = Object.fromEntries(formData.entries());
+        
+        const isEdit = productData.product_id !== '';
+        const url = isEdit 
+            ? `/api/inventory/products/${productData.product_id}`
+            : '/api/inventory/products';
+        const method = isEdit ? 'PUT' : 'POST';
+        
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(productData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showNotification(
+                    isEdit ? 'Produit modifié avec succès' : 'Produit ajouté avec succès', 
+                    'success'
+                );
+                closeProductModal();
+                loadProducts();
+            } else {
+                showNotification(result.message || 'Erreur lors de l\'enregistrement', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving product:', error);
+            showNotification('Erreur de connexion', 'error');
+        }
+    }
+    
+    function calculateMargin() {
+        const purchasePrice = parseFloat(document.getElementById('purchasePrice').value) || 0;
+        const sellPrice = parseFloat(document.getElementById('sellPrice').value) || 0;
+        
+        let margin = 0;
+        if (purchasePrice > 0 && sellPrice > 0) {
+            margin = ((sellPrice - purchasePrice) / purchasePrice * 100).toFixed(2);
+        }
+        
+        document.getElementById('marginDisplay').value = margin + '%';
+    }
+    
+    // Actions
+    function editProduct(productId) {
+        openProductModal(productId);
+    }
+    
+    async function deleteProduct(productId) {
+        if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit?')) return;
+        
+        try {
+            const response = await fetch(`/api/inventory/products/${productId}`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                showNotification('Produit supprimé avec succès', 'success');
+                loadProducts();
+            } else {
+                showNotification(result.message || 'Erreur lors de la suppression', 'error');
+            }
+        } catch (error) {
+            console.error('Error deleting product:', error);
+            showNotification('Erreur de connexion', 'error');
+        }
+    }
+    
+    function adjustStock(productId) {
+        // Implementation for stock adjustment modal
+        showNotification('Fonctionnalité d\'ajustement de stock à implémenter', 'info');
+    }
+    
+    function viewDetails(productId) {
+        // Implementation for product details view
+        showNotification('Vue détaillée du produit à implémenter', 'info');
+    }
+    
+    // Barcode scanner
+    function openBarcodeScanner() {
+        document.getElementById('barcodeScannerModal').classList.remove('hidden');
+    }
+    
+    function closeBarcodeScanner() {
+        document.getElementById('barcodeScannerModal').classList.add('hidden');
+        document.getElementById('manualBarcode').value = '';
+    }
+    
+    function searchByBarcode() {
+        const barcode = document.getElementById('manualBarcode').value.trim();
+        if (!barcode) return;
+        
+        // Search for product by barcode
+        document.getElementById('searchInput').value = barcode;
+        closeBarcodeScanner();
+        loadProducts();
+    }
+    
+    // Import/Export functions
+    function exportInventory() {
+        window.open('/api/inventory/export', '_blank');
+    }
+    
+    function openImportModal() {
+        showNotification('Fonctionnalité d\'import à implémenter', 'info');
+    }
+    
+    function generateReport() {
+        window.open('/api/inventory/report', '_blank');
+    }
+    
+    // Utility functions
+    function showLoading() {
+        document.getElementById('loadingState').classList.remove('hidden');
+        document.getElementById('productsContainer').classList.add('hidden');
+    }
+    
+    function hideLoading() {
+        document.getElementById('loadingState').classList.add('hidden');
+        document.getElementById('productsContainer').classList.remove('hidden');
+    }
+    
+    function showEmptyState() {
+        document.getElementById('emptyState').classList.remove('hidden');
+        document.getElementById('productsContainer').classList.add('hidden');
+    }
+    
+    function hideEmptyState() {
+        document.getElementById('emptyState').classList.add('hidden');
+        document.getElementById('productsContainer').classList.remove('hidden');
+    }
+    
+    function updateStats(stats) {
+        if (stats) {
+            document.getElementById('totalProducts').textContent = stats.total || '0';
+            document.getElementById('inStockProducts').textContent = stats.in_stock || '0';
+            document.getElementById('lowStockProducts').textContent = stats.low_stock || '0';
+            document.getElementById('stockValue').textContent = (stats.total_value || '0') + ' MRU';
+        }
+    }
+    
+    function debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+</script>
+{% endblock %}

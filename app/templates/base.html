@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Quincaillerie Management{% endblock %}</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="{{ url_for('manifest') }}">
+    <meta name="theme-color" content="#1f2937">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Chart.js for analytics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Alpine.js for reactive components -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    
+    <!-- Common JavaScript functions -->
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    
+    <!-- Custom CSS -->
+    <style>
+        /* RTL Support for Arabic */
+        [dir="rtl"] {
+            text-align: right;
+        }
+        
+        /* Offline indicator */
+        .offline-indicator {
+            background: #ef4444;
+            color: white;
+            padding: 0.5rem;
+            text-align: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 9999;
+            transform: translateY(-100%);
+            transition: transform 0.3s ease;
+        }
+        
+        .offline-indicator.show {
+            transform: translateY(0);
+        }
+        
+        /* Loading spinner */
+        .spinner {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Print styles */
+        @media print {
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+    
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 min-h-screen" dir="{{ 'rtl' if current_language == 'ar' else 'ltr' }}">
+    <!-- Offline Indicator -->
+    <div id="offlineIndicator" class="offline-indicator">
+        <span id="offlineText">Mode hors ligne - Les données seront synchronisées à la reconnexion</span>
+    </div>
+    
+    <!-- Navigation -->
+    {% if session.user_id %}
+    <nav class="bg-gray-800 text-white shadow-lg no-print">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <!-- Logo -->
+                    <div class="flex-shrink-0">
+                        <h1 class="text-xl font-bold">🔧 Quincaillerie</h1>
+                    </div>
+                    
+                    <!-- Navigation Links -->
+                    <div class="hidden md:block ml-10">
+                        <div class="flex items-baseline space-x-4">
+                            <a href="{{ url_for('dashboard') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
+                                📊 Tableau de bord
+                            </a>
+                            <a href="{{ url_for('inventory') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                                📦 Inventaire
+                            </a>
+                            <a href="{{ url_for('sales') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                                💰 Ventes
+                            </a>
+                            <a href="{{ url_for('finance') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
+                                💳 Finance
+                            </a>
+                            <a href="{{ url_for('reports') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
+                                📈 Rapports
+                            </a>
+                            {% if user_role == 'admin' %}
+                            <a href="{{ url_for('admin') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
+                                ⚙️ Admin
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Right side items -->
+                <div class="flex items-center space-x-4">
+                    <!-- Sync Status -->
+                    <div id="syncStatus" class="flex items-center text-sm">
+                        <div id="syncIndicator" class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+                        <span id="syncText">Synchronisé</span>
+                    </div>
+                    
+                    <!-- Language Selector -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" class="flex items-center text-sm hover:bg-gray-700 px-2 py-1 rounded">
+                            <span class="mr-1">🌐</span>
+                            {{ supported_languages[current_language] }}
+                        </button>
+                        <div x-show="open" @click.away="open = false" 
+                             class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                            {% for lang_code, lang_name in supported_languages.items() %}
+                            <button onclick="changeLanguage('{{ lang_code }}')"
+                               class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {{ 'bg-gray-100' if lang_code == current_language else '' }}">
+                                {{ lang_name }}
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- User Menu -->
+                    <div class="relative" x-data="{ open: false }">
+                        <button @click="open = !open" class="flex items-center text-sm hover:bg-gray-700 px-2 py-1 rounded">
+                            <span class="mr-2">👤</span>
+                            {{ current_user }}
+                            <span class="ml-1 text-xs bg-blue-600 px-2 py-0.5 rounded">{{ user_role }}</span>
+                        </button>
+                        <div x-show="open" @click.away="open = false" 
+                             class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                            <a href="{{ url_for('settings') }}" 
+                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                ⚙️ Paramètres
+                            </a>
+                            <button onclick="handleLogout()" 
+                               class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
+                                🚪 Déconnexion
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Mobile menu button -->
+                    <div class="md:hidden">
+                        <button x-data @click="$refs.mobileMenu.classList.toggle('hidden')" 
+                                class="text-gray-300 hover:text-white p-2">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Mobile menu -->
+        <div x-ref="mobileMenu" class="md:hidden hidden">
+            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-gray-700">
+                <a href="{{ url_for('dashboard') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">📊 Tableau de bord</a>
+                <a href="{{ url_for('inventory') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">📦 Inventaire</a>
+                <a href="{{ url_for('sales') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">💰 Ventes</a>
+                <a href="{{ url_for('finance') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">💳 Finance</a>
+                <a href="{{ url_for('reports') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">📈 Rapports</a>
+                {% if user_role == 'admin' %}
+                <a href="{{ url_for('admin') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">⚙️ Admin</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+    {% endif %}
+    
+    <!-- Main Content -->
+    <main class="flex-1">
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 no-print">
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} mb-4 p-4 rounded-md {{ 'bg-red-50 border border-red-200 text-red-700' if category == 'error' else 'bg-green-50 border border-green-200 text-green-700' if category == 'success' else 'bg-blue-50 border border-blue-200 text-blue-700' }}">
+                            <div class="flex">
+                                <div class="flex-shrink-0">
+                                    {% if category == 'error' %}
+                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                                        </svg>
+                                    {% elif category == 'success' %}
+                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                                        </svg>
+                                    {% else %}
+                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                        </svg>
+                                    {% endif %}
+                                </div>
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium">{{ message }}</p>
+                                </div>
+                                <div class="ml-auto pl-3">
+                                    <div class="-mx-1.5 -my-1.5">
+                                        <button type="button" onclick="this.parentElement.parentElement.parentElement.parentElement.remove()" class="inline-flex rounded-md p-1.5 hover:bg-gray-100 focus:outline-none">
+                                            <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                                                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Page Content -->
+        {% block content %}{% endblock %}
+    </main>
+    
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-white mt-12 no-print">
+        <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <span class="text-sm">© {{ current_year }} Quincaillerie Management v{{ app_version }}</span>
+                    <span id="connectionStatus" class="text-xs bg-gray-700 px-2 py-1 rounded">
+                        <span id="statusDot" class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1"></span>
+                        <span id="statusText">En ligne</span>
+                    </span>
+                </div>
+                <div class="flex items-center space-x-4 text-sm">
+                    <span>Mode: <span class="font-semibold">{{ 'Administrateur' if user_role == 'admin' else 'Employé' }}</span></span>
+                    <span>|</span>
+                    <span>Utilisateur: <span class="font-semibold">{{ current_user }}</span></span>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
+    <!-- Global JavaScript -->
+    <script>
+        // Global app configuration
+        window.AppConfig = {
+            language: '{{ current_language }}',
+            userRole: '{{ user_role }}',
+            apiBase: '/api',
+            isOffline: false
+        };
+        
+        // Service Worker Registration
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js')
+                .then(registration => {
+                    console.log('SW registered: ', registration);
+                })
+                .catch(registrationError => {
+                    console.log('SW registration failed: ', registrationError);
+                });
+        }
+        
+        // Online/Offline Detection
+        function updateConnectionStatus() {
+            const statusDot = document.getElementById('statusDot');
+            const statusText = document.getElementById('statusText');
+            const offlineIndicator = document.getElementById('offlineIndicator');
+            const syncIndicator = document.getElementById('syncIndicator');
+            const syncText = document.getElementById('syncText');
+            
+            if (navigator.onLine) {
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-green-400 mr-1';
+                statusText.textContent = 'En ligne';
+                offlineIndicator.classList.remove('show');
+                syncIndicator.className = 'w-2 h-2 rounded-full bg-green-500 mr-2';
+                syncText.textContent = 'Synchronisé';
+                window.AppConfig.isOffline = false;
+            } else {
+                statusDot.className = 'inline-block w-2 h-2 rounded-full bg-red-400 mr-1';
+                statusText.textContent = 'Hors ligne';
+                offlineIndicator.classList.add('show');
+                syncIndicator.className = 'w-2 h-2 rounded-full bg-yellow-500 mr-2';
+                syncText.textContent = 'Hors ligne';
+                window.AppConfig.isOffline = true;
+            }
+        }
+        
+        // Initialize connection status
+        updateConnectionStatus();
+        
+        // Listen for online/offline events
+        window.addEventListener('online', updateConnectionStatus);
+        window.addEventListener('offline', updateConnectionStatus);
+        
+        // Global fetch wrapper with offline handling
+        window.apiFetch = async function(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('API request failed:', error);
+                
+                // In offline mode, you might want to queue the request
+                if (!navigator.onLine) {
+                    console.log('Offline: queueing request for later');
+                    // TODO: Implement offline request queueing
+                }
+                
+                throw error;
+            }
+        };
+        
+        // Global notification system
+        window.showNotification = function(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' :
+                type === 'error' ? 'bg-red-500 text-white' :
+                type === 'warning' ? 'bg-yellow-500 text-black' :
+                'bg-blue-500 text-white'
+            }`;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+            
+            // Click to remove
+            notification.addEventListener('click', () => {
+                notification.remove();
+            });
+        };
+        
+        // Global loading indicator
+        window.showLoading = function(show = true) {
+            let loader = document.getElementById('globalLoader');
+            if (!loader) {
+                loader = document.createElement('div');
+                loader.id = 'globalLoader';
+                loader.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+                loader.innerHTML = '<div class="bg-white p-4 rounded-lg"><div class="spinner mx-auto"></div><p class="mt-2 text-center">Chargement...</p></div>';
+                document.body.appendChild(loader);
+            }
+            
+            loader.style.display = show ? 'flex' : 'none';
+        };
+        
+        // Print function
+        window.printPage = function() {
+            window.print();
+        };
+    </script>
+    
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

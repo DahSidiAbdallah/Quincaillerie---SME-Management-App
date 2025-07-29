@@ -1,0 +1,653 @@
+{% extends "base.html" %}
+
+{% block title %}Tableau de Bord - Quincaillerie Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+    
+    .pulse-animation {
+        animation: pulse 2s infinite;
+    }
+    
+    .metric-card {
+        transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 200px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Tableau de bord</h1>
+        <p class="text-gray-600 mt-2">Vue d'ensemble de votre activité, ventes et inventaire</p>
+    </div>
+
+    <!-- Dashboard Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-boxes text-2xl text-blue-600"></i>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h3 class="text-sm font-medium text-gray-500">Total Produits</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="totalProducts">{{ total_products or '0' }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-2xl text-yellow-500"></i>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h3 class="text-sm font-medium text-gray-500">Stock Faible</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="lowStockCount">{{ low_stock_items|length or '0' }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-coins text-2xl text-orange-500"></i>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h3 class="text-sm font-medium text-gray-500">Ventes Aujourd'hui</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="todaySales">{{ today_sales or '0,00' }} MRU</p>
+                </div>
+            </div>
+        </div>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-chart-line text-2xl text-green-600"></i>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h3 class="text-sm font-medium text-gray-500">Revenus Total</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="totalRevenue">{{ total_revenue or '0,00' }} MRU</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Sales Chart -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">Ventes des 7 Derniers Jours</h3>
+                <div class="flex space-x-2">
+                    <button onclick="updateSalesChart('daily')" 
+                            class="sales-chart-btn px-3 py-1 text-xs bg-blue-100 text-blue-600 rounded-md hover:bg-blue-200 transition">
+                        Journalier
+                    </button>
+                    <button onclick="updateSalesChart('weekly')" 
+                            class="sales-chart-btn px-3 py-1 text-xs bg-gray-100 text-gray-600 rounded-md hover:bg-gray-200 transition">
+                        Hebdomadaire
+                    </button>
+                </div>
+            </div>
+            <div class="chart-container">
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+        
+        <!-- Top Products -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Produits les Plus Vendus</h3>
+            <div class="space-y-4" id="topProducts">
+                <!-- Will be populated by JavaScript -->
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                            <span class="text-blue-600 font-semibold">1</span>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">Produit #1</p>
+                            <p class="text-sm text-gray-500">0 unités vendues</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-semibold text-gray-900">0,00 MRU</p>
+                        <p class="text-sm text-green-600">+0%</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                            <span class="text-green-600 font-semibold">2</span>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">Produit #2</p>
+                            <p class="text-sm text-gray-500">0 unités vendues</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-semibold text-gray-900">0,00 MRU</p>
+                        <p class="text-sm text-green-600">+0%</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div class="flex items-center">
+                        <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
+                            <span class="text-yellow-600 font-semibold">3</span>
+                        </div>
+                        <div>
+                            <p class="font-medium text-gray-900">Produit #3</p>
+                            <p class="text-sm text-gray-500">0 unités vendues</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <p class="font-semibold text-gray-900">0,00 MRU</p>
+                        <p class="text-sm text-red-600">+0%</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mt-4 text-center">
+                <a href="{{ url_for('reports', tab='products') }}" 
+                   class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                    Voir tous les produits →
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activities & Alerts -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Activities -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Activités Récentes</h3>
+            <div class="space-y-4" id="recentActivities">
+                <!-- Activities will be loaded via JavaScript -->
+                {% if recent_activities %}
+                    {% for activity in recent_activities %}
+                    <div class="flex items-start space-x-3">
+                        <div class="flex-shrink-0 w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
+                            <svg class="w-4 h-4 text-gray-600" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div class="flex-1">
+                            <p class="text-sm text-gray-900">
+                                <span class="font-medium">{{ activity.action_type }}</span> - {{ activity.description }}
+                            </p>
+                            <p class="text-xs text-gray-500">Par: {{ activity.username }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="text-center text-gray-500 py-4">
+                        Aucune activité récente
+                    </div>
+                {% endif %}
+            </div>
+            
+            <div class="mt-4 text-center">
+                <button onclick="loadMoreActivities()" 
+                        class="text-sm text-blue-600 hover:text-blue-800 font-medium">
+                    Voir plus d'activités →
+                </button>
+            </div>
+        </div>
+        
+        <!-- Alerts -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">Alertes & Rappels</h3>
+            
+            <div class="rounded-lg bg-yellow-50 p-4 mb-4 border-l-4 border-yellow-400">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-exclamation-triangle text-yellow-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-yellow-800">Stock Faible</h3>
+                        <div class="mt-2 text-sm text-yellow-700">
+                            <p>{{ low_stock_items|length or '0' }} produits sont en dessous du seuil d'alerte.</p>
+                            <button onclick="viewLowStock()" 
+                                    class="mt-1 text-xs font-medium text-yellow-800 hover:text-yellow-900">
+                                Voir les produits →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="rounded-lg bg-red-50 p-4 mb-4 border-l-4 border-red-400">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-calendar-times text-red-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-red-800">Paiements en Retard</h3>
+                        <div class="mt-2 text-sm text-red-700">
+                            <p id="pendingDebts">
+                                {% if pending_debts and pending_debts.count %}
+                                    {{ pending_debts.count }} clients ont des paiements en retard (Total: {{ pending_debts.total }} MRU)
+                                {% else %}
+                                    0 clients ont des paiements en retard (Total: 0,00 MRU)
+                                {% endif %}
+                            </p>
+                            <button onclick="viewOverduePayments()" 
+                                    class="mt-1 text-xs font-medium text-red-800 hover:text-red-900">
+                                Voir les créances →
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="rounded-lg bg-blue-50 p-4 border-l-4 border-blue-400">
+                <div class="flex items-start">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-sync text-blue-400"></i>
+                    </div>
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-800">État du Système</h3>
+                        <div class="mt-2 text-sm text-blue-700">
+                            <div class="flex items-center" id="connectionStatus">
+                                <div class="w-2 h-2 rounded-full bg-green-400 mr-2"></div>
+                                <span>Système en ligne</span>
+                            </div>
+                            <p class="mt-1 text-xs">Dernière synchronisation: {{ "aujourd'hui" }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    {% if user_role == 'admin' %}
+    <!-- AI Insights (Admin Only) -->
+    <div class="mt-8 p-6 bg-gradient-to-r from-purple-500 to-indigo-600 rounded-xl text-white shadow-xl">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h3 class="text-2xl font-bold">Insights IA</h3>
+                <p class="text-purple-100">Recommandations intelligentes pour votre business</p>
+            </div>
+            <div class="text-3xl">🤖</div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white/10 rounded-lg p-4">
+                <h4 class="font-semibold mb-2">Prédiction de Ventes</h4>
+                <p class="text-sm text-purple-100">Les ventes devraient augmenter de 12% la semaine prochaine</p>
+                <button onclick="viewSalesForecast()" 
+                        class="text-xs text-white hover:text-purple-200 font-medium mt-2">
+                    Voir détails →
+                </button>
+            </div>
+            
+            <div class="bg-white/10 rounded-lg p-4">
+                <h4 class="font-semibold mb-2">Réapprovisionnement</h4>
+                <p class="text-sm text-purple-100">Recommandé: Commander 250 unités de Vis Phillips cette semaine</p>
+                <button onclick="viewRestockSuggestions()" 
+                        class="text-xs text-white hover:text-purple-200 font-medium mt-2">
+                    Voir suggestions →
+                </button>
+            </div>
+            
+            <div class="bg-white/10 rounded-lg p-4">
+                <h4 class="font-semibold mb-2">Optimisation Prix</h4>
+                <p class="text-sm text-purple-100">5 produits pourraient bénéficier d'un ajustement de prix</p>
+                <button onclick="viewPricingOptimization()" 
+                        class="text-xs text-white hover:text-purple-200 font-medium mt-2">
+                    Optimiser →
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</main>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+    // Sales Chart
+    let salesChart;
+    
+    function initializeSalesChart() {
+        const ctx = document.getElementById('salesChart').getContext('2d');
+        
+        salesChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+                datasets: [{
+                    label: 'Ventes (MRU)',
+                    data: [0, 0, 0, 0, 0, 0, 0],
+                    borderColor: 'rgb(59, 130, 246)',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString() + ' MRU';
+                            }
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        });
+        
+        // Load actual sales data
+        loadSalesChartData('daily');
+    }
+    
+    async function loadSalesChartData(period) {
+        try {
+            const response = await fetch('/api/dashboard/sales-chart');
+            const data = await response.json();
+            
+            if (data.success) {
+                updateSalesChart(period, data);
+            } else {
+                console.error('Error loading sales chart data:', data.error);
+            }
+        } catch (error) {
+            console.error('Error loading sales chart data:', error);
+        }
+    }
+    
+    function updateSalesChart(period, data = null) {
+        let newData, newLabels;
+        
+        if (data && data.success) {
+            if (period === 'weekly' && data.weekly) {
+                newLabels = data.weekly.labels;
+                newData = data.weekly.data;
+            } else if (data.daily) {
+                newLabels = data.daily.labels;
+                newData = data.daily.data;
+            } else {
+                // Fallback
+                newLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                newData = [0, 0, 0, 0, 0, 0, 0];
+            }
+        } else {
+            // Default fallback data
+            if (period === 'weekly') {
+                newLabels = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
+                newData = [0, 0, 0, 0];
+            } else {
+                newLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+                newData = [0, 0, 0, 0, 0, 0, 0];
+            }
+        }
+        
+        salesChart.data.labels = newLabels;
+        salesChart.data.datasets[0].data = newData;
+        salesChart.update();
+        
+        // Change button styles
+        if (period === 'weekly') {
+            document.querySelectorAll('.sales-chart-btn').forEach(btn => {
+                if (btn.innerText.includes('Hebdomadaire')) {
+                    btn.classList.replace('bg-gray-100', 'bg-blue-100');
+                    btn.classList.replace('text-gray-600', 'text-blue-600');
+                } else {
+                    btn.classList.replace('bg-blue-100', 'bg-gray-100');
+                    btn.classList.replace('text-blue-600', 'text-gray-600');
+                }
+            });
+        } else {
+            document.querySelectorAll('.sales-chart-btn').forEach(btn => {
+                if (btn.innerText.includes('Journalier')) {
+                    btn.classList.replace('bg-gray-100', 'bg-blue-100');
+                    btn.classList.replace('text-gray-600', 'text-blue-600');
+                } else {
+                    btn.classList.replace('bg-blue-100', 'bg-gray-100');
+                    btn.classList.replace('text-blue-600', 'text-gray-600');
+                }
+            });
+        }
+    }
+    
+    // Real-time data updates
+    async function updateDashboardData() {
+        try {
+            const response = await fetch('/api/dashboard/stats');
+            const data = await response.json();
+            
+            if (data.success && data.stats) {
+                // Update metrics
+                const stats = data.stats;
+                
+                // Update counters
+                document.getElementById('totalProducts').textContent = stats.total_products || '0';
+                document.getElementById('lowStockCount').textContent = stats.low_stock_count || '0';
+                document.getElementById('todaySales').textContent = `${stats.today_sales || '0,00'} MRU`;
+                document.getElementById('totalRevenue').textContent = `${stats.total_revenue || '0,00'} MRU`;
+                
+                // Update warning section if it exists
+                const pendingDebtsElement = document.getElementById('pendingDebts');
+                if (pendingDebtsElement && stats.pending_debts_count) {
+                    pendingDebtsElement.textContent = `${stats.pending_debts_count} clients ont des paiements en retard (Total: ${stats.pending_debts} MRU)`;
+                }
+                
+                // Update top products
+                loadTopProducts();
+            }
+        } catch (error) {
+            console.error('Error updating dashboard data:', error);
+        }
+    }
+    
+    // Load top products
+    async function loadTopProducts() {
+        try {
+            const response = await fetch('/api/dashboard/top-products');
+            const data = await response.json();
+            
+            if (data.success && data.products && data.products.length > 0) {
+                const container = document.getElementById('topProducts');
+                container.innerHTML = '';
+                
+                // Loop through top products
+                data.products.forEach((product, index) => {
+                    const rankColors = ['blue', 'green', 'yellow', 'indigo', 'red'];
+                    const colorClass = rankColors[index % rankColors.length];
+                    
+                    const trendClass = product.trend >= 0 ? 'text-green-600' : 'text-red-600';
+                    const trendSign = product.trend >= 0 ? '+' : '';
+                    
+                    const productElement = document.createElement('div');
+                    productElement.className = 'flex items-center justify-between p-3 bg-gray-50 rounded-lg';
+                    productElement.innerHTML = `
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-${colorClass}-100 rounded-lg flex items-center justify-center mr-3">
+                                <span class="text-${colorClass}-600 font-semibold">${index + 1}</span>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">${product.name}</p>
+                                <p class="text-sm text-gray-500">${product.total_quantity} unités vendues</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-semibold text-gray-900">${product.total_amount} MRU</p>
+                            <p class="text-sm ${trendClass}">${trendSign}${product.trend}%</p>
+                        </div>
+                    `;
+                    
+                    container.appendChild(productElement);
+                });
+            }
+        } catch (error) {
+            console.error('Error loading top products:', error);
+        }
+    }
+    
+    // Load recent activities
+    async function loadRecentActivities() {
+        try {
+            const response = await fetch('/api/dashboard/activities');
+            const data = await response.json();
+            
+            if (data.success) {
+                const container = document.getElementById('recentActivities');
+                container.innerHTML = '';
+                
+                if (data.activities && data.activities.length > 0) {
+                    data.activities.forEach(activity => {
+                        const activityElement = createActivityElement(activity);
+                        container.appendChild(activityElement);
+                    });
+                } else {
+                    container.innerHTML = `
+                        <div class="text-center text-gray-500 py-4">
+                            Aucune activité récente
+                        </div>
+                    `;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading activities:', error);
+        }
+    }
+    
+    function createActivityElement(activity) {
+        const div = document.createElement('div');
+        div.className = 'flex items-start space-x-3';
+        
+        const iconColors = {
+            'sale': 'bg-green-100 text-green-600',
+            'stock': 'bg-blue-100 text-blue-600',
+            'login': 'bg-purple-100 text-purple-600',
+            'payment': 'bg-yellow-100 text-yellow-600'
+        };
+        
+        const iconColor = iconColors[activity.type] || 'bg-gray-100 text-gray-600';
+        
+        div.innerHTML = `
+            <div class="flex-shrink-0 w-8 h-8 ${iconColor} rounded-full flex items-center justify-center">
+                ${getActivityIcon(activity.type)}
+            </div>
+            <div class="flex-1">
+                <p class="text-sm text-gray-900">
+                    <span class="font-medium">${activity.title}</span> - ${activity.description}
+                </p>
+                <p class="text-xs text-gray-500">${activity.time_ago} par ${activity.user}</p>
+            </div>
+        `;
+        
+        return div;
+    }
+    
+    function getActivityIcon(type) {
+        const icons = {
+            'sale': `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`,
+            'stock': `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z"></path></svg>`,
+            'login': `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"></path></svg>`,
+            'payment': `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zM14 6a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h8zM4 14a2 2 0 002 2h8a2 2 0 002-2v-2H4v2z"></path></svg>`
+        };
+        
+        return icons[type] || icons['stock'];
+    }
+    
+    // Navigation functions
+    function viewLowStock() {
+        window.location.href = "{{ url_for('inventory') }}?filter=low_stock";
+    }
+    
+    function viewOverduePayments() {
+        window.location.href = "{{ url_for('finance') }}?tab=receivables&filter=overdue";
+    }
+    
+    function viewSalesForecast() {
+        window.location.href = "{{ url_for('reports') }}?tab=ai_insights&view=sales_forecast";
+    }
+    
+    function viewRestockSuggestions() {
+        window.location.href = "{{ url_for('reports') }}?tab=ai_insights&view=restock";
+    }
+    
+    function viewPricingOptimization() {
+        window.location.href = "{{ url_for('reports') }}?tab=ai_insights&view=pricing";
+    }
+    
+    function loadMoreActivities() {
+        // Load more activities - could implement pagination
+        showNotification('Chargement de plus d\'activités...', 'info');
+    }
+    
+    // Initialize dashboard
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeSalesChart();
+        updateDashboardData();
+        loadRecentActivities();
+        
+        // Update data every 5 minutes
+        setInterval(updateDashboardData, 5 * 60 * 1000);
+        
+        // Update activities every 2 minutes
+        setInterval(loadRecentActivities, 2 * 60 * 1000);
+    });
+    
+    // Connection status monitoring
+    function updateConnectionStatus() {
+        const statusElement = document.getElementById('connectionStatus');
+        
+        if (navigator.onLine) {
+            statusElement.innerHTML = `
+                <div class="w-2 h-2 rounded-full bg-green-400 mr-2"></div>
+                <span>Système en ligne</span>
+            `;
+        } else {
+            statusElement.innerHTML = `
+                <div class="w-2 h-2 rounded-full bg-red-400 mr-2"></div>
+                <span>Mode hors ligne</span>
+            `;
+        }
+    }
+    
+    window.addEventListener('online', updateConnectionStatus);
+    window.addEventListener('offline', updateConnectionStatus);
+    
+    // Helper function for notifications (if not defined in base.html)
+    function showNotification(message, type) {
+        if (typeof window.showToast === 'function') {
+            window.showToast(message, type);
+        } else {
+            console.log(`Notification: ${message} (${type})`);
+        }
+    }
+</script>
+{% endblock %}

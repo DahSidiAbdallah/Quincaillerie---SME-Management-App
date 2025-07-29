@@ -1,0 +1,228 @@
+{
+  "name": "Quincaillerie & SME Management",
+  "short_name": "Quincaillerie",
+  "description": "Application de gestion complète pour quincailleries et PME - Inventaire, ventes, finances et IA",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "theme_color": "#1f2937",
+  "background_color": "#ffffff",
+  "scope": "/",
+  "lang": "fr",
+  "dir": "ltr",
+  "categories": ["business", "productivity", "finance"],
+  "screenshots": [
+    {
+      "src": "/static/screenshots/dashboard-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Tableau de bord mobile"
+    },
+    {
+      "src": "/static/screenshots/dashboard-desktop.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "platform": "wide",
+      "label": "Tableau de bord desktop"
+    },
+    {
+      "src": "/static/screenshots/inventory-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Gestion d'inventaire mobile"
+    },
+    {
+      "src": "/static/screenshots/sales-mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "platform": "narrow",
+      "label": "Point de vente mobile"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/static/icon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icon-128x128.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icon-152x152.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/icon-384x384.png",
+      "sizes": "384x384",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/static/icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nouvelle Vente",
+      "short_name": "Vente",
+      "description": "Créer une nouvelle vente rapidement",
+      "url": "/sales?action=new",
+      "icons": [
+        {
+          "src": "/static/shortcut-sale.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Inventaire",
+      "short_name": "Stock",
+      "description": "Consulter et gérer l'inventaire",
+      "url": "/inventory",
+      "icons": [
+        {
+          "src": "/static/shortcut-inventory.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Rapports",
+      "short_name": "Rapports",
+      "description": "Voir les rapports et analyses",
+      "url": "/reports",
+      "icons": [
+        {
+          "src": "/static/shortcut-reports.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Scanner",
+      "short_name": "Scanner",
+      "description": "Scanner un code-barres",
+      "url": "/inventory?action=scan",
+      "icons": [
+        {
+          "src": "/static/shortcut-scanner.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "prefer_related_applications": false,
+  "edge_side_panel": {
+    "preferred_width": 400
+  },
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  },
+  "protocol_handlers": [
+    {
+      "protocol": "web+quincaillerie",
+      "url": "/handle?protocol=%s"
+    }
+  ],
+  "file_handlers": [
+    {
+      "action": "/import",
+      "accept": {
+        "text/csv": [".csv"],
+        "application/vnd.ms-excel": [".xls"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"]
+      }
+    }
+  ],
+  "share_target": {
+    "action": "/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": ["image/*", "text/csv", ".xlsx", ".xls"]
+        }
+      ]
+    }
+  },
+  "permissions": [
+    "camera",
+    "storage",
+    "geolocation",
+    "notifications",
+    "background-sync"
+  ],
+  "features": [
+    {
+      "name": "offline-support",
+      "description": "Fonctionne hors ligne avec synchronisation automatique"
+    },
+    {
+      "name": "barcode-scanner",
+      "description": "Scanner de codes-barres intégré"
+    },
+    {
+      "name": "ai-insights",
+      "description": "Insights et prédictions par intelligence artificielle"
+    },
+    {
+      "name": "multi-language",
+      "description": "Support multilingue (Français, Arabe)"
+    },
+    {
+      "name": "real-time-sync",
+      "description": "Synchronisation en temps réel avec le cloud"
+    },
+    {
+      "name": "advanced-reporting",
+      "description": "Rapports avancés et tableaux de bord"
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "https://quincaillerie-app.com"
+    }
+  ],
+  "version": "1.0.0",
+  "gcm_sender_id": "103953800507"
+}

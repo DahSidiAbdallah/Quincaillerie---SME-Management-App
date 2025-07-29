@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mode Hors Ligne - Quincaillerie Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <meta name="theme-color" content="#1f2937">
+    <style>
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 20%, 53%, 80%, 100% { transform: translate3d(0,0,0); }
+            40%, 43% { transform: translate3d(0, -30px, 0); }
+            70% { transform: translate3d(0, -15px, 0); }
+            90% { transform: translate3d(0, -4px, 0); }
+        }
+        
+        .bounce-animation {
+            animation: bounce 2s infinite;
+        }
+        
+        .connection-check {
+            transition: all 0.3s ease;
+        }
+        
+        .offline-feature {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: slideUp 0.5s ease forwards;
+        }
+        
+        .offline-feature:nth-child(1) { animation-delay: 0.1s; }
+        .offline-feature:nth-child(2) { animation-delay: 0.2s; }
+        .offline-feature:nth-child(3) { animation-delay: 0.3s; }
+        .offline-feature:nth-child(4) { animation-delay: 0.4s; }
+        
+        @keyframes slideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-gray-100 to-gray-200 min-h-screen flex items-center justify-center p-4">
+    
+    <!-- Main Container -->
+    <div class="max-w-md w-full">
+        <!-- Offline Status Card -->
+        <div class="bg-white rounded-2xl shadow-xl p-8 text-center mb-6">
+            <!-- Offline Icon -->
+            <div class="w-20 h-20 mx-auto mb-6 bg-orange-100 rounded-full flex items-center justify-center">
+                <svg class="w-10 h-10 text-orange-600 pulse-animation" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192L5.636 18.364M12 2.25a9.75 9.75 0 000 19.5 9.75 9.75 0 000-19.5z"></path>
+                </svg>
+            </div>
+            
+            <!-- Title and Description -->
+            <h1 class="text-2xl font-bold text-gray-900 mb-3">Mode Hors Ligne</h1>
+            <p class="text-gray-600 mb-6">
+                Vous êtes actuellement hors ligne. L'application continue de fonctionner avec les données locales.
+            </p>
+            
+            <!-- Connection Status -->
+            <div id="connectionStatus" class="inline-flex items-center px-4 py-2 bg-orange-100 text-orange-800 rounded-full text-sm font-medium mb-6">
+                <div class="w-2 h-2 bg-orange-500 rounded-full mr-2 pulse-animation"></div>
+                Connexion en cours de vérification...
+            </div>
+            
+            <!-- Retry Connection Button -->
+            <button onclick="checkConnection()" 
+                    id="retryButton" 
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition duration-200 mb-4">
+                <span class="flex items-center justify-center">
+                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span id="retryText">Réessayer la connexion</span>
+                </span>
+            </button>
+            
+            <!-- Continue Offline Button -->
+            <button onclick="continueOffline()" 
+                    class="w-full bg-gray-600 hover:bg-gray-700 text-white font-medium py-3 px-6 rounded-lg transition duration-200">
+                Continuer hors ligne
+            </button>
+        </div>
+        
+        <!-- Offline Features -->
+        <div class="bg-white rounded-2xl shadow-xl p-6">
+            <h2 class="text-lg font-semibold text-gray-900 mb-4 text-center">
+                Fonctionnalités Disponibles Hors Ligne
+            </h2>
+            
+            <div class="space-y-4">
+                <!-- Feature 1 -->
+                <div class="offline-feature flex items-center p-3 bg-green-50 rounded-lg">
+                    <div class="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-gray-900">Consulter l'Inventaire</h3>
+                        <p class="text-sm text-gray-600">Voir les produits en stock</p>
+                    </div>
+                </div>
+                
+                <!-- Feature 2 -->
+                <div class="offline-feature flex items-center p-3 bg-blue-50 rounded-lg">
+                    <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-gray-900">Enregistrer les Ventes</h3>
+                        <p class="text-sm text-gray-600">Les ventes seront synchronisées</p>
+                    </div>
+                </div>
+                
+                <!-- Feature 3 -->
+                <div class="offline-feature flex items-center p-3 bg-purple-50 rounded-lg">
+                    <div class="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-gray-900">Voir les Rapports</h3>
+                        <p class="text-sm text-gray-600">Données locales disponibles</p>
+                    </div>
+                </div>
+                
+                <!-- Feature 4 -->
+                <div class="offline-feature flex items-center p-3 bg-yellow-50 rounded-lg">
+                    <div class="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
+                        <svg class="w-5 h-5 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-gray-900">Synchronisation Auto</h3>
+                        <p class="text-sm text-gray-600">Dès la reconnexion</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sync Queue Info -->
+        <div id="syncQueueInfo" class="mt-4 bg-white rounded-lg shadow p-4 hidden">
+            <div class="flex items-center text-sm text-gray-600">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span id="queueCount">0</span> actions en attente de synchronisation
+            </div>
+        </div>
+    </div>
+    
+    <!-- Background Sync Status -->
+    <div id="syncNotification" class="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg transform translate-y-full transition-transform duration-300">
+        <div class="flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+            </svg>
+            Synchronisation terminée
+        </div>
+    </div>
+    
+    <script>
+        let isOnline = navigator.onLine;
+        let retryAttempts = 0;
+        let maxRetryAttempts = 5;
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            updateConnectionStatus();
+            checkSyncQueue();
+            startConnectionMonitoring();
+        });
+        
+        // Update connection status display
+        function updateConnectionStatus() {
+            const statusElement = document.getElementById('connectionStatus');
+            const retryButton = document.getElementById('retryButton');
+            
+            if (navigator.onLine) {
+                statusElement.innerHTML = `
+                    <div class="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                    Connexion rétablie
+                `;
+                statusElement.className = 'inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full text-sm font-medium mb-6';
+                
+                // Redirect to main app after a delay
+                setTimeout(() => {
+                    window.location.href = '/dashboard';
+                }, 2000);
+            } else {
+                statusElement.innerHTML = `
+                    <div class="w-2 h-2 bg-orange-500 rounded-full mr-2 pulse-animation"></div>
+                    Hors ligne
+                `;
+                statusElement.className = 'inline-flex items-center px-4 py-2 bg-orange-100 text-orange-800 rounded-full text-sm font-medium mb-6';
+            }
+        }
+        
+        // Check connection
+        async function checkConnection() {
+            const retryButton = document.getElementById('retryButton');
+            const retryText = document.getElementById('retryText');
+            
+            // Show loading state
+            retryButton.disabled = true;
+            retryText.innerHTML = `
+                <div class="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Vérification...
+            `;
+            
+            try {
+                // Try to fetch a small resource from the server
+                const response = await fetch('/api/health', {
+                    method: 'GET',
+                    cache: 'no-cache',
+                    timeout: 5000
+                });
+                
+                if (response.ok) {
+                    // Connection is back
+                    updateConnectionStatus();
+                    showSyncNotification('Connexion rétablie!');
+                    retryAttempts = 0;
+                } else {
+                    throw new Error('Server not responding');
+                }
+            } catch (error) {
+                retryAttempts++;
+                
+                if (retryAttempts >= maxRetryAttempts) {
+                    retryText.textContent = 'Impossible de se connecter';
+                    setTimeout(() => {
+                        retryText.textContent = 'Réessayer la connexion';
+                        retryButton.disabled = false;
+                        retryAttempts = 0;
+                    }, 3000);
+                } else {
+                    retryText.textContent = `Tentative ${retryAttempts}/${maxRetryAttempts}`;
+                    setTimeout(() => {
+                        retryText.textContent = 'Réessayer la connexion';
+                        retryButton.disabled = false;
+                    }, 2000);
+                }
+            }
+        }
+        
+        // Continue working offline
+        function continueOffline() {
+            // Navigate to the main app
+            window.location.href = '/dashboard';
+        }
+        
+        // Start monitoring connection
+        function startConnectionMonitoring() {
+            // Check connection every 30 seconds
+            setInterval(() => {
+                if (navigator.onLine && !isOnline) {
+                    isOnline = true;
+                    updateConnectionStatus();
+                    checkConnection();
+                } else if (!navigator.onLine && isOnline) {
+                    isOnline = false;
+                    updateConnectionStatus();
+                }
+            }, 30000);
+            
+            // Listen for online/offline events
+            window.addEventListener('online', () => {
+                isOnline = true;
+                updateConnectionStatus();
+                showSyncNotification('Connexion rétablie!');
+            });
+            
+            window.addEventListener('offline', () => {
+                isOnline = false;
+                updateConnectionStatus();
+            });
+        }
+        
+        // Check sync queue
+        async function checkSyncQueue() {
+            try {
+                // Check if there are pending sync operations
+                if ('indexedDB' in window) {
+                    const request = indexedDB.open('QuincaillerieSyncDB', 1);
+                    
+                    request.onsuccess = function(event) {
+                        const db = event.target.result;
+                        
+                        if (db.objectStoreNames.contains('sync_queue')) {
+                            const transaction = db.transaction(['sync_queue'], 'readonly');
+                            const store = transaction.objectStore('sync_queue');
+                            const countRequest = store.count();
+                            
+                            countRequest.onsuccess = function() {
+                                const count = countRequest.result;
+                                if (count > 0) {
+                                    document.getElementById('queueCount').textContent = count;
+                                    document.getElementById('syncQueueInfo').classList.remove('hidden');
+                                }
+                            };
+                        }
+                    };
+                }
+            } catch (error) {
+                console.log('Could not check sync queue:', error);
+            }
+        }
+        
+        // Show sync notification
+        function showSyncNotification(message) {
+            const notification = document.getElementById('syncNotification');
+            notification.querySelector('span').textContent = message;
+            notification.style.transform = 'translateY(0)';
+            
+            setTimeout(() => {
+                notification.style.transform = 'translateY(100%)';
+            }, 3000);
+        }
+        
+        // Listen for service worker messages
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', event => {
+                const { type, data } = event.data;
+                
+                if (type === 'SYNC_COMPLETED') {
+                    showSyncNotification(`${data.syncedCount} actions synchronisées`);
+                    checkSyncQueue(); // Update queue count
+                }
+            });
+        }
+        
+        // PWA install prompt
+        let deferredPrompt;
+        
+        window.addEventListener('beforeinstallprompt', (e) => {
+            deferredPrompt = e;
+            // Show install button if desired
+        });
+        
+        // Handle app installed
+        window.addEventListener('appinstalled', (evt) => {
+            console.log('App was installed');
+        });
+    </script>
+</body>
+</html>

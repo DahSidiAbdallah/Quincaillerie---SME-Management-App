@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administration - Quincaillerie Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-wrench mr-2"></i>
+                    <h1 class="text-xl font-bold">Quincaillerie</h1>
+                </div>
+                
+                <!-- Main Navigation -->
+                <nav class="hidden md:flex space-x-6">
+                    <a href="/dashboard" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-tachometer-alt mr-2"></i>Tableau de bord
+                    </a>
+                    <a href="/inventory" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-boxes mr-2"></i>Inventaire
+                    </a>
+                    <a href="/sales" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-shopping-cart mr-2"></i>Ventes
+                    </a>
+                    <a href="/finance" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-chart-line mr-2"></i>Finance
+                    </a>
+                    <a href="/reports" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-chart-bar mr-2"></i>Rapports
+                    </a>
+                    <a href="/admin" class="flex items-center px-3 py-2 rounded-md text-sm font-medium bg-blue-600">
+                        <i class="fas fa-cog mr-2"></i>Admin
+                    </a>
+                </nav>
+                
+                <!-- User Menu -->
+                <div class="flex items-center space-x-4">
+                    <span class="text-green-400"><i class="fas fa-circle text-xs"></i> Synchronisé</span>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-globe"></i>
+                        <select class="bg-slate-700 text-white rounded px-2 py-1 text-sm" onchange="changeLanguage(this.value)">
+                            <option value="fr" {{ 'selected' if current_language == 'fr' }}>Français</option>
+                            <option value="ar" {{ 'selected' if current_language == 'ar' }}>العربية</option>
+                            <option value="en" {{ 'selected' if current_language == 'en' }}>English</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-user"></i>
+                        <span class="text-sm">{{ current_user }}</span>
+                        <span class="bg-blue-600 text-xs px-2 py-1 rounded">{{ user_role }}</span>
+                    </div>
+                    <button onclick="handleLogout()" class="text-red-400 hover:text-red-300">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="adminManager()">
+        <!-- Page Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Panneau d'Administration</h1>
+            <p class="text-gray-600 mt-2">Gérez les utilisateurs, paramètres système et configuration</p>
+        </div>
+
+        <!-- Admin Menu Tabs -->
+        <div class="bg-white rounded-lg shadow mb-8">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8 px-6">
+                    <button @click="activeTab = 'users'" 
+                            :class="activeTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-users mr-2"></i>Utilisateurs
+                    </button>
+                    <button @click="activeTab = 'settings'" 
+                            :class="activeTab === 'settings' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-cog mr-2"></i>Paramètres
+                    </button>
+                    <button @click="activeTab = 'backup'" 
+                            :class="activeTab === 'backup' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-database mr-2"></i>Sauvegarde
+                    </button>
+                    <button @click="activeTab = 'logs'" 
+                            :class="activeTab === 'logs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-list-alt mr-2"></i>Journaux
+                    </button>
+                    <button @click="activeTab = 'system'" 
+                            :class="activeTab === 'system' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-server mr-2"></i>Système
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Users Management -->
+        <div x-show="activeTab === 'users'" class="space-y-8">
+            <div class="bg-white rounded-lg shadow">
+                <div class="px-6 py-4 border-b border-gray-200">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-lg font-medium text-gray-900">Gestion des Utilisateurs</h3>
+                        <button @click="showUserModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center">
+                            <i class="fas fa-plus mr-2"></i>
+                            Nouvel Utilisateur
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nom d'utilisateur</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rôle</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Dernière connexion</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="user in users" :key="user.id">
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <div class="flex-shrink-0 h-10 w-10">
+                                                <div class="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                                    <i class="fas fa-user text-blue-600"></i>
+                                                </div>
+                                            </div>
+                                            <div class="ml-4">
+                                                <div class="text-sm font-medium text-gray-900" x-text="user.username"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="{
+                                                  'bg-red-100 text-red-800': user.role === 'admin',
+                                                  'bg-blue-100 text-blue-800': user.role === 'manager',
+                                                  'bg-green-100 text-green-800': user.role === 'employee'
+                                              }"
+                                              x-text="user.role">
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="user.last_login || 'Jamais'"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                              x-text="user.is_active ? 'Actif' : 'Inactif'">
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button @click="editUser(user)" class="text-blue-600 hover:text-blue-900 mr-3">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button @click="toggleUserStatus(user)" class="text-yellow-600 hover:text-yellow-900 mr-3">
+                                            <i class="fas fa-power-off"></i>
+                                        </button>
+                                        <button @click="deleteUser(user)" class="text-red-600 hover:text-red-900">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Settings -->
+        <div x-show="activeTab === 'settings'" class="space-y-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- General Settings -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Paramètres Généraux</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Nom de l'entreprise</label>
+                            <input type="text" x-model="settings.company_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Langue par défaut</label>
+                            <select x-model="settings.default_language" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="fr">Français</option>
+                                <option value="ar">العربية</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Devise</label>
+                            <select x-model="settings.currency" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="MRU">Dirham (MRU)</option>
+                                <option value="EUR">Euro (€)</option>
+                                <option value="USD">Dollar ($)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="settings.enable_notifications" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Activer les notifications</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Security Settings -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Paramètres de Sécurité</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Durée de session (minutes)</label>
+                            <input type="number" x-model="settings.session_timeout" min="5" max="480" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Tentatives de connexion max</label>
+                            <input type="number" x-model="settings.max_login_attempts" min="3" max="10" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="settings.require_strong_passwords" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Exiger des mots de passe forts</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="settings.enable_audit_log" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Activer le journal d'audit</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button @click="saveSettings()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                    <i class="fas fa-save mr-2"></i>
+                    Sauvegarder les Paramètres
+                </button>
+            </div>
+        </div>
+
+        <!-- Backup & Restore -->
+        <div x-show="activeTab === 'backup'" class="space-y-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Sauvegarde</h3>
+                    <div class="space-y-4">
+                        <p class="text-gray-600">Créez une sauvegarde complète de vos données.</p>
+                        <div class="flex items-center space-x-4">
+                            <button @click="createBackup()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center">
+                                <i class="fas fa-download mr-2"></i>
+                                Créer Sauvegarde
+                            </button>
+                            <button @click="scheduleBackup()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center">
+                                <i class="fas fa-clock mr-2"></i>
+                                Programmer
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Restauration</h3>
+                    <div class="space-y-4">
+                        <p class="text-gray-600">Restaurez vos données à partir d'une sauvegarde.</p>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                            <i class="fas fa-upload text-4xl text-gray-400 mb-2"></i>
+                            <p class="text-gray-500">Glissez-déposez votre fichier de sauvegarde ici</p>
+                            <button class="mt-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                                Sélectionner Fichier
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Backups -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Sauvegardes Récentes</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Taille</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="backup in backups" :key="backup.id">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="backup.date"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="backup.size"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="backup.type"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button @click="downloadBackup(backup)" class="text-blue-600 hover:text-blue-900 mr-3">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button @click="deleteBackup(backup)" class="text-red-600 hover:text-red-900">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Info -->
+        <div x-show="activeTab === 'system'" class="space-y-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Informations Système</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Version de l'application:</span>
+                            <span class="font-medium">{{ app_version }}</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Python:</span>
+                            <span class="font-medium" x-text="systemInfo.python_version">3.13.5</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Base de données:</span>
+                            <span class="font-medium">SQLite</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Démarrage:</span>
+                            <span class="font-medium" x-text="systemInfo.uptime">2h 34m</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Performance</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Utilisation CPU:</span>
+                            <span class="font-medium text-green-600">12%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Utilisation Mémoire:</span>
+                            <span class="font-medium text-blue-600">245 MB</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Espace Disque:</span>
+                            <span class="font-medium text-yellow-600">2.1 GB</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-600">Connexions actives:</span>
+                            <span class="font-medium">3</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Modal -->
+        <div x-show="showUserModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Nouvel Utilisateur</h3>
+                        <button @click="showUserModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    
+                    <form @submit.prevent="createUser()">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nom d'utilisateur</label>
+                                <input type="text" x-model="newUser.username" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">PIN</label>
+                                <input type="password" x-model="newUser.pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
+                            <select x-model="newUser.role" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                <option value="employee">Employé</option>
+                                <option value="manager">Manager</option>
+                                <option value="admin">Administrateur</option>
+                            </select>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" @click="showUserModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                                Annuler
+                            </button>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                                Créer Utilisateur
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-white py-4 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <p>&copy; {{ current_year }} Quincaillerie Management v{{ app_version }}</p>
+            <div class="flex items-center space-x-4">
+                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
+                <span>Mode: {{ user_role|title }}</span>
+                <span>Utilisateur: {{ current_user }}</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function adminManager() {
+            return {
+                activeTab: 'users',
+                showUserModal: false,
+                users: [
+                    {id: 1, username: 'admin', role: 'admin', last_login: '2025-07-24 10:30', is_active: true},
+                    {id: 2, username: 'manager1', role: 'manager', last_login: '2025-07-23 16:45', is_active: true},
+                    {id: 3, username: 'employee1', role: 'employee', last_login: '2025-07-24 09:15', is_active: true}
+                ],
+                newUser: {
+                    username: '',
+                    pin: '',
+                    role: 'employee'
+                },
+                settings: {
+                    company_name: 'Ma Quincaillerie',
+                    default_language: 'fr',
+                    currency: 'MRU',
+                    enable_notifications: true,
+                    session_timeout: 60,
+                    max_login_attempts: 5,
+                    require_strong_passwords: false,
+                    enable_audit_log: true
+                },
+                backups: [
+                    {id: 1, date: '2025-07-24', size: '2.3 MB', type: 'Automatique'},
+                    {id: 2, date: '2025-07-23', size: '2.1 MB', type: 'Manuel'},
+                    {id: 3, date: '2025-07-22', size: '2.0 MB', type: 'Automatique'}
+                ],
+                systemInfo: {
+                    python_version: '3.13.5',
+                    uptime: '2h 34m'
+                },
+                
+                init() {
+                    this.loadData();
+                },
+                
+                loadData() {
+                    // Load users and settings from API
+                    console.log('Loading admin data...');
+                },
+                
+                createUser() {
+                    // Mock user creation
+                    const newUserId = Date.now();
+                    this.users.push({
+                        id: newUserId,
+                        username: this.newUser.username,
+                        role: this.newUser.role,
+                        last_login: null,
+                        is_active: true
+                    });
+                    
+                    this.showUserModal = false;
+                    this.newUser = {username: '', pin: '', role: 'employee'};
+                    alert('Utilisateur créé avec succès!');
+                },
+                
+                editUser(user) {
+                    alert('Éditer utilisateur: ' + user.username);
+                },
+                
+                toggleUserStatus(user) {
+                    user.is_active = !user.is_active;
+                    alert(`Utilisateur ${user.username} ${user.is_active ? 'activé' : 'désactivé'}`);
+                },
+                
+                deleteUser(user) {
+                    if (confirm(`Êtes-vous sûr de vouloir supprimer l'utilisateur ${user.username}?`)) {
+                        this.users = this.users.filter(u => u.id !== user.id);
+                    }
+                },
+                
+                saveSettings() {
+                    alert('Paramètres sauvegardés avec succès!');
+                },
+                
+                createBackup() {
+                    alert('Création de la sauvegarde en cours...');
+                    setTimeout(() => {
+                        this.backups.unshift({
+                            id: Date.now(),
+                            date: new Date().toISOString().split('T')[0],
+                            size: '2.4 MB',
+                            type: 'Manuel'
+                        });
+                        alert('Sauvegarde créée avec succès!');
+                    }, 2000);
+                },
+                
+                scheduleBackup() {
+                    alert('Configuration de la sauvegarde programmée...');
+                },
+                
+                downloadBackup(backup) {
+                    alert('Téléchargement de la sauvegarde du ' + backup.date);
+                },
+                
+                deleteBackup(backup) {
+                    if (confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) {
+                        this.backups = this.backups.filter(b => b.id !== backup.id);
+                    }
+                }
+            }
+        }
+        
+        function changeLanguage(lang) {
+            window.location.href = `/set-language/${lang}`;
+        }
+    </script>
+    
+    <style>
+        [x-cloak] { display: none !important; }
+    </style>
+</body>
+</html>

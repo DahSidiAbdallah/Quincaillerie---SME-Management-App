@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="{{ current_language }}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paramètres - Quincaillerie Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-50">
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-wrench mr-2"></i>
+                    <h1 class="text-xl font-bold">Quincaillerie</h1>
+                </div>
+                
+                <!-- Main Navigation -->
+                <nav class="hidden md:flex space-x-6">
+                    <a href="/dashboard" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-tachometer-alt mr-2"></i>Tableau de bord
+                    </a>
+                    <a href="/inventory" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-boxes mr-2"></i>Inventaire
+                    </a>
+                    <a href="/sales" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-shopping-cart mr-2"></i>Ventes
+                    </a>
+                    <a href="/finance" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-chart-line mr-2"></i>Finance
+                    </a>
+                    <a href="/reports" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-chart-bar mr-2"></i>Rapports
+                    </a>
+                    <a href="/admin" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
+                        <i class="fas fa-cog mr-2"></i>Admin
+                    </a>
+                </nav>
+                
+                <!-- User Menu -->
+                <div class="flex items-center space-x-4">
+                    <span class="text-green-400"><i class="fas fa-circle text-xs"></i> Synchronisé</span>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-globe"></i>
+                        <select class="bg-slate-700 text-white rounded px-2 py-1 text-sm" onchange="changeLanguage(this.value)">
+                            <option value="fr" {{ 'selected' if current_language == 'fr' }}>Français</option>
+                            <option value="ar" {{ 'selected' if current_language == 'ar' }}>العربية</option>
+                            <option value="en" {{ 'selected' if current_language == 'en' }}>English</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <i class="fas fa-user"></i>
+                        <span class="text-sm">{{ current_user }}</span>
+                        <span class="bg-blue-600 text-xs px-2 py-1 rounded">{{ user_role }}</span>
+                    </div>
+                    <button onclick="handleLogout()" class="text-red-400 hover:text-red-300">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="settingsManager()">
+        <!-- Page Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900">Paramètres Utilisateur</h1>
+            <p class="text-gray-600 mt-2">Personnalisez votre expérience et gérez votre profil</p>
+        </div>
+        
+        <!-- Loading State -->
+        <div x-show="isLoading" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+            <div class="bg-white p-4 rounded-lg shadow-xl flex flex-col items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+                <p class="text-gray-700">Chargement des paramètres...</p>
+            </div>
+        </div>
+        
+        <!-- Error Message -->
+        <div x-show="errorMessage" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+            <p class="font-bold">Erreur</p>
+            <p x-text="errorMessage"></p>
+        </div>
+
+        <!-- Settings Tabs -->
+        <div class="bg-white rounded-lg shadow mb-8">
+            <div class="border-b border-gray-200">
+                <nav class="-mb-px flex space-x-8 px-6">
+                    <button @click="activeTab = 'profile'" 
+                            :class="activeTab === 'profile' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-user mr-2"></i>Profil
+                    </button>
+                    <button @click="activeTab = 'preferences'" 
+                            :class="activeTab === 'preferences' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-cog mr-2"></i>Préférences
+                    </button>
+                    <button @click="activeTab = 'security'" 
+                            :class="activeTab === 'security' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-shield-alt mr-2"></i>Sécurité
+                    </button>
+                    <button @click="activeTab = 'notifications'" 
+                            :class="activeTab === 'notifications' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                        <i class="fas fa-bell mr-2"></i>Notifications
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Profile Settings -->
+        <div x-show="activeTab === 'profile'" class="space-y-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-6">Informations du Profil</h3>
+                
+                <form @submit.prevent="updateProfile()">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <!-- Profile Photo -->
+                        <div class="flex flex-col items-center">
+                            <div class="h-24 w-24 rounded-full bg-blue-100 flex items-center justify-center mb-4">
+                                <i class="fas fa-user text-3xl text-blue-600"></i>
+                            </div>
+                            <button type="button" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm">
+                                <i class="fas fa-camera mr-2"></i>
+                                Changer Photo
+                            </button>
+                        </div>
+                        
+                        <!-- Profile Form -->
+                        <div class="lg:col-span-2 space-y-6">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nom d'utilisateur</label>
+                                    <input type="text" x-model="profile.username" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Rôle</label>
+                                    <input type="text" x-model="profile.role" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50" readonly>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
+                                    <input type="text" x-model="profile.first_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Nom de famille</label>
+                                    <input type="text" x-model="profile.last_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                    <input type="email" x-model="profile.email" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
+                                    <input type="tel" x-model="profile.phone" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                </div>
+                            </div>
+                            
+                            <div class="flex justify-end">
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Sauvegarder
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Preferences Settings -->
+        <div x-show="activeTab === 'preferences'" class="space-y-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Language & Display -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Affichage et Langue</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Langue d'interface</label>
+                            <select x-model="preferences.language" @change="changeLanguage(preferences.language)" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="fr">Français</option>
+                                <option value="ar">العربية</option>
+                                <option value="en">English</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Format de date</label>
+                            <select x-model="preferences.date_format" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                                <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+                                <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Fuseau horaire</label>
+                            <select x-model="preferences.timezone" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="Africa/Casablanca">GMT+1 (Casablanca)</option>
+                                <option value="Europe/Paris">GMT+1 (Paris)</option>
+                                <option value="UTC">GMT+0 (UTC)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="preferences.dark_mode" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Mode sombre</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dashboard Preferences -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Tableau de Bord</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Page d'accueil par défaut</label>
+                            <select x-model="preferences.default_page" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="dashboard">Tableau de bord</option>
+                                <option value="inventory">Inventaire</option>
+                                <option value="sales">Ventes</option>
+                                <option value="finance">Finance</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Éléments par page</label>
+                            <select x-model="preferences.items_per_page" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="preferences.auto_refresh" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Actualisation automatique</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="preferences.show_tips" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Afficher les conseils</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end">
+                <button @click="savePreferences()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                    <i class="fas fa-save mr-2"></i>
+                    Sauvegarder les Préférences
+                </button>
+            </div>
+        </div>
+
+        <!-- Security Settings -->
+        <div x-show="activeTab === 'security'" class="space-y-8">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Change PIN -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Changer le PIN</h3>
+                    <form @submit.prevent="changePin()">
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">PIN actuel</label>
+                                <input type="password" x-model="security.current_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nouveau PIN</label>
+                                <input type="password" x-model="security.new_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le nouveau PIN</label>
+                                <input type="password" x-model="security.confirm_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div class="flex justify-end">
+                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md">
+                                    <i class="fas fa-key mr-2"></i>
+                                    Changer PIN
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Security Options -->
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Options de Sécurité</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="security.auto_logout" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Déconnexion automatique après inactivité</span>
+                            </label>
+                        </div>
+                        <div x-show="security.auto_logout" class="ml-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Délai (minutes)</label>
+                            <input type="number" x-model="security.auto_logout_time" min="5" max="120" class="w-32 border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="security.login_notifications" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Notification des connexions</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="security.activity_log" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Journal d'activité personnel</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Activité Récente</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" x-show="!isLoading">
+                            <template x-if="recentActivity.length === 0">
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                                        Aucune activité récente à afficher
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-for="activity in recentActivity" :key="activity.id">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="activity.date"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="activity.action"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="activity.description"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="activity.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                              x-text="activity.status === 'success' ? 'Succès' : 'Échec'">
+                                        </span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                        <tbody x-show="isLoading">
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center">
+                                    <div class="flex justify-center">
+                                        <div class="animate-pulse flex space-x-4">
+                                            <div class="h-3 bg-gray-200 rounded w-full"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications Settings -->
+        <div x-show="activeTab === 'notifications'" class="space-y-8">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-6">Préférences de Notification</h3>
+                
+                <div class="space-y-6">
+                    <!-- Email Notifications -->
+                    <div class="border-b border-gray-200 pb-6">
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Notifications par Email</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Stock faible</label>
+                                    <p class="text-xs text-gray-500">Recevoir un email quand un produit atteint le stock minimum</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.email.low_stock" class="rounded border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Ventes importantes</label>
+                                    <p class="text-xs text-gray-500">Notification pour les ventes supérieures à un montant défini</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.email.large_sales" class="rounded border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Rapports quotidiens</label>
+                                    <p class="text-xs text-gray-500">Résumé quotidien des activités</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.email.daily_reports" class="rounded border-gray-300">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Browser Notifications -->
+                    <div class="border-b border-gray-200 pb-6">
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Notifications Navigateur</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Nouvelles ventes</label>
+                                    <p class="text-xs text-gray-500">Notification instantanée pour chaque nouvelle vente</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.browser.new_sales" class="rounded border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Erreurs système</label>
+                                    <p class="text-xs text-gray-500">Alertes pour les erreurs critiques</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.browser.system_errors" class="rounded border-gray-300">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sound Settings -->
+                    <div>
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Paramètres Audio</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-sm font-medium text-gray-700">Sons de notification</label>
+                                <input type="checkbox" x-model="notifications.sound.enabled" class="rounded border-gray-300">
+                            </div>
+                            <div x-show="notifications.sound.enabled" class="ml-6">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Volume</label>
+                                <input type="range" x-model="notifications.sound.volume" min="0" max="100" class="w-full">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end mt-6">
+                    <button @click="saveNotifications()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                        <i class="fas fa-save mr-2"></i>
+                        Sauvegarder
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-white py-4 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+            <p>&copy; {{ current_year }} Quincaillerie Management v{{ app_version }}</p>
+            <div class="flex items-center space-x-4">
+                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
+                <span>Mode: {{ user_role|title }}</span>
+                <span>Utilisateur: {{ current_user }}</span>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        function settingsManager() {
+            return {
+                activeTab: 'profile',
+                profile: {
+                    username: '{{ current_user }}',
+                    role: '{{ user_role }}',
+                    first_name: '',
+                    last_name: '',
+                    email: '',
+                    phone: ''
+                },
+                preferences: {
+                    language: '{{ current_language }}',
+                    date_format: 'dd/mm/yyyy',
+                    timezone: 'Africa/Casablanca',
+                    dark_mode: false,
+                    default_page: 'dashboard',
+                    items_per_page: 25,
+                    auto_refresh: true,
+                    show_tips: true
+                },
+                security: {
+                    current_pin: '',
+                    new_pin: '',
+                    confirm_pin: '',
+                    auto_logout: true,
+                    auto_logout_time: 30,
+                    login_notifications: true,
+                    activity_log: true
+                },
+                notifications: {
+                    email: {
+                        low_stock: true,
+                        large_sales: true,
+                        daily_reports: false
+                    },
+                    browser: {
+                        new_sales: true,
+                        system_errors: true
+                    },
+                    sound: {
+                        enabled: true,
+                        volume: 50
+                    }
+                },
+                recentActivity: [],
+                isLoading: true,
+                errorMessage: '',
+                
+                init() {
+                    this.loadSettings();
+                },
+                
+                loadSettings() {
+                    this.isLoading = true;
+                    // Fetch user information from API
+                    fetch('/api/settings/user-info')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                // Update profile info
+                                this.profile.username = data.user.username || '{{ current_user }}';
+                                this.profile.role = data.user.role || '{{ user_role }}';
+                                this.profile.first_name = data.user.first_name || '';
+                                this.profile.last_name = data.user.last_name || '';
+                                this.profile.email = data.user.email || '';
+                                this.profile.phone = data.user.phone || '';
+                                
+                                // Update preferences
+                                this.preferences.language = data.user.language || '{{ current_language }}';
+                                
+                                // Format activities
+                                if (data.activities && Array.isArray(data.activities)) {
+                                    this.recentActivity = data.activities.map((activity, index) => {
+                                        return {
+                                            id: index + 1,
+                                            date: activity.formatted_time || activity.created_at,
+                                            action: activity.action_type,
+                                            description: activity.description,
+                                            ip: activity.ip_address || '-',
+                                            status: activity.status || 'success'
+                                        };
+                                    });
+                                }
+                            } else {
+                                console.error('Failed to load user settings:', data.error);
+                                this.errorMessage = data.error || 'Failed to load user settings';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading user settings:', error);
+                            this.errorMessage = 'Error connecting to server';
+                        })
+                        .finally(() => {
+                            this.isLoading = false;
+                        });
+                },
+                
+                updateProfile() {
+                    // Show loading indicator
+                    const loadingToast = showToast('Mise à jour du profil...', 'info', -1);
+                    
+                    // Create the profile data to send
+                    const profileData = {
+                        first_name: this.profile.first_name,
+                        last_name: this.profile.last_name,
+                        email: this.profile.email,
+                        phone: this.profile.phone
+                    };
+                    
+                    // Send the update request
+                    fetch('/api/settings/update-profile', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(profileData)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Profil mis à jour avec succès!', 'success');
+                        } else {
+                            showToast(data.error || 'Erreur lors de la mise à jour du profil', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        console.error('Error updating profile:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                savePreferences() {
+                    // Show loading indicator
+                    const loadingToast = showToast('Sauvegarde des préférences...', 'info', -1);
+                    
+                    // Prepare preferences data
+                    const preferencesData = {
+                        language: this.preferences.language,
+                        date_format: this.preferences.date_format,
+                        timezone: this.preferences.timezone,
+                        dark_mode: this.preferences.dark_mode,
+                        default_page: this.preferences.default_page,
+                        items_per_page: this.preferences.items_per_page,
+                        auto_refresh: this.preferences.auto_refresh,
+                        show_tips: this.preferences.show_tips
+                    };
+                    
+                    // Send the update request
+                    fetch('/api/settings/update-preferences', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(preferencesData)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Préférences sauvegardées avec succès!', 'success');
+                            
+                            // Update language if changed
+                            if (data.reload_required) {
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1500);
+                            }
+                        } else {
+                            showToast(data.error || 'Erreur lors de la sauvegarde des préférences', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        console.error('Error saving preferences:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                changeLanguage(lang) {
+                    const loadingToast = showToast('Changement de langue...', 'info', -1);
+                    
+                    fetch('/api/settings/update-language', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ language: lang })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Langue mise à jour. Rechargement...', 'success');
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            showToast(data.error || 'Erreur lors du changement de langue', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        hideToast(loadingToast);
+                        console.error('Error changing language:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                changePin() {
+                    if (this.security.new_pin !== this.security.confirm_pin) {
+                        showToast('Les nouveaux PINs ne correspondent pas!', 'error');
+                        return;
+                    }
+                    
+                    if (this.security.new_pin.length < 4) {
+                        showToast('Le PIN doit contenir au moins 4 caractères!', 'error');
+                        return;
+                    }
+                    
+                    const loadingToast = showToast('Mise à jour du PIN...', 'info', -1);
+                    
+                    fetch('/api/settings/update-pin', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            current_pin: this.security.current_pin,
+                            new_pin: this.security.new_pin
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('PIN changé avec succès!', 'success');
+                            this.security.current_pin = '';
+                            this.security.new_pin = '';
+                            this.security.confirm_pin = '';
+                        } else {
+                            showToast(data.error || 'Erreur lors du changement de PIN', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        hideToast(loadingToast);
+                        console.error('Error changing PIN:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                saveNotifications() {
+                    const loadingToast = showToast('Sauvegarde des préférences de notification...', 'info', -1);
+                    
+                    fetch('/api/settings/update-notifications', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(this.notifications)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Préférences de notification sauvegardées!', 'success');
+                        } else {
+                            showToast(data.error || 'Erreur lors de la sauvegarde des préférences', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        hideToast(loadingToast);
+                        console.error('Error saving notification preferences:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                }
+            }
+        }
+        
+        // Helper function for global language change
+        function changeLanguage(lang) {
+            const settingsApp = document.querySelector('[x-data="settingsManager()"]').__x.$data;
+            if (settingsApp) {
+                settingsApp.changeLanguage(lang);
+            } else {
+                window.location.href = `/set-language/${lang}`;
+            }
+        }
+        
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-4 py-2 rounded-md text-white z-50 ${
+                type === 'success' ? 'bg-green-500' : 
+                type === 'error' ? 'bg-red-500' : 
+                type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+            }`;
+            toast.innerHTML = message;
+            document.body.appendChild(toast);
+            
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.remove();
+                }, duration);
+            }
+            
+            return toast;
+        }
+        
+        function hideToast(toast) {
+            if (toast && document.body.contains(toast)) {
+                toast.remove();
+            }
+        }
+    </script>
+    
+    <style>
+        [x-cloak] { display: none !important; }
+        
+        /* Loading spinner animation */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Toast notification animations */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        
+        .toast-enter { animation: slideIn 0.3s ease forwards; }
+        .toast-exit { animation: slideOut 0.3s ease forwards; }
+    </style>
+</body>
+</html>
