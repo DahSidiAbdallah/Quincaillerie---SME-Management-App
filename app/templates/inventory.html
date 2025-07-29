@@ -544,11 +544,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         console.log('DOM content loaded, setting up event listeners...');
         
-        // Force immediate product loading for testing
-        console.log('🚨 FORCING IMMEDIATE PRODUCT LOADING');
-        isLoading = false; // Reset loading state
-        loadProductsWithAuth(); // Direct API call
-        
         // Continue with normal setup
         setupEventListeners(); // This will trigger checkAuthAndLoadProducts
         calculateMargin(); // Initialize margin calculation
