@@ -136,10 +136,54 @@ def get_capital_entries():
             'capital_entries': entries,
             'total_capital': total_capital
         })
-        
+
     except Exception as e:
         logger.error(f"Error fetching capital entries: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération du capital'}), 500
+
+
+@finance_bp.route('/capital/<int:entry_id>', methods=['PUT', 'DELETE'])
+def modify_capital_entry(entry_id):
+    """Update or delete a capital entry"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        if request.method == 'DELETE':
+            cursor.execute('DELETE FROM capital_entries WHERE id = ?', (entry_id,))
+            conn.commit()
+            db_manager.log_user_action(session['user_id'], 'delete_capital', f'Suppression entrée capital #{entry_id}', 'capital_entries', entry_id)
+            db_manager.add_to_sync_queue('capital_entries', entry_id, 'delete')
+            conn.close()
+            return jsonify({'success': True})
+
+        data = request.get_json() or {}
+        update_fields = []
+        values = []
+
+        for field in ['amount', 'source', 'justification', 'entry_date']:
+            if field in data:
+                update_fields.append(f'{field} = ?')
+                values.append(data[field])
+
+        if update_fields:
+            values.append(entry_id)
+            query = f"UPDATE capital_entries SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            cursor.execute(query, values)
+            conn.commit()
+            db_manager.log_user_action(session['user_id'], 'update_capital', f'Mise à jour entrée capital #{entry_id}', 'capital_entries', entry_id, None, data)
+            db_manager.add_to_sync_queue('capital_entries', entry_id, 'update', data)
+
+        conn.close()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error updating capital entry: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour'}), 500
 
 @finance_bp.route('/expenses', methods=['POST'])
 def add_expense():
@@ -254,10 +298,84 @@ def get_expenses():
         conn.close()
         
         return jsonify({'success': True, 'expenses': expenses})
-        
+
     except Exception as e:
         logger.error(f"Error fetching expenses: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des dépenses'}), 500
+
+
+@finance_bp.route('/expenses/<int:expense_id>', methods=['PUT', 'DELETE'])
+def modify_expense(expense_id):
+    """Update or delete an expense entry"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        if request.method == 'DELETE':
+            cursor.execute('DELETE FROM expenses WHERE id = ?', (expense_id,))
+            conn.commit()
+            db_manager.log_user_action(session['user_id'], 'delete_expense', f'Suppression dépense #{expense_id}', 'expenses', expense_id)
+            db_manager.add_to_sync_queue('expenses', expense_id, 'delete')
+            conn.close()
+            return jsonify({'success': True})
+
+        data = request.get_json() or {}
+        update_fields = []
+        values = []
+        for field in ['amount', 'category', 'subcategory', 'description', 'expense_date']:
+            if field in data:
+                update_fields.append(f'{field} = ?')
+                values.append(data[field])
+
+        if update_fields:
+            values.append(expense_id)
+            query = f"UPDATE expenses SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+            cursor.execute(query, values)
+            conn.commit()
+            db_manager.log_user_action(session['user_id'], 'update_expense', f'Mise à jour dépense #{expense_id}', 'expenses', expense_id, None, data)
+            db_manager.add_to_sync_queue('expenses', expense_id, 'update', data)
+
+        conn.close()
+        return jsonify({'success': True})
+
+    except Exception as e:
+        logger.error(f"Error updating expense: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour'}), 500
+
+
+@finance_bp.route('/transactions', methods=['GET'])
+def get_transactions():
+    """Return combined list of income and expense transactions"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT id, entry_date AS date, amount, source AS description,
+                   'income' AS type, 'capital' AS category
+            FROM capital_entries
+            UNION ALL
+            SELECT id, expense_date AS date, amount, description,
+                   'expense' AS type, category
+            FROM expenses
+            ORDER BY date DESC
+        ''')
+
+        transactions = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        return jsonify({'success': True, 'transactions': transactions})
+    except Exception as e:
+        logger.error(f"Error fetching transactions: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des transactions'}), 500
 
 @finance_bp.route('/cash-register', methods=['POST'])
 def create_cash_register():
