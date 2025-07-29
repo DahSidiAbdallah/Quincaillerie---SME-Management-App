@@ -180,7 +180,11 @@ def update_user(user_id):
         
         # Get current user data for logging
         cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
-        old_user = dict(cursor.fetchone())
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'success': False, 'message': "Utilisateur introuvable"}), 404
+        old_user = dict(row)
         
         # Build update query dynamically
         update_fields = []
