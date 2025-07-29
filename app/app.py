@@ -277,8 +277,9 @@ def dashboard():
     # Get dashboard data based on available modules
     if MODULES_AVAILABLE and db_manager is not None:
         try:
-            # Fetch all the necessary data from the database
-            total_products = db_manager.get_total_products() if db_manager is not None else 0
+            # Fetch inventory statistics
+            inv_stats = db_manager.get_inventory_stats()
+            total_products = inv_stats.get('total', 0)
             low_stock_items = db_manager.get_low_stock_items() if db_manager is not None else []
             
             # Get today's sales summary
@@ -359,202 +360,6 @@ def inventory():
     """Inventory management page"""
     return render_template('inventory.html')
 
-# Inventory API endpoints
-@app.route('/api/inventory/stats')
-@login_required
-def inventory_stats():
-    """Get inventory statistics"""
-    if MODULES_AVAILABLE and db_manager is not None:
-        try:
-            # Get inventory statistics from database
-            conn = db_manager.get_connection()
-            cursor = conn.cursor()
-            
-            # Total products count
-            total_products = db_manager.get_total_products() if db_manager is not None else 0
-            
-            # Low stock items
-            low_stock_items = db_manager.get_low_stock_items() if db_manager is not None else []
-            
-            # Calculate total inventory value
-            cursor.execute('''
-                SELECT SUM(purchase_price * current_stock) as total_value
-                FROM products
-                WHERE is_active = 1
-            ''')
-            result = cursor.fetchone()
-            total_value = float(result['total_value']) if result and result['total_value'] else 0
-            
-            # Count products by category
-            cursor.execute('''
-                SELECT category, COUNT(*) as count
-                FROM products
-                WHERE is_active = 1
-                GROUP BY category
-                ORDER BY count DESC
-            ''')
-            
-            categories = []
-            for row in cursor.fetchall():
-                categories.append({
-                    'name': row['category'],
-                    'count': row['count']
-                })
-            
-            # Return inventory statistics
-            stats = {
-                'total_products': total_products,
-                'low_stock_count': len(low_stock_items) if isinstance(low_stock_items, list) else 0,
-                'total_value': f"{total_value:,.2f} MRU",
-                'categories': categories
-            }
-            
-            return jsonify({'success': True, 'stats': stats})
-        except Exception as e:
-            logger.error(f"Error fetching inventory stats: {e}")
-            return jsonify({'success': False, 'error': str(e)})
-    else:
-        # Fallback data for minimal mode
-        return jsonify({
-            'success': False,
-            'message': 'Inventory statistics not available in minimal mode',
-            'stats': {
-                'total_products': 0,
-                'low_stock_count': 0,
-                'total_value': '0.00 MRU',
-                'categories': []
-            }
-        })
-
-@app.route('/api/inventory/products')
-@login_required
-def inventory_products():
-    """Get product list with pagination and filtering"""
-    if MODULES_AVAILABLE and db_manager is not None:
-        try:
-            # Get query parameters
-            page = request.args.get('page', 1, type=int)
-            limit = request.args.get('limit', 20, type=int)
-            search = request.args.get('search', '')
-            category = request.args.get('category', '')
-            sort_by = request.args.get('sort_by', 'name')
-            sort_order = request.args.get('sort_order', 'asc')
-            low_stock = request.args.get('low_stock', 'false').lower() == 'true'
-            
-            # Calculate offset
-            offset = (page - 1) * limit
-            
-            # Build query
-            query = '''
-                SELECT p.*, (p.purchase_price * p.current_stock) as stock_value
-                FROM products p
-                WHERE p.is_active = 1
-            '''
-            params = []
-            
-            # Add search filter
-            if search:
-                query += ' AND (p.name LIKE ? OR p.sku LIKE ? OR p.description LIKE ?)'
-                search_param = f'%{search}%'
-                params.extend([search_param, search_param, search_param])
-            
-            # Add category filter
-            if category:
-                query += ' AND p.category = ?'
-                params.append(category)
-            
-            # Add low stock filter
-            if low_stock:
-                query += ' AND p.current_stock <= p.reorder_level'
-            
-            # Add sorting
-            valid_sort_fields = ['name', 'sku', 'current_stock', 'selling_price', 'purchase_price']
-            valid_sort_orders = ['asc', 'desc']
-            
-            if sort_by in valid_sort_fields and sort_order in valid_sort_orders:
-                query += f' ORDER BY p.{sort_by} {sort_order.upper()}'
-            else:
-                query += ' ORDER BY p.name ASC'
-            
-            # Add pagination
-            query += ' LIMIT ? OFFSET ?'
-            params.extend([limit, offset])
-            
-            # Execute query
-            conn = db_manager.get_connection()
-            cursor = conn.cursor()
-            cursor.execute(query, params)
-            
-            # Convert rows to dictionaries
-            products = []
-            for row in cursor.fetchall():
-                product = dict(row)
-                
-                # Calculate stock status
-                if product['current_stock'] <= 0:
-                    product['stock_status'] = 'out_of_stock'
-                elif product['current_stock'] <= product['reorder_level']:
-                    product['stock_status'] = 'low'
-                elif product['current_stock'] <= product['reorder_level'] * 2:
-                    product['stock_status'] = 'medium'
-                else:
-                    product['stock_status'] = 'good'
-                
-                products.append(product)
-            
-            # Get total count for pagination
-            count_query = '''
-                SELECT COUNT(*) as total
-                FROM products p
-                WHERE p.is_active = 1
-            '''
-            count_params = []
-            
-            # Add the same filters to count query
-            if search:
-                count_query += ' AND (p.name LIKE ? OR p.sku LIKE ? OR p.description LIKE ?)'
-                search_param = f'%{search}%'
-                count_params.extend([search_param, search_param, search_param])
-            
-            if category:
-                count_query += ' AND p.category = ?'
-                count_params.append(category)
-            
-            if low_stock:
-                count_query += ' AND p.current_stock <= p.reorder_level'
-            
-            cursor.execute(count_query, count_params)
-            total = cursor.fetchone()['total']
-            
-            # Calculate pagination info
-            pagination = {
-                'page': page,
-                'limit': limit,
-                'total': total,
-                'pages': (total + limit - 1) // limit
-            }
-            
-            return jsonify({
-                'success': True, 
-                'products': products,
-                'pagination': pagination
-            })
-        except Exception as e:
-            logger.error(f"Error fetching products: {e}")
-            return jsonify({'success': False, 'error': str(e)})
-    else:
-        # Fallback empty list for minimal mode
-        return jsonify({
-            'success': False,
-            'message': 'Product data not available in minimal mode',
-            'products': [],
-            'pagination': {
-                'page': 1,
-                'limit': 20,
-                'total': 0,
-                'pages': 0
-            }
-        })
 
 @app.route('/sales')
 @login_required
@@ -1405,7 +1210,8 @@ def dashboard_stats():
     if MODULES_AVAILABLE and db_manager is not None:
         try:
             # Fetch detailed statistics from database
-            total_products = db_manager.get_total_products() if db_manager is not None else 0
+            inv_stats = db_manager.get_inventory_stats()
+            total_products = inv_stats.get('total', 0)
             low_stock_items = db_manager.get_low_stock_items() if db_manager is not None else []
             today_sales_data = db_manager.get_today_sales() if db_manager is not None else {'total': 0, 'count': 0}
             total_revenue = db_manager.get_total_revenue() if db_manager is not None else 0
