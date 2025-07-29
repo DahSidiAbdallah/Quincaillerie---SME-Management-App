@@ -10,6 +10,16 @@ function apiFetch(url, options = {}) {
     if (!options.headers) {
         options.headers = {};
     }
+
+    // Always send cookies for authentication
+    if (!options.credentials) {
+        options.credentials = 'include';
+    }
+
+    // Mark request as AJAX for Flask handlers
+    if (!options.headers['X-Requested-With']) {
+        options.headers['X-Requested-With'] = 'XMLHttpRequest';
+    }
     
     // Set content type if not provided and method is not GET
     if (options.method && options.method !== 'GET' && !options.headers['Content-Type']) {
@@ -18,13 +28,20 @@ function apiFetch(url, options = {}) {
     
     // Return the fetch promise
     return fetch(url, options)
-        .then(response => {
+        .then(async response => {
             if (response.status === 401) {
                 // Redirect to login on auth failure
                 window.location.href = '/login';
                 throw new Error('Not authenticated');
             }
-            return response;
+            const data = await response.json().catch(() => null);
+            if (!response.ok) {
+                const err = new Error((data && data.message) || 'Request failed');
+                err.response = response;
+                err.data = data;
+                throw err;
+            }
+            return data;
         })
         .catch(error => {
             console.error('API fetch error:', error);
