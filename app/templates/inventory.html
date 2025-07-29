@@ -506,11 +506,13 @@
             const searchTerm = document.getElementById('searchInput').value;
             const category = document.getElementById('categoryFilter').value;
             const stockFilter = document.getElementById('stockFilter').value;
-            
+
             const params = new URLSearchParams();
             if (searchTerm) params.append('search', searchTerm);
             if (category) params.append('category', category);
-            if (stockFilter) params.append('stock_filter', stockFilter);
+            if (stockFilter === 'low_stock' || stockFilter === 'out_of_stock') {
+                params.append('low_stock', 'true');
+            }
             
             const response = await fetch(`/api/inventory/products?${params}`);
             const data = await response.json();

@@ -318,6 +318,14 @@ class DatabaseManager:
                     FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
+
+            # Application wide settings
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
             
             # AI predictions cache table (Phase 4)
             cursor.execute('''
@@ -447,6 +455,27 @@ class DatabaseManager:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('UPDATE users SET language = ? WHERE id = ?', (language, user_id))
+        conn.commit()
+        conn.close()
+
+    # --- Application settings ---
+    def get_app_settings(self):
+        """Return application settings as dict"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT key, value FROM app_settings')
+        data = {row['key']: row['value'] for row in cursor.fetchall()}
+        conn.close()
+        return data
+
+    def set_app_settings(self, settings: dict):
+        """Update application settings"""
+        if not settings:
+            return
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        for k, v in settings.items():
+            cursor.execute('REPLACE INTO app_settings (key, value) VALUES (?, ?)', (k, json.dumps(v) if isinstance(v, (dict, list)) else str(v)))
         conn.commit()
         conn.close()
     

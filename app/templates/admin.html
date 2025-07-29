@@ -454,6 +454,16 @@
                         .then(r => r.json())
                         .then(data => { if (data.success) { this.users = data.users || []; } })
                         .catch(err => console.error('Error loading users:', err));
+
+                    fetch('/api/admin/settings')
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.settings = data.settings || {}; } })
+                        .catch(err => console.error('Error loading settings:', err));
+
+                    fetch('/api/admin/backups')
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.backups = data.backups || []; } })
+                        .catch(err => console.error('Error loading backups:', err));
                 },
                 
                 createUser() {
@@ -522,20 +532,28 @@
                 },
                 
                 saveSettings() {
-                    alert('Paramètres sauvegardés avec succès!');
+                    fetch('/api/admin/settings', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(this.settings)
+                    })
+                        .then(r => r.json())
+                        .then(data => { if (data.success) alert('Paramètres sauvegardés'); else alert(data.message || 'Erreur'); })
+                        .catch(err => console.error('Error saving settings:', err));
                 },
                 
                 createBackup() {
-                    alert('Création de la sauvegarde en cours...');
-                    setTimeout(() => {
-                        this.backups.unshift({
-                            id: Date.now(),
-                            date: new Date().toISOString().split('T')[0],
-                            size: '2.4 MB',
-                            type: 'Manuel'
-                        });
-                        alert('Sauvegarde créée avec succès!');
-                    }, 2000);
+                    fetch('/api/admin/backups', {method: 'POST'})
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.loadData();
+                                alert('Sauvegarde créée avec succès!');
+                            } else {
+                                alert(data.message || 'Erreur création sauvegarde');
+                            }
+                        })
+                        .catch(err => console.error('Error creating backup:', err));
                 },
                 
                 scheduleBackup() {
@@ -543,13 +561,15 @@
                 },
                 
                 downloadBackup(backup) {
-                    alert('Téléchargement de la sauvegarde du ' + backup.date);
+                    window.open(`/api/admin/backups/${backup.id}`, '_blank');
                 },
                 
                 deleteBackup(backup) {
-                    if (confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) {
-                        this.backups = this.backups.filter(b => b.id !== backup.id);
-                    }
+                    if (!confirm('Êtes-vous sûr de vouloir supprimer cette sauvegarde?')) return;
+                    fetch(`/api/admin/backups/${backup.id}`, {method: 'DELETE'})
+                        .then(r => r.json())
+                        .then(data => { if (data.success) { this.backups = this.backups.filter(b => b.id !== backup.id); } else { alert(data.message || 'Erreur'); } })
+                        .catch(err => console.error('Error deleting backup:', err));
                 }
             }
         }

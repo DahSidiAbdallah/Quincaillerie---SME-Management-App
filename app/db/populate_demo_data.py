@@ -120,5 +120,18 @@ cursor.executemany('''
 ''', sale_items)
 
 conn.commit()
+
+# Default application settings
+cursor.executemany('INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)', [
+    ('company_name', 'Ma Quincaillerie'),
+    ('default_language', 'fr'),
+    ('currency', 'MRU'),
+    ('enable_notifications', '1'),
+    ('session_timeout', '60'),
+    ('max_login_attempts', '5'),
+    ('require_strong_passwords', '0'),
+    ('enable_audit_log', '1')
+])
+conn.commit()
 print('Demo data inserted successfully.')
 conn.close()

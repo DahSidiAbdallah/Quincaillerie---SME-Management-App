@@ -47,7 +47,7 @@ db_manager = None
 stock_predictor = None
 sales_forecaster = None
 sync_manager = None
-auth_bp = inventory_bp = sales_bp = customers_bp = finance_bp = reports_bp = ai_bp = dashboard_bp = settings_bp = None
+auth_bp = inventory_bp = sales_bp = customers_bp = finance_bp = reports_bp = ai_bp = dashboard_bp = settings_bp = admin_bp = None
 
 if MODULES_AVAILABLE:
     try:
@@ -57,6 +57,7 @@ if MODULES_AVAILABLE:
         from api.inventory import inventory_bp
         from api.sales import sales_bp
         from api.customers import customers_bp
+        from api.admin import admin_bp
         from api.finance import finance_bp
         from api.reports import reports_bp
         from api.ai_insights import ai_bp
@@ -101,6 +102,7 @@ if MODULES_AVAILABLE:
         app.register_blueprint(reports_bp, url_prefix='/api/reports')
         app.register_blueprint(ai_bp, url_prefix='/api/ai')
         app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
+        app.register_blueprint(admin_bp, url_prefix='/api/admin')
         
         # Initialize settings routes with necessary dependencies
         SUPPORTED_LANGUAGES = {'fr': 'Français', 'ar': 'العربية'}
@@ -248,7 +250,8 @@ def app_status():
         'Reports API': reports_bp is not None,
         'AI Insights API': ai_bp is not None,
         'Dashboard API': dashboard_bp is not None,
-        'Settings API': settings_bp is not None
+        'Settings API': settings_bp is not None,
+        'Admin API': admin_bp is not None
     }
     
     system_info = {
