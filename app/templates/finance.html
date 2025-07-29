@@ -359,13 +359,15 @@
                         })
                         .catch(error => console.error('Error loading summary:', error));
                     
-                    // Mock transactions data
-                    this.transactions = [
-                        {id: 1, date: '2025-07-24', description: 'Vente produits', type: 'income', amount: 1250.00, category: 'Ventes'},
-                        {id: 2, date: '2025-07-23', description: 'Achat stock', type: 'expense', amount: 850.00, category: 'Achats'},
-                        {id: 3, date: '2025-07-22', description: 'Vente matériel', type: 'income', amount: 920.00, category: 'Ventes'},
-                        {id: 4, date: '2025-07-21', description: 'Facture électricité', type: 'expense', amount: 180.00, category: 'Électricité'}
-                    ];
+                    // Load transactions history
+                    fetch('/api/finance/transactions')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.transactions = data.transactions || [];
+                            }
+                        })
+                        .catch(error => console.error('Error loading transactions:', error));
                 },
                 
                 get filteredTransactions() {
@@ -378,77 +380,100 @@
                 },
                 
                 initCharts() {
-                    // Revenue Chart
                     const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+                    const expenseCtx = document.getElementById('expenseChart').getContext('2d');
+
                     this.revenueChart = new Chart(revenueCtx, {
                         type: 'line',
-                        data: {
-                            labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
-                            datasets: [{
-                                label: 'Revenus (MRU)',
-                                data: [12000, 15000, 13000, 18000, 16000, 19000],
-                                borderColor: 'rgb(59, 130, 246)',
-                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                tension: 0.4
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            scales: {
-                                y: {
-                                    beginAtZero: true
-                                }
-                            }
-                        }
+                        data: { labels: [], datasets: [{ label: 'Revenus (MRU)', data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4 }] },
+                        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
                     });
-                    
-                    // Expense Chart
-                    const expenseCtx = document.getElementById('expenseChart').getContext('2d');
+
                     this.expenseChart = new Chart(expenseCtx, {
                         type: 'doughnut',
-                        data: {
-                            labels: ['Achats', 'Salaires', 'Loyer', 'Électricité', 'Autres'],
-                            datasets: [{
-                                data: [45, 25, 15, 8, 7],
-                                backgroundColor: [
-                                    'rgb(239, 68, 68)',
-                                    'rgb(245, 158, 11)',
-                                    'rgb(34, 197, 94)',
-                                    'rgb(168, 85, 247)',
-                                    'rgb(107, 114, 128)'
-                                ]
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false
-                        }
+                        data: { labels: [], datasets: [{ data: [], backgroundColor: ['rgb(239, 68, 68)','rgb(245, 158, 11)','rgb(34, 197, 94)','rgb(168, 85, 247)','rgb(107, 114, 128)'] }] },
+                        options: { responsive: true, maintainAspectRatio: false }
                     });
+
+                    // Load chart data from reports API
+                    fetch('/api/reports/financial-report')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                const perf = data.report.daily_performance || [];
+                                this.revenueChart.data.labels = perf.map(p => p.date);
+                                this.revenueChart.data.datasets[0].data = perf.map(p => p.revenue);
+                                this.revenueChart.update();
+
+                                const breakdown = data.report.expenses_breakdown || [];
+                                this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
+                                this.expenseChart.data.datasets[0].data = breakdown.map(b => b.total_amount);
+                                this.expenseChart.update();
+                            }
+                        })
+                        .catch(error => console.error('Error loading chart data:', error));
                 },
                 
                 updateCharts() {
-                    // Update charts based on selected period
-                    console.log('Updating charts for period:', this.chartPeriod);
+                    const params = new URLSearchParams();
+                    if (this.chartPeriod === 'week') {
+                        params.append('start_date', new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0]);
+                    } else if (this.chartPeriod === 'month') {
+                        params.append('start_date', new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0]);
+                    } else if (this.chartPeriod === 'year') {
+                        params.append('start_date', new Date(Date.now() - 365*24*60*60*1000).toISOString().split('T')[0]);
+                    }
+                    fetch(`/api/reports/financial-report?${params.toString()}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                const perf = data.report.daily_performance || [];
+                                this.revenueChart.data.labels = perf.map(p => p.date);
+                                this.revenueChart.data.datasets[0].data = perf.map(p => p.revenue);
+                                this.revenueChart.update();
+
+                                const breakdown = data.report.expenses_breakdown || [];
+                                this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
+                                this.expenseChart.data.datasets[0].data = breakdown.map(b => b.total_amount);
+                                this.expenseChart.update();
+                            }
+                        })
+                        .catch(err => console.error('Error updating charts:', err));
                 },
                 
                 createTransaction() {
-                    const transactionData = {
-                        ...this.newTransaction,
-                        date: new Date().toISOString().split('T')[0]
+                    const today = new Date().toISOString().split('T')[0];
+                    const isIncome = this.newTransaction.type === 'income';
+                    const url = isIncome ? '/api/finance/capital' : '/api/finance/expenses';
+
+                    const payload = isIncome ? {
+                        amount: this.newTransaction.amount,
+                        source: this.newTransaction.description,
+                        entry_date: today
+                    } : {
+                        amount: this.newTransaction.amount,
+                        category: this.newTransaction.category || 'Divers',
+                        description: this.newTransaction.description,
+                        expense_date: today
                     };
-                    
-                    // Mock API call
-                    setTimeout(() => {
-                        this.transactions.unshift({
-                            id: Date.now(),
-                            ...transactionData
-                        });
-                        
-                        this.showTransactionModal = false;
-                        this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
-                        alert('Transaction créée avec succès!');
-                    }, 500);
+
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.loadData();
+                                this.showTransactionModal = false;
+                                this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
+                                alert('Transaction créée avec succès!');
+                            } else {
+                                alert(data.message || 'Erreur lors de la création');
+                            }
+                        })
+                        .catch(err => console.error('Error creating transaction:', err));
                 },
                 
                 editTransaction(transaction) {
@@ -456,9 +481,22 @@
                 },
                 
                 deleteTransaction(transaction) {
-                    if (confirm('Êtes-vous sûr de vouloir supprimer cette transaction?')) {
-                        this.transactions = this.transactions.filter(t => t.id !== transaction.id);
-                    }
+                    if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction?')) return;
+
+                    const url = transaction.type === 'income'
+                        ? `/api/finance/capital/${transaction.id}`
+                        : `/api/finance/expenses/${transaction.id}`;
+
+                    fetch(url, { method: 'DELETE' })
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.transactions = this.transactions.filter(t => t.id !== transaction.id);
+                            } else {
+                                alert(data.message || 'Erreur lors de la suppression');
+                            }
+                        })
+                        .catch(err => console.error('Error deleting transaction:', err));
                 },
                 
                 generateFinanceReport() {

@@ -368,33 +368,43 @@
                 },
                 
                 loadReportData() {
-                    // Load sales report data
-                    fetch('/api/reports/sales')
-                        .then(response => response.json())
+                    fetch('/api/reports/sales-report')
+                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
+                                const stats = data.report.overall_statistics;
                                 this.reportData.sales = {
-                                    total_sales: 156,
-                                    revenue: 45780,
-                                    average_sale: 293.46,
-                                    best_day: 'Vendredi',
-                                    top_products: [
-                                        {id: 1, name: 'Marteau 500g', quantity: 45, revenue: 1575, percentage: 3.4},
-                                        {id: 2, name: 'Perceuse sans fil', quantity: 12, revenue: 7800, percentage: 17.0},
-                                        {id: 3, name: 'Tournevis cruciforme', quantity: 89, revenue: 1068, percentage: 2.3}
-                                    ]
+                                    total_sales: stats.total_sales,
+                                    revenue: stats.total_revenue,
+                                    average_sale: stats.avg_sale_amount,
+                                    best_day: '',
+                                    top_products: data.report.top_products || []
+                                };
+                                const labels = data.report.sales_by_period.map(p => p.period);
+                                const amounts = data.report.sales_by_period.map(p => p.total_revenue);
+                                if (this.salesChart) {
+                                    this.salesChart.data.labels = labels;
+                                    this.salesChart.data.datasets[0].data = amounts;
+                                    this.salesChart.update();
+                                }
+                            }
+                        })
+                        .catch(error => console.error('Error loading sales report:', error));
+
+                    fetch('/api/reports/inventory-report')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                const stats = data.report.overall_statistics;
+                                this.reportData.inventory = {
+                                    total_products: stats.total_products,
+                                    low_stock: stats.low_stock_count,
+                                    out_of_stock: stats.out_of_stock_count,
+                                    stock_value: stats.total_value
                                 };
                             }
                         })
-                        .catch(error => console.error('Error loading report data:', error));
-                    
-                    // Mock inventory data
-                    this.reportData.inventory = {
-                        total_products: 245,
-                        low_stock: 12,
-                        out_of_stock: 3,
-                        stock_value: 125400
-                    };
+                        .catch(error => console.error('Error loading inventory report:', error));
                 },
                 
                 initCharts() {
@@ -404,10 +414,10 @@
                         this.salesChart = new Chart(salesCtx.getContext('2d'), {
                             type: 'line',
                             data: {
-                                labels: ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun'],
+                                labels: [],
                                 datasets: [{
                                     label: 'Ventes (MRU)',
-                                    data: [12000, 15000, 13000, 18000, 16000, 19000],
+                                    data: [],
                                     borderColor: 'rgb(59, 130, 246)',
                                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                                     tension: 0.4,
