@@ -25,6 +25,21 @@ if admin_id:
 else:
     admin_id = 1
 
+# Customers
+customers = []
+for _ in range(20):
+    customers.append((
+        fake.name(),
+        fake.phone_number(),
+        fake.email(),
+        fake.address()
+    ))
+
+cursor.executemany('''
+    INSERT INTO customers (name, phone, email, address)
+    VALUES (?, ?, ?, ?)
+''', customers)
+
 # Products
 products = []
 for _ in range(30):
@@ -51,6 +66,7 @@ for _ in range(50):
     sale_date = fake.date_between(start_date='-60d', end_date='today')
     customer_name = fake.name()
     customer_phone = fake.phone_number()
+    invoice_number = f"INV{fake.unique.random_int(min=1000, max=9999)}"
     total_amount = 0
     paid_amount = 0
     payment_method = fake.random_element(['cash', 'credit', 'mobile'])
@@ -66,7 +82,7 @@ for _ in range(50):
     status = fake.random_element(['completed', 'pending'])
     notes = fake.sentence(nb_words=6)
     # Add sale
-    sales.append((sale_date, customer_name, customer_phone, 0, 0, payment_method, is_credit, credit_due_date, status, notes, admin_id))
+    sales.append((sale_date, invoice_number, customer_name, customer_phone, 0, 0, payment_method, is_credit, credit_due_date, status, notes, admin_id))
 
 conn.commit()
 
@@ -74,8 +90,9 @@ conn.commit()
 
 for sale in sales:
     cursor.execute('''
-        INSERT INTO sales (sale_date, customer_name, customer_phone, total_amount, paid_amount, payment_method, is_credit, credit_due_date, status, notes, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sales (sale_date, invoice_number, customer_name, customer_phone, total_amount, paid_amount,
+                           payment_method, is_credit, credit_due_date, status, notes, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ''', sale)
     sale_id = cursor.lastrowid
     # Add 1-4 items per sale
@@ -102,6 +119,19 @@ cursor.executemany('''
     VALUES (?, ?, ?, ?, ?, ?)
 ''', sale_items)
 
+conn.commit()
+
+# Default application settings
+cursor.executemany('INSERT OR IGNORE INTO app_settings (key, value) VALUES (?, ?)', [
+    ('company_name', 'Ma Quincaillerie'),
+    ('default_language', 'fr'),
+    ('currency', 'MRU'),
+    ('enable_notifications', '1'),
+    ('session_timeout', '60'),
+    ('max_login_attempts', '5'),
+    ('require_strong_passwords', '0'),
+    ('enable_audit_log', '1')
+])
 conn.commit()
 print('Demo data inserted successfully.')
 conn.close()

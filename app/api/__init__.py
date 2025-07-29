@@ -6,5 +6,5 @@ Each module defines a Blueprint for a specific functionality area.
 
 # Import all blueprints for proper initialization
 from . import auth, dashboard, inventory, sales, finance, reports, ai_insights
-# Add settings module to the imports
 from . import settings
+from . import admin
