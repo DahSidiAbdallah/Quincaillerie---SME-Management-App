@@ -392,6 +392,16 @@
                             }
                         })
                         .catch(error => console.error('Error loading products:', error));
+
+                    // Load customers list
+                    fetch('/api/customers')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                this.customers = data.customers || [];
+                            }
+                        })
+                        .catch(error => console.error('Error loading customers:', error));
                 },
                 
                 get filteredSales() {
@@ -476,11 +486,11 @@
                 },
                 
                 generateReport() {
-                    alert('Génération du rapport de ventes...');
+                    window.open('/api/reports/sales-report', '_blank');
                 },
-                
+
                 exportData() {
-                    alert('Export des données...');
+                    window.open('/api/reports/export/sales', '_blank');
                 },
                 
                 formatDate(dateString) {

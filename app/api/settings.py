@@ -5,11 +5,13 @@ Settings API for Quincaillerie & SME Management App
 Handles user settings, preferences, and profile management
 """
 
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, url_for, current_app
 from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 import logging
 from datetime import datetime
 import json
+import os
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -61,14 +63,17 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 
                 if has_profiles_table:
                     cursor.execute('''
-                        SELECT first_name, last_name, email, phone
+                        SELECT first_name, last_name, email, phone, photo_path
                         FROM user_profiles
                         WHERE user_id = ?
                     ''', (user_id,))
-                    
+
                     profile = cursor.fetchone()
                     if profile:
-                        user_data.update(dict(profile))
+                        prof = dict(profile)
+                        if prof.get('photo_path'):
+                            prof['photo_url'] = url_for('static', filename=prof['photo_path'].replace('static/', ''))
+                        user_data.update(prof)
                 
                 # Get user preferences if the table exists
                 cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_preferences'")
@@ -134,7 +139,49 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 },
                 'activities': []
             })
-    
+
+    @settings_bp.route('/api/settings/upload-photo', methods=['POST'])
+    def upload_photo():
+        """Upload user profile photo"""
+        if MODULES_AVAILABLE and db_manager is not None:
+            try:
+                user_id = session.get('user_id')
+                if not user_id:
+                    return jsonify({'success': False, 'error': 'User not authenticated'})
+
+                if 'photo' not in request.files:
+                    return jsonify({'success': False, 'error': 'Aucun fichier'}), 400
+                file = request.files['photo']
+                if file.filename == '':
+                    return jsonify({'success': False, 'error': 'Aucun fichier'}), 400
+
+                filename = secure_filename(file.filename)
+                ext = os.path.splitext(filename)[1]
+                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profiles')
+                os.makedirs(upload_dir, exist_ok=True)
+                new_name = f'user_{user_id}{ext}'
+                path = os.path.join(upload_dir, new_name)
+                file.save(path)
+
+                conn = db_manager.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT id FROM user_profiles WHERE user_id = ?', (user_id,))
+                exists = cursor.fetchone() is not None
+                if exists:
+                    cursor.execute('UPDATE user_profiles SET photo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (path, user_id))
+                else:
+                    cursor.execute('INSERT INTO user_profiles (user_id, photo_path) VALUES (?, ?)', (user_id, path))
+                conn.commit(); conn.close()
+
+                db_manager.log_user_action(user_id, 'upload_photo', 'Mise à jour photo profil', 'user_profiles')
+
+                return jsonify({'success': True, 'photo_url': url_for('static', filename=path.replace('static/',''))})
+            except Exception as e:
+                logger.error(f"Error uploading photo: {e}")
+                return jsonify({'success': False, 'error': str(e)})
+        else:
+            return jsonify({'success': False, 'error': 'Cette fonctionnalité n\'est pas disponible en mode minimal'})
+
     @settings_bp.route('/api/settings/update-profile', methods=['POST'])
     def update_profile():
         """Update user profile information"""
@@ -151,7 +198,8 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                     'first_name': data.get('first_name', ''),
                     'last_name': data.get('last_name', ''),
                     'email': data.get('email', ''),
-                    'phone': data.get('phone', '')
+                    'phone': data.get('phone', ''),
+                    'photo_path': data.get('photo_path', '')
                 }
                 
                 conn = db_manager.get_connection()
@@ -185,27 +233,29 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 if profile_exists:
                     # Update existing profile
                     cursor.execute('''
-                        UPDATE user_profiles 
-                        SET first_name = ?, last_name = ?, email = ?, phone = ?, updated_at = CURRENT_TIMESTAMP
+                        UPDATE user_profiles
+                        SET first_name = ?, last_name = ?, email = ?, phone = ?, photo_path = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE user_id = ?
                     ''', (
-                        profile_data['first_name'], 
-                        profile_data['last_name'], 
-                        profile_data['email'], 
+                        profile_data['first_name'],
+                        profile_data['last_name'],
+                        profile_data['email'],
                         profile_data['phone'],
+                        profile_data['photo_path'],
                         user_id
                     ))
                 else:
                     # Insert new profile
                     cursor.execute('''
-                        INSERT INTO user_profiles (user_id, first_name, last_name, email, phone)
-                        VALUES (?, ?, ?, ?, ?)
+                        INSERT INTO user_profiles (user_id, first_name, last_name, email, phone, photo_path)
+                        VALUES (?, ?, ?, ?, ?, ?)
                     ''', (
                         user_id,
-                        profile_data['first_name'], 
-                        profile_data['last_name'], 
-                        profile_data['email'], 
-                        profile_data['phone']
+                        profile_data['first_name'],
+                        profile_data['last_name'],
+                        profile_data['email'],
+                        profile_data['phone'],
+                        profile_data['photo_path']
                     ))
                 
                 conn.commit()

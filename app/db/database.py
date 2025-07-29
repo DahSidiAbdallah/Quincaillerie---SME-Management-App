@@ -49,6 +49,36 @@ class DatabaseManager:
                     is_active BOOLEAN DEFAULT 1
                 )
             ''')
+
+            # Customers table - used for sales and credit tracking
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS customers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    phone TEXT,
+                    email TEXT,
+                    address TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    is_active BOOLEAN DEFAULT 1
+                )
+            ''')
+
+            # Ensure table exists in older databases
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+            if not cursor.fetchone():
+                cursor.execute('''
+                    CREATE TABLE customers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT NOT NULL,
+                        phone TEXT,
+                        email TEXT,
+                        address TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        is_active BOOLEAN DEFAULT 1
+                    )
+                ''')
             
             # Products/Articles table (Phase 1.2)
             cursor.execute('''
@@ -94,6 +124,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS sales (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     sale_date DATE NOT NULL,
+                    invoice_number TEXT,
                     customer_name TEXT,
                     customer_phone TEXT,
                     total_amount REAL NOT NULL,
@@ -108,6 +139,12 @@ class DatabaseManager:
                     FOREIGN KEY (created_by) REFERENCES users (id)
                 )
             ''')
+
+            # Ensure invoice_number column exists (for older databases)
+            cursor.execute("PRAGMA table_info(sales)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'invoice_number' not in columns:
+                cursor.execute('ALTER TABLE sales ADD COLUMN invoice_number TEXT')
             
             # Sale items table
             cursor.execute('''
@@ -246,11 +283,17 @@ class DatabaseManager:
                     last_name TEXT,
                     email TEXT,
                     phone TEXT,
+                    photo_path TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
+
+            cursor.execute("PRAGMA table_info(user_profiles)")
+            profile_cols = [row[1] for row in cursor.fetchall()]
+            if 'photo_path' not in profile_cols:
+                cursor.execute('ALTER TABLE user_profiles ADD COLUMN photo_path TEXT')
             
             # User preferences table (Phase 5.3)
             cursor.execute('''
@@ -308,7 +351,9 @@ class DatabaseManager:
             # Create indexes for better performance
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(sale_date)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_sales_invoice ON sales(invoice_number)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_stock_movements_product ON stock_movements(product_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_customers_name ON customers(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_activity_log_user ON user_activity_log(user_id)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_client_debts_status ON client_debts(status)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_supplier_debts_status ON supplier_debts(status)')
@@ -647,18 +692,47 @@ class DatabaseManager:
         conn.close()
         
     def get_customers_list(self):
-        """Get list of customers who have made purchases"""
+        """Get list of active customers"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        # Check if dedicated customers table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+        has_table = cursor.fetchone() is not None
+
+        if has_table:
+            cursor.execute('''
+                SELECT id, name, phone
+                FROM customers
+                WHERE is_active = 1
+                ORDER BY name
+            ''')
+        else:
+            # Fallback: derive customers from sales table
+            cursor.execute('''
+                SELECT MIN(rowid) as id, customer_name as name, customer_phone as phone
+                FROM sales
+                WHERE customer_name != ''
+                GROUP BY customer_name, customer_phone
+                ORDER BY customer_name
+            ''')
+
+        customers = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return customers
+
+    def create_customer(self, name, phone='', email='', address=''):
+        """Create a new customer record"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute('''
-            SELECT DISTINCT customer_name as name, customer_phone as phone
-            FROM sales
-            WHERE customer_name != ''
-            ORDER BY customer_name
-        ''')
-        customers = cursor.fetchall()
+            INSERT INTO customers (name, phone, email, address)
+            VALUES (?, ?, ?, ?)
+        ''', (name, phone, email, address))
+        customer_id = cursor.lastrowid
+        conn.commit()
         conn.close()
-        return [dict(c) for c in customers]
+        return customer_id
         
     def get_sales_stats(self):
         """Get statistics for sales dashboard"""
