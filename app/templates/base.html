@@ -5,9 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Quincaillerie Management{% endblock %}</title>
     
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="{{ url_for('manifest') }}">
+    <!-- PWA Manifest and Meta Tags -->
+    <link rel="manifest" href="{{ url_for('serve_manifest_file') }}">
     <meta name="theme-color" content="#1f2937">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quincaillerie">
+    <meta name="description" content="Application de gestion pour quincailleries et PME - Inventaire, ventes, finances">
+    
+    <!-- iOS icons and splash screens -->
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='splash/splash-640x1136.png') }}" media="(device-width: 320px) and (device-height: 568px) and (-webkit-device-pixel-ratio: 2)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='splash/splash-750x1334.png') }}" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='splash/splash-1242x2208.png') }}" media="(device-width: 414px) and (device-height: 736px) and (-webkit-device-pixel-ratio: 3)">
+    <link rel="apple-touch-startup-image" href="{{ url_for('static', filename='splash/splash-1125x2436.png') }}" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -18,8 +29,10 @@
     <!-- Alpine.js for reactive components -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
-    <!-- Common JavaScript functions -->
+    <!-- JS resources -->
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/offline-handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/pwa-installer.js') }}" defer></script>
     
     <!-- Custom CSS -->
     <style>
@@ -62,11 +75,46 @@
             100% { transform: rotate(360deg); }
         }
         
+        /* Enhanced mobile styles */
+        @media (max-width: 768px) {
+            .mobile-nav-expanded {
+                height: 100vh;
+                overflow-y: auto;
+            }
+            
+            .mobile-menu-container {
+                max-height: calc(100vh - 64px);
+                overflow-y: auto;
+            }
+        }
+        
         /* Print styles */
         @media print {
             .no-print {
                 display: none !important;
             }
+        }
+        
+        /* PWA install button */
+        .install-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            padding: 10px 15px;
+            background-color: #1f2937;
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s ease;
+        }
+        
+        .install-button:hover {
+            background-color: #374151;
+            transform: translateY(-2px);
         }
     </style>
     
@@ -80,7 +128,7 @@
     
     <!-- Navigation -->
     {% if session.user_id %}
-    <nav class="bg-gray-800 text-white shadow-lg no-print">
+    <nav x-data="{ mobileMenuOpen: false }" class="bg-gray-800 text-white shadow-lg no-print">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
@@ -89,7 +137,7 @@
                         <h1 class="text-xl font-bold">🔧 Quincaillerie</h1>
                     </div>
                     
-                    <!-- Navigation Links -->
+                    <!-- Navigation Links (Desktop) -->
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">
                             <a href="{{ url_for('dashboard') }}" 
@@ -125,7 +173,7 @@
                 <!-- Right side items -->
                 <div class="flex items-center space-x-4">
                     <!-- Sync Status -->
-                    <div id="syncStatus" class="flex items-center text-sm">
+                    <div id="syncStatus" class="hidden sm:flex items-center text-sm">
                         <div id="syncIndicator" class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
                         <span id="syncText">Synchronisé</span>
                     </div>
@@ -134,7 +182,7 @@
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="flex items-center text-sm hover:bg-gray-700 px-2 py-1 rounded">
                             <span class="mr-1">🌐</span>
-                            {{ supported_languages[current_language] }}
+                            <span class="hidden sm:inline">{{ supported_languages[current_language] }}</span>
                         </button>
                         <div x-show="open" @click.away="open = false" 
                              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
@@ -147,11 +195,27 @@
                         </div>
                     </div>
                     
+                    <!-- Mobile menu button -->
+                    <button @click="mobileMenuOpen = !mobileMenuOpen" type="button" 
+                            class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white" 
+                            aria-controls="mobile-menu" 
+                            :aria-expanded="mobileMenuOpen">
+                        <span class="sr-only">Open main menu</span>
+                        <!-- Icon when menu is closed -->
+                        <svg x-show="!mobileMenuOpen" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                        <!-- Icon when menu is open -->
+                        <svg x-show="mobileMenuOpen" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                    
                     <!-- User Menu -->
                     <div class="relative" x-data="{ open: false }">
                         <button @click="open = !open" class="flex items-center text-sm hover:bg-gray-700 px-2 py-1 rounded">
                             <span class="mr-2">👤</span>
-                            {{ current_user }}
+                            <span class="hidden sm:inline">{{ current_user }}</span>
                             <span class="ml-1 text-xs bg-blue-600 px-2 py-0.5 rounded">{{ user_role }}</span>
                         </button>
                         <div x-show="open" @click.away="open = false" 
@@ -166,31 +230,45 @@
                             </button>
                         </div>
                     </div>
-                    
-                    <!-- Mobile menu button -->
-                    <div class="md:hidden">
-                        <button x-data @click="$refs.mobileMenu.classList.toggle('hidden')" 
-                                class="text-gray-300 hover:text-white p-2">
-                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                            </svg>
-                        </button>
-                    </div>
                 </div>
             </div>
-        </div>
-        
-        <!-- Mobile menu -->
-        <div x-ref="mobileMenu" class="md:hidden hidden">
-            <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-gray-700">
-                <a href="{{ url_for('dashboard') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">📊 Tableau de bord</a>
-                <a href="{{ url_for('inventory') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">📦 Inventaire</a>
-                <a href="{{ url_for('sales') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">💰 Ventes</a>
-                <a href="{{ url_for('finance') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">💳 Finance</a>
-                <a href="{{ url_for('reports') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">📈 Rapports</a>
-                {% if user_role == 'admin' %}
-                <a href="{{ url_for('admin') }}" class="block px-3 py-2 text-base font-medium hover:bg-gray-600 rounded-md">⚙️ Admin</a>
-                {% endif %}
+            
+            <!-- Mobile menu -->
+            <div x-show="mobileMenuOpen" class="md:hidden mobile-menu-container" id="mobile-menu">
+                <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
+                    <a href="{{ url_for('dashboard') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
+                        📊 Tableau de bord
+                    </a>
+                    <a href="{{ url_for('inventory') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                        📦 Inventaire
+                    </a>
+                    <a href="{{ url_for('sales') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                        💰 Ventes
+                    </a>
+                    <a href="{{ url_for('finance') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
+                        💳 Finance
+                    </a>
+                    <a href="{{ url_for('reports') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
+                        📈 Rapports
+                    </a>
+                    {% if user_role == 'admin' %}
+                    <a href="{{ url_for('admin') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
+                        ⚙️ Admin
+                    </a>
+                    {% endif %}
+                    
+                    <!-- Mobile sync status -->
+                    <div class="flex items-center px-3 py-2 text-sm">
+                        <div class="w-2 h-2 rounded-full bg-green-500 mr-2" id="mobileSyncIndicator"></div>
+                        <span id="mobileSyncText">Synchronisé</span>
+                    </div>
+                </div>
             </div>
         </div>
     </nav>
@@ -387,7 +465,34 @@
         window.printPage = function() {
             window.print();
         };
+        
+        // Logout handler
+        window.handleLogout = function() {
+            window.showLoading(true);
+            fetch('/api/auth/logout', { method: 'POST' })
+                .then(response => {
+                    if (response.ok) {
+                        window.location.href = '/login';
+                    } else {
+                        window.showLoading(false);
+                        window.showNotification('Erreur lors de la déconnexion', 'error');
+                    }
+                })
+                .catch(error => {
+                    console.error('Logout error:', error);
+                    window.showLoading(false);
+                    window.showNotification('Erreur lors de la déconnexion', 'error');
+                });
+        };
     </script>
+    
+    <!-- PWA Install Button -->
+    <button id="pwaInstallButton" class="install-button hidden">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Installer l'application
+    </button>
     
     {% block extra_scripts %}{% endblock %}
 </body>

@@ -1,11 +1,27 @@
-<!DOCTYPE html>
+<!DO    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hors ligne - Quincaillerie Management</title>
+    
+    <!-- PWA Manifest and Meta Tags -->
+    <link rel="manifest" href="{{ url_for('serve_manifest_file') }}">
+    <meta name="theme-color" content="#1f2937">
+    <meta name="apple-mobile-web-app-capable" content="yes">tml>
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mode Hors Ligne - Quincaillerie Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- PWA Manifest and Meta Tags -->
+    <link rel="manifest" href="/static/manifest.json">
     <meta name="theme-color" content="#1f2937">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Quincaillerie">
+    
+    <!-- iOS icons -->
+    <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @keyframes pulse {
             0%, 100% { opacity: 1; }
@@ -46,6 +62,13 @@
             to {
                 opacity: 1;
                 transform: translateY(0);
+            }
+        }
+        
+        /* Mobile optimizations */
+        @media (max-width: 640px) {
+            .max-w-md {
+                width: 100%;
             }
         }
     </style>
@@ -168,12 +191,7 @@
     
     <!-- Background Sync Status -->
     <div id="syncNotification" class="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg transform translate-y-full transition-transform duration-300">
-        <div class="flex items-center">
-            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            Synchronisation terminée
-        </div>
+        Synchronisation terminée
     </div>
     
     <script>
@@ -186,7 +204,39 @@
             updateConnectionStatus();
             checkSyncQueue();
             startConnectionMonitoring();
+            registerServiceWorker();
         });
+        
+        // Register service worker if not already registered
+        async function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                try {
+                    const registration = await navigator.serviceWorker.register('/sw.js');
+                    console.log('Service Worker registered with scope:', registration.scope);
+                    
+                    // Setup periodic sync if supported
+                    if ('periodicSync' in registration) {
+                        try {
+                            // Request permission for background sync
+                            const status = await navigator.permissions.query({
+                                name: 'periodic-background-sync',
+                            });
+                            
+                            if (status.state === 'granted') {
+                                await registration.periodicSync.register('sync-data', {
+                                    minInterval: 24 * 60 * 60 * 1000, // Once per day
+                                });
+                                console.log('Periodic background sync registered!');
+                            }
+                        } catch (error) {
+                            console.log('Periodic background sync not registered:', error);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Service Worker registration failed:', error);
+                }
+            }
+        }
         
         // Update connection status display
         function updateConnectionStatus() {
@@ -226,17 +276,21 @@
             `;
             
             try {
-                // Try to fetch a small resource from the server
+                // Try to fetch a small resource from the server with cache control headers
                 const response = await fetch('/api/health', {
                     method: 'GET',
                     cache: 'no-cache',
-                    timeout: 5000
+                    headers: {
+                        'Cache-Control': 'no-cache',
+                        'Pragma': 'no-cache'
+                    }
                 });
                 
                 if (response.ok) {
                     // Connection is back
                     updateConnectionStatus();
                     showSyncNotification('Connexion rétablie!');
+                    syncPendingData();
                     retryAttempts = 0;
                 } else {
                     throw new Error('Server not responding');
@@ -274,7 +328,7 @@
                 if (navigator.onLine && !isOnline) {
                     isOnline = true;
                     updateConnectionStatus();
-                    checkConnection();
+                    syncPendingData();
                 } else if (!navigator.onLine && isOnline) {
                     isOnline = false;
                     updateConnectionStatus();
@@ -286,6 +340,7 @@
                 isOnline = true;
                 updateConnectionStatus();
                 showSyncNotification('Connexion rétablie!');
+                syncPendingData();
             });
             
             window.addEventListener('offline', () => {
@@ -324,10 +379,29 @@
             }
         }
         
+        // Sync pending data
+        function syncPendingData() {
+            // If service worker is active, tell it to sync data
+            if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                    type: 'SYNC_DATA'
+                });
+            }
+            
+            // If SyncManager is supported, register a sync
+            if ('serviceWorker' in navigator && 'SyncManager' in window) {
+                navigator.serviceWorker.ready.then(registration => {
+                    registration.sync.register('sync-queued-requests').catch(error => {
+                        console.error('Background sync could not be registered:', error);
+                    });
+                });
+            }
+        }
+        
         // Show sync notification
         function showSyncNotification(message) {
             const notification = document.getElementById('syncNotification');
-            notification.querySelector('span').textContent = message;
+            notification.textContent = message;
             notification.style.transform = 'translateY(0)';
             
             setTimeout(() => {
@@ -338,11 +412,17 @@
         // Listen for service worker messages
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.addEventListener('message', event => {
-                const { type, data } = event.data;
+                const data = event.data;
                 
-                if (type === 'SYNC_COMPLETED') {
+                if (data.type === 'SYNC_COMPLETED') {
                     showSyncNotification(`${data.syncedCount} actions synchronisées`);
                     checkSyncQueue(); // Update queue count
+                } else if (data.type === 'OFFLINE_READY') {
+                    // The service worker has successfully cached resources
+                    console.log('App ready for offline use');
+                } else if (data.type === 'UPDATE_AVAILABLE') {
+                    // A new version of the app is available
+                    showSyncNotification('Nouvelle version disponible');
                 }
             });
         }
@@ -351,13 +431,47 @@
         let deferredPrompt;
         
         window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later
             deferredPrompt = e;
-            // Show install button if desired
+            // Show the install button
+            const installButton = document.createElement('button');
+            installButton.id = 'install-pwa';
+            installButton.className = 'w-full mt-4 bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-3 px-6 rounded-lg transition duration-200';
+            installButton.textContent = 'Installer l\'application';
+            installButton.addEventListener('click', () => {
+                // Show the install prompt
+                deferredPrompt.prompt();
+                // Wait for the user to respond to the prompt
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the A2HS prompt');
+                    } else {
+                        console.log('User dismissed the A2HS prompt');
+                    }
+                    deferredPrompt = null;
+                });
+                // Remove the button after prompt
+                document.getElementById('install-pwa').remove();
+            });
+            
+            // Add to page
+            const offlineCard = document.querySelector('.max-w-md > div:first-child');
+            if (offlineCard) {
+                offlineCard.appendChild(installButton);
+            }
         });
         
         // Handle app installed
         window.addEventListener('appinstalled', (evt) => {
             console.log('App was installed');
+            showSyncNotification('Application installée avec succès!');
+            // Hide the install button if it's still there
+            const installButton = document.getElementById('install-pwa');
+            if (installButton) {
+                installButton.remove();
+            }
         });
     </script>
 </body>

@@ -179,6 +179,50 @@ def index():
         return redirect(url_for('dashboard'))
     return render_template('login.html')
 
+# PWA Routes
+@app.route('/manifest.json')
+def serve_manifest_file():
+    """Serve the app manifest for PWA installation"""
+    response = app.send_static_file('manifest.json')
+    response.headers['Content-Type'] = 'application/json'
+    return response
+
+@app.route('/sw.js')
+def serve_service_worker_file():
+    """Serve the service worker JavaScript file"""
+    response = app.send_static_file('sw.js')
+    # Set the correct content type to avoid MIME type errors
+    response.headers['Content-Type'] = 'application/javascript'
+    # Cache control - service worker should be checked frequently
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint for service worker"""
+    try:
+        # Check database connection
+        if db_manager:
+            db_manager.get_connection()
+            return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
+        return jsonify({"status": "limited", "message": "Database not available", "timestamp": datetime.now().isoformat()})
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return jsonify({"status": "error", "message": str(e), "timestamp": datetime.now().isoformat()}), 500
+
+@app.route('/offline')
+def offline():
+    """Offline page for PWA"""
+    return render_template('offline.html')
+
+@app.route('/admin/pwa')
+def pwa_admin():
+    """PWA administration page"""
+    if 'user_id' not in session or session.get('is_admin') != True:
+        flash('Vous devez être administrateur pour accéder à cette page.', 'error')
+        return redirect(url_for('login'))
+    return render_template('pwa_admin.html')
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     """User login with PIN-based authentication"""
@@ -1467,12 +1511,17 @@ def forbidden(error):
 
 # Service Worker for offline functionality
 @app.route('/sw.js')
-def service_worker():
-    """Service worker for offline functionality"""
-    return app.send_static_file('sw.js'), 200, {'Content-Type': 'application/javascript'}
+def serve_service_worker():
+    """Serve the service worker JavaScript file"""
+    response = app.send_static_file('sw.js')
+    # Set the correct content type to avoid MIME type errors
+    response.headers['Content-Type'] = 'application/javascript'
+    # Cache control - service worker should be checked frequently
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
 
 @app.route('/manifest.json')
-def manifest():
+def serve_manifest():
     """Web app manifest for PWA functionality"""
     return app.send_static_file('manifest.json'), 200, {'Content-Type': 'application/json'}
 

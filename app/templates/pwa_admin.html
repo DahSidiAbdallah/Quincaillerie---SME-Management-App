@@ -1,0 +1,878 @@
+{% extends "base.html" %}
+
+{% block title %}Administration PWA | Quincaillerie Management{% endblock %}
+
+{% block head_extra %}
+<style>
+    .pwa-card {
+        transition: all 0.3s ease;
+    }
+    
+    .pwa-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 5px;
+    }
+    
+    .status-dot.active {
+        background-color: #10B981;
+    }
+    
+    .status-dot.inactive {
+        background-color: #F87171;
+    }
+    
+    .status-dot.warning {
+        background-color: #FBBF24;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <div class="flex flex-col md:flex-row justify-between items-center mb-8">
+        <h1 class="text-2xl font-bold text-gray-800">Gestion PWA</h1>
+        <div class="flex space-x-2 mt-4 md:mt-0">
+            <button id="refreshButton" class="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+                Actualiser
+            </button>
+            <button id="forceSyncButton" class="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition">
+                <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path>
+                </svg>
+                Synchroniser
+            </button>
+        </div>
+    </div>
+    
+    <!-- PWA Status Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Service Worker Status -->
+        <div class="pwa-card bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="bg-blue-600 h-2"></div>
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Service Worker</h3>
+                    <span id="swStatus" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                        <span class="status-dot inactive"></span>
+                        Vérification...
+                    </span>
+                </div>
+                <p class="text-gray-600 text-sm mb-4">
+                    Le service worker gère le fonctionnement hors ligne et met en cache les ressources clés.
+                </p>
+                <div class="flex justify-between">
+                    <button id="updateSwButton" class="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Mettre à jour
+                    </button>
+                    <button id="unregisterSwButton" class="text-sm text-red-600 hover:text-red-800 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Désactiver
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cache Status -->
+        <div class="pwa-card bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="bg-purple-600 h-2"></div>
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Cache</h3>
+                    <span id="cacheStatus" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                        <span class="status-dot inactive"></span>
+                        Vérification...
+                    </span>
+                </div>
+                <div id="cacheInfo" class="text-gray-600 text-sm mb-4">
+                    <p>Les données mises en cache permettent l'utilisation hors ligne.</p>
+                    <div class="mt-2 text-xs text-gray-500">
+                        <div>Ressources en cache: <span id="cachedResourcesCount">-</span></div>
+                        <div>Taille approximative: <span id="cacheSize">-</span></div>
+                    </div>
+                </div>
+                <div class="flex justify-between">
+                    <button id="refreshCacheButton" class="text-sm text-blue-600 hover:text-blue-800">
+                        Actualiser le cache
+                    </button>
+                    <button id="clearCacheButton" class="text-sm text-red-600 hover:text-red-800">
+                        Vider le cache
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Sync Status -->
+        <div class="pwa-card bg-white rounded-xl shadow-md overflow-hidden">
+            <div class="bg-green-600 h-2"></div>
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800">Synchronisation</h3>
+                    <span id="syncStatus" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                        <span class="status-dot inactive"></span>
+                        Vérification...
+                    </span>
+                </div>
+                <div id="syncInfo" class="text-gray-600 text-sm mb-4">
+                    <p>La synchronisation permet le travail hors ligne et la mise à jour automatique.</p>
+                    <div class="mt-2 text-xs text-gray-500">
+                        <div>Actions en attente: <span id="pendingActionsCount">-</span></div>
+                        <div>Dernière sync: <span id="lastSyncTime">-</span></div>
+                    </div>
+                </div>
+                <div class="flex justify-between">
+                    <button id="forceOfflineButton" class="text-sm text-blue-600 hover:text-blue-800">
+                        Tester mode hors-ligne
+                    </button>
+                    <button id="clearSyncQueueButton" class="text-sm text-red-600 hover:text-red-800">
+                        Vider la file
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- PWA Installation & Management -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+        <div class="bg-indigo-600 h-2"></div>
+        <div class="p-6">
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Installation PWA</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <p class="text-gray-600 text-sm mb-4">
+                        L'application web progressive (PWA) permet l'installation sur les appareils et le fonctionnement hors ligne.
+                    </p>
+                    
+                    <div class="mb-4">
+                        <div class="text-sm font-medium text-gray-700 mb-1">État d'installation:</div>
+                        <div id="installStatus" class="px-3 py-1 text-xs font-medium inline-block rounded-full bg-gray-100 text-gray-800">
+                            <span class="status-dot inactive"></span>
+                            Non installée
+                        </div>
+                    </div>
+                    
+                    <button id="installButton" class="w-full mb-2 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed hidden">
+                        Installer l'application
+                    </button>
+                    
+                    <div id="installInstructions" class="text-sm text-gray-600 mt-4">
+                        <p class="font-medium mb-1">Pour installer manuellement:</p>
+                        <ul class="list-disc pl-5 space-y-1">
+                            <li>Chrome/Edge: Cliquez sur l'icône ⋮ puis "Installer l'application"</li>
+                            <li>Safari iOS: Appuyez sur "Partager" puis "Sur l'écran d'accueil"</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="border-t md:border-t-0 md:border-l border-gray-200 pt-4 md:pt-0 md:pl-6 mt-4 md:mt-0">
+                    <h4 class="text-md font-medium text-gray-800 mb-3">Paramètres de l'application</h4>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center">
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="enableNotifications" class="sr-only peer">
+                                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                <span class="ms-3 text-sm font-medium text-gray-700">Notifications</span>
+                            </label>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="enableBackgroundSync" class="sr-only peer">
+                                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                <span class="ms-3 text-sm font-medium text-gray-700">Sync. en arrière-plan</span>
+                            </label>
+                        </div>
+                        
+                        <div class="flex items-center">
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="enableOfflineMode" class="sr-only peer" checked>
+                                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                <span class="ms-3 text-sm font-medium text-gray-700">Mode hors ligne</span>
+                            </label>
+                        </div>
+                        
+                        <div class="pt-2">
+                            <label for="cacheStrategy" class="block text-sm font-medium text-gray-700 mb-1">Stratégie de cache:</label>
+                            <select id="cacheStrategy" class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5">
+                                <option value="network-first">Réseau d'abord</option>
+                                <option value="cache-first">Cache d'abord</option>
+                                <option value="stale-while-revalidate" selected>Mettre à jour en arrière-plan</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Logs and Debugging -->
+    <div class="bg-white rounded-xl shadow-md overflow-hidden">
+        <div class="bg-gray-600 h-2"></div>
+        <div class="p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">Journaux et débogage</h3>
+                <button id="clearLogsButton" class="text-xs px-2 py-1 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">
+                    Effacer
+                </button>
+            </div>
+            
+            <div class="bg-gray-100 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs">
+                <pre id="logsContainer" class="whitespace-pre-wrap">Chargement des journaux...</pre>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Global variables
+    let deferredPrompt = null;
+    let serviceWorkerRegistration = null;
+    let isInstalledPWA = false;
+    const logs = [];
+    
+    // Initialize page
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check if running as PWA
+        if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) {
+            isInstalledPWA = true;
+            document.getElementById('installStatus').innerHTML = `
+                <span class="status-dot active"></span>
+                Installée
+            `;
+        }
+        
+        // Check service worker
+        checkServiceWorker();
+        
+        // Check cache status
+        checkCacheStatus();
+        
+        // Check sync status
+        checkSyncStatus();
+        
+        // Set up event listeners
+        setupEventListeners();
+        
+        // Start log collection
+        collectLogs();
+    });
+    
+    // Service Worker status check
+    async function checkServiceWorker() {
+        if ('serviceWorker' in navigator) {
+            try {
+                // Get existing registrations
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                
+                if (registrations.length > 0) {
+                    serviceWorkerRegistration = registrations[0];
+                    document.getElementById('swStatus').innerHTML = `
+                        <span class="status-dot active"></span>
+                        Actif
+                    `;
+                    document.getElementById('updateSwButton').removeAttribute('disabled');
+                    document.getElementById('unregisterSwButton').removeAttribute('disabled');
+                    
+                    // Log service worker information
+                    addLog('Service Worker actif', 'info');
+                } else {
+                    document.getElementById('swStatus').innerHTML = `
+                        <span class="status-dot inactive"></span>
+                        Inactif
+                    `;
+                    document.getElementById('updateSwButton').setAttribute('disabled', 'disabled');
+                    document.getElementById('unregisterSwButton').setAttribute('disabled', 'disabled');
+                    
+                    addLog('Service Worker inactif', 'warning');
+                }
+            } catch (error) {
+                document.getElementById('swStatus').innerHTML = `
+                    <span class="status-dot warning"></span>
+                    Erreur
+                `;
+                addLog('Erreur service worker: ' + error.message, 'error');
+            }
+        } else {
+            document.getElementById('swStatus').innerHTML = `
+                <span class="status-dot inactive"></span>
+                Non supporté
+            `;
+            addLog('Service Worker non supporté par ce navigateur', 'error');
+        }
+    }
+    
+    // Check cache status
+    async function checkCacheStatus() {
+        if ('caches' in window) {
+            try {
+                const cacheNames = await window.caches.keys();
+                const appCaches = cacheNames.filter(name => name.includes('quincaillerie'));
+                
+                if (appCaches.length > 0) {
+                    document.getElementById('cacheStatus').innerHTML = `
+                        <span class="status-dot active"></span>
+                        ${appCaches.length} cache(s)
+                    `;
+                    
+                    // Count cached resources
+                    let totalResources = 0;
+                    let totalSize = 0;
+                    
+                    for (const cacheName of appCaches) {
+                        const cache = await window.caches.open(cacheName);
+                        const requests = await cache.keys();
+                        totalResources += requests.length;
+                    }
+                    
+                    document.getElementById('cachedResourcesCount').textContent = totalResources;
+                    document.getElementById('cacheSize').textContent = 'Calc. impossible';
+                    
+                    addLog(`Caches trouvés: ${appCaches.join(', ')}`, 'info');
+                } else {
+                    document.getElementById('cacheStatus').innerHTML = `
+                        <span class="status-dot inactive"></span>
+                        Pas de cache
+                    `;
+                    document.getElementById('cachedResourcesCount').textContent = '0';
+                    document.getElementById('cacheSize').textContent = '0 Ko';
+                    
+                    addLog('Aucun cache trouvé', 'warning');
+                }
+            } catch (error) {
+                document.getElementById('cacheStatus').innerHTML = `
+                    <span class="status-dot warning"></span>
+                    Erreur
+                `;
+                addLog('Erreur d\'accès au cache: ' + error.message, 'error');
+            }
+        } else {
+            document.getElementById('cacheStatus').innerHTML = `
+                <span class="status-dot inactive"></span>
+                Non supporté
+            `;
+            addLog('API Cache non supportée par ce navigateur', 'error');
+        }
+    }
+    
+    // Check sync status
+    async function checkSyncStatus() {
+        if ('indexedDB' in window) {
+            try {
+                const request = indexedDB.open('QuincaillerieSyncDB', 1);
+                
+                request.onerror = function(event) {
+                    document.getElementById('syncStatus').innerHTML = `
+                        <span class="status-dot warning"></span>
+                        Erreur
+                    `;
+                    document.getElementById('pendingActionsCount').textContent = '-';
+                    document.getElementById('lastSyncTime').textContent = '-';
+                    
+                    addLog('Erreur d\'accès à IndexedDB: ' + event.target.error, 'error');
+                };
+                
+                request.onsuccess = function(event) {
+                    const db = event.target.result;
+                    
+                    if (db.objectStoreNames.contains('sync_queue')) {
+                        const transaction = db.transaction(['sync_queue'], 'readonly');
+                        const store = transaction.objectStore('sync_queue');
+                        const countRequest = store.count();
+                        
+                        countRequest.onsuccess = function() {
+                            const count = countRequest.result;
+                            document.getElementById('pendingActionsCount').textContent = count;
+                            
+                            if (count > 0) {
+                                document.getElementById('syncStatus').innerHTML = `
+                                    <span class="status-dot warning"></span>
+                                    ${count} en attente
+                                `;
+                                addLog(`${count} action(s) en attente de synchronisation`, 'warning');
+                            } else {
+                                document.getElementById('syncStatus').innerHTML = `
+                                    <span class="status-dot active"></span>
+                                    Synchronisé
+                                `;
+                                addLog('Pas d\'actions en attente de synchronisation', 'info');
+                            }
+                        };
+                        
+                        // Get last sync time
+                        if (db.objectStoreNames.contains('metadata')) {
+                            const metaTransaction = db.transaction(['metadata'], 'readonly');
+                            const metaStore = metaTransaction.objectStore('metadata');
+                            const lastSyncRequest = metaStore.get('last_sync');
+                            
+                            lastSyncRequest.onsuccess = function() {
+                                if (lastSyncRequest.result) {
+                                    const lastSync = new Date(lastSyncRequest.result.value);
+                                    document.getElementById('lastSyncTime').textContent = lastSync.toLocaleString();
+                                } else {
+                                    document.getElementById('lastSyncTime').textContent = 'Jamais';
+                                }
+                            };
+                        } else {
+                            document.getElementById('lastSyncTime').textContent = 'Inconnu';
+                        }
+                    } else {
+                        document.getElementById('syncStatus').innerHTML = `
+                            <span class="status-dot inactive"></span>
+                            Non configuré
+                        `;
+                        document.getElementById('pendingActionsCount').textContent = '-';
+                        document.getElementById('lastSyncTime').textContent = '-';
+                        
+                        addLog('Sync queue non configurée dans IndexedDB', 'warning');
+                    }
+                };
+            } catch (error) {
+                document.getElementById('syncStatus').innerHTML = `
+                    <span class="status-dot warning"></span>
+                    Erreur
+                `;
+                addLog('Erreur de synchronisation: ' + error.message, 'error');
+            }
+        } else {
+            document.getElementById('syncStatus').innerHTML = `
+                <span class="status-dot inactive"></span>
+                Non supporté
+            `;
+            addLog('IndexedDB non supporté par ce navigateur', 'error');
+        }
+    }
+    
+    // Set up event listeners
+    function setupEventListeners() {
+        // Refresh button
+        document.getElementById('refreshButton').addEventListener('click', function() {
+            checkServiceWorker();
+            checkCacheStatus();
+            checkSyncStatus();
+            addLog('Statuts actualisés', 'info');
+        });
+        
+        // Force sync button
+        document.getElementById('forceSyncButton').addEventListener('click', function() {
+            syncData();
+        });
+        
+        // Update service worker button
+        document.getElementById('updateSwButton').addEventListener('click', function() {
+            updateServiceWorker();
+        });
+        
+        // Unregister service worker button
+        document.getElementById('unregisterSwButton').addEventListener('click', function() {
+            unregisterServiceWorker();
+        });
+        
+        // Refresh cache button
+        document.getElementById('refreshCacheButton').addEventListener('click', function() {
+            refreshCache();
+        });
+        
+        // Clear cache button
+        document.getElementById('clearCacheButton').addEventListener('click', function() {
+            clearCache();
+        });
+        
+        // Force offline button
+        document.getElementById('forceOfflineButton').addEventListener('click', function() {
+            window.location.href = '/offline';
+        });
+        
+        // Clear sync queue button
+        document.getElementById('clearSyncQueueButton').addEventListener('click', function() {
+            clearSyncQueue();
+        });
+        
+        // Clear logs button
+        document.getElementById('clearLogsButton').addEventListener('click', function() {
+            logs.length = 0;
+            updateLogsDisplay();
+        });
+        
+        // PWA Install
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent Chrome 67 and earlier from automatically showing the prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later
+            deferredPrompt = e;
+            
+            // Show install button
+            const installButton = document.getElementById('installButton');
+            installButton.classList.remove('hidden');
+            installButton.addEventListener('click', () => {
+                // Show the prompt
+                deferredPrompt.prompt();
+                // Wait for the user to respond to the prompt
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        addLog('PWA installation acceptée', 'success');
+                        installButton.classList.add('hidden');
+                    } else {
+                        addLog('PWA installation refusée', 'warning');
+                    }
+                    deferredPrompt = null;
+                });
+            });
+        });
+        
+        // Settings checkboxes
+        document.getElementById('enableNotifications').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                requestNotificationPermission();
+            }
+        });
+        
+        document.getElementById('enableBackgroundSync').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                enableBackgroundSync();
+            }
+        });
+        
+        document.getElementById('cacheStrategy').addEventListener('change', function(e) {
+            updateCacheStrategy(e.target.value);
+        });
+    }
+    
+    // Sync data
+    async function syncData() {
+        addLog('Démarrage de la synchronisation manuelle', 'info');
+        
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'SYNC_DATA'
+            });
+            
+            if ('SyncManager' in window) {
+                try {
+                    const registration = await navigator.serviceWorker.ready;
+                    await registration.sync.register('sync-queued-requests');
+                    addLog('Synchronisation démarrée', 'success');
+                } catch (error) {
+                    addLog('Erreur de synchronisation: ' + error.message, 'error');
+                }
+            } else {
+                addLog('SyncManager non supporté, utilisation de la synchronisation alternative', 'warning');
+            }
+        } else {
+            addLog('Service Worker non actif, synchronisation impossible', 'error');
+        }
+    }
+    
+    // Update service worker
+    async function updateServiceWorker() {
+        if (serviceWorkerRegistration) {
+            try {
+                await serviceWorkerRegistration.update();
+                addLog('Service Worker mis à jour', 'success');
+                setTimeout(() => {
+                    checkServiceWorker();
+                }, 1000);
+            } catch (error) {
+                addLog('Erreur de mise à jour du Service Worker: ' + error.message, 'error');
+            }
+        }
+    }
+    
+    // Unregister service worker
+    async function unregisterServiceWorker() {
+        if (confirm('Voulez-vous vraiment désactiver le Service Worker? Cela désactivera le mode hors ligne.')) {
+            if (serviceWorkerRegistration) {
+                try {
+                    const success = await serviceWorkerRegistration.unregister();
+                    if (success) {
+                        addLog('Service Worker désactivé', 'success');
+                        serviceWorkerRegistration = null;
+                        setTimeout(() => {
+                            checkServiceWorker();
+                        }, 1000);
+                    } else {
+                        addLog('Échec de la désactivation du Service Worker', 'error');
+                    }
+                } catch (error) {
+                    addLog('Erreur lors de la désactivation du Service Worker: ' + error.message, 'error');
+                }
+            }
+        }
+    }
+    
+    // Refresh cache
+    async function refreshCache() {
+        if (serviceWorkerRegistration) {
+            try {
+                // Signal the service worker to refresh cache
+                if (navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.controller.postMessage({
+                        type: 'REFRESH_CACHE'
+                    });
+                    addLog('Demande de rafraîchissement du cache envoyée', 'info');
+                } else {
+                    addLog('Service Worker non actif, impossible de rafraîchir le cache', 'error');
+                }
+            } catch (error) {
+                addLog('Erreur lors du rafraîchissement du cache: ' + error.message, 'error');
+            }
+        } else {
+            addLog('Service Worker non disponible', 'error');
+        }
+    }
+    
+    // Clear cache
+    async function clearCache() {
+        if (confirm('Voulez-vous vraiment vider tous les caches? Les données devront être retéléchargées.')) {
+            if ('caches' in window) {
+                try {
+                    const cacheNames = await window.caches.keys();
+                    const appCaches = cacheNames.filter(name => name.includes('quincaillerie'));
+                    
+                    for (const cacheName of appCaches) {
+                        await window.caches.delete(cacheName);
+                    }
+                    
+                    addLog(`${appCaches.length} cache(s) vidé(s)`, 'success');
+                    
+                    // Signal service worker
+                    if (navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.controller.postMessage({
+                            type: 'CACHES_CLEARED'
+                        });
+                    }
+                    
+                    setTimeout(() => {
+                        checkCacheStatus();
+                    }, 1000);
+                } catch (error) {
+                    addLog('Erreur lors du vidage des caches: ' + error.message, 'error');
+                }
+            } else {
+                addLog('API Cache non supportée', 'error');
+            }
+        }
+    }
+    
+    // Clear sync queue
+    async function clearSyncQueue() {
+        if (confirm('Voulez-vous vraiment vider la file de synchronisation? Les changements non synchronisés seront perdus.')) {
+            if ('indexedDB' in window) {
+                try {
+                    const request = indexedDB.open('QuincaillerieSyncDB', 1);
+                    
+                    request.onsuccess = function(event) {
+                        const db = event.target.result;
+                        
+                        if (db.objectStoreNames.contains('sync_queue')) {
+                            const transaction = db.transaction(['sync_queue'], 'readwrite');
+                            const store = transaction.objectStore('sync_queue');
+                            const clearRequest = store.clear();
+                            
+                            clearRequest.onsuccess = function() {
+                                addLog('File de synchronisation vidée', 'success');
+                                
+                                // Signal service worker
+                                if (navigator.serviceWorker.controller) {
+                                    navigator.serviceWorker.controller.postMessage({
+                                        type: 'SYNC_QUEUE_CLEARED'
+                                    });
+                                }
+                                
+                                setTimeout(() => {
+                                    checkSyncStatus();
+                                }, 1000);
+                            };
+                            
+                            clearRequest.onerror = function() {
+                                addLog('Erreur lors du vidage de la file de synchronisation', 'error');
+                            };
+                        }
+                    };
+                } catch (error) {
+                    addLog('Erreur d\'accès à IndexedDB: ' + error.message, 'error');
+                }
+            } else {
+                addLog('IndexedDB non supporté', 'error');
+            }
+        }
+    }
+    
+    // Request notification permission
+    async function requestNotificationPermission() {
+        if ('Notification' in window) {
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    addLog('Notifications autorisées', 'success');
+                    return true;
+                } else {
+                    addLog('Notifications refusées: ' + permission, 'warning');
+                    document.getElementById('enableNotifications').checked = false;
+                    return false;
+                }
+            } catch (error) {
+                addLog('Erreur lors de la demande de permission pour les notifications: ' + error.message, 'error');
+                document.getElementById('enableNotifications').checked = false;
+                return false;
+            }
+        } else {
+            addLog('Notifications non supportées', 'error');
+            document.getElementById('enableNotifications').checked = false;
+            return false;
+        }
+    }
+    
+    // Enable background sync
+    async function enableBackgroundSync() {
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                if ('periodicSync' in registration) {
+                    try {
+                        const status = await navigator.permissions.query({
+                            name: 'periodic-background-sync',
+                        });
+                        
+                        if (status.state === 'granted') {
+                            await registration.periodicSync.register('sync-data', {
+                                minInterval: 24 * 60 * 60 * 1000, // Once per day
+                            });
+                            addLog('Synchronisation périodique activée', 'success');
+                            return true;
+                        } else {
+                            addLog('Permission pour la synchronisation périodique refusée: ' + status.state, 'warning');
+                            document.getElementById('enableBackgroundSync').checked = false;
+                            return false;
+                        }
+                    } catch (error) {
+                        addLog('Erreur lors de l\'activation de la synchronisation périodique: ' + error.message, 'error');
+                        document.getElementById('enableBackgroundSync').checked = false;
+                        return false;
+                    }
+                } else {
+                    await registration.sync.register('sync-data');
+                    addLog('Synchronisation en arrière-plan activée (mode basique)', 'success');
+                    return true;
+                }
+            } catch (error) {
+                addLog('Erreur lors de l\'activation de la synchronisation en arrière-plan: ' + error.message, 'error');
+                document.getElementById('enableBackgroundSync').checked = false;
+                return false;
+            }
+        } else {
+            addLog('Synchronisation en arrière-plan non supportée', 'error');
+            document.getElementById('enableBackgroundSync').checked = false;
+            return false;
+        }
+    }
+    
+    // Update cache strategy
+    function updateCacheStrategy(strategy) {
+        if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'UPDATE_CACHE_STRATEGY',
+                strategy: strategy
+            });
+            addLog(`Stratégie de cache mise à jour: ${strategy}`, 'success');
+        } else {
+            addLog('Service Worker non actif, impossible de mettre à jour la stratégie de cache', 'error');
+        }
+    }
+    
+    // Add log
+    function addLog(message, level = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        const logEntry = {
+            timestamp,
+            message,
+            level
+        };
+        
+        logs.unshift(logEntry); // Add to beginning
+        
+        // Keep only the last 100 logs
+        if (logs.length > 100) {
+            logs.pop();
+        }
+        
+        updateLogsDisplay();
+    }
+    
+    // Update logs display
+    function updateLogsDisplay() {
+        const logsContainer = document.getElementById('logsContainer');
+        logsContainer.innerHTML = '';
+        
+        logs.forEach(log => {
+            let color;
+            switch (log.level) {
+                case 'error':
+                    color = 'text-red-600';
+                    break;
+                case 'warning':
+                    color = 'text-yellow-600';
+                    break;
+                case 'success':
+                    color = 'text-green-600';
+                    break;
+                case 'info':
+                default:
+                    color = 'text-gray-600';
+            }
+            
+            logsContainer.innerHTML += `<div class="${color}">[${log.timestamp}] ${log.message}</div>`;
+        });
+        
+        if (logs.length === 0) {
+            logsContainer.innerHTML = '<div class="text-gray-400">Aucun journal</div>';
+        }
+    }
+    
+    // Collect logs
+    function collectLogs() {
+        // Subscribe to service worker messages
+        if (navigator.serviceWorker) {
+            navigator.serviceWorker.addEventListener('message', event => {
+                const data = event.data;
+                
+                if (data.type === 'LOG') {
+                    addLog(data.message, data.level || 'info');
+                } else if (data.type === 'SYNC_COMPLETED') {
+                    addLog(`Synchronisation terminée: ${data.syncedCount} actions synchronisées`, 'success');
+                    setTimeout(() => {
+                        checkSyncStatus();
+                    }, 1000);
+                } else if (data.type === 'CACHE_UPDATED') {
+                    addLog('Cache mis à jour', 'success');
+                    setTimeout(() => {
+                        checkCacheStatus();
+                    }, 1000);
+                }
+            });
+        }
+        
+        // Listen for online/offline events
+        window.addEventListener('online', () => {
+            addLog('Connexion internet rétablie', 'success');
+            syncData();
+        });
+        
+        window.addEventListener('offline', () => {
+            addLog('Connexion internet perdue', 'warning');
+        });
+    }
+</script>
+{% endblock %}

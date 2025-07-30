@@ -1,5 +1,5 @@
 // Service Worker for Quincaillerie Management App
-const CACHE_NAME = 'quincaillerie-v1.0.0';
+const CACHE_NAME = 'quincaillerie-v1.1.0'; // Updated version
 const OFFLINE_URL = '/offline.html';
 
 // Resources to cache for offline functionality
@@ -7,6 +7,22 @@ const STATIC_CACHE_URLS = [
     '/',
     '/static/manifest.json',
     '/offline.html',
+    '/static/js/common.js',
+    '/static/js/pwa-installer.js',
+    '/static/js/offline-handler.js',
+    '/static/icon-72x72.png',
+    '/static/icon-96x96.png',
+    '/static/icon-128x128.png',
+    '/static/icon-144x144.png',
+    '/static/icon-152x152.png',
+    '/static/icon-192x192.png',
+    '/static/icon-384x384.png',
+    '/static/icon-512x512.png',
+    '/static/apple-touch-icon.png',
+    '/static/splash/splash-640x1136.png',
+    '/static/splash/splash-750x1334.png',
+    '/static/splash/splash-1242x2208.png',
+    '/static/splash/splash-1125x2436.png',
     // Tailwind CSS (CDN)
     'https://cdn.tailwindcss.com',
     // Alpine.js (CDN)
@@ -19,10 +35,13 @@ const STATIC_CACHE_URLS = [
     '/sales',
     '/finance',
     '/reports',
+    '/login',
     // API endpoints for offline data
     '/api/dashboard/stats',
     '/api/inventory/products',
-    '/api/sales/recent'
+    '/api/sales/recent',
+    '/api/finance/summary',
+    '/api/customers/list'
 ];
 
 // API endpoints that should be cached for offline access
@@ -30,7 +49,8 @@ const API_CACHE_PATTERNS = [
     /^\/api\/inventory\/products/,
     /^\/api\/dashboard\/stats/,
     /^\/api\/sales\/recent/,
-    /^\/api\/finance\/summary/
+    /^\/api\/finance\/summary/,
+    /^\/api\/customers\/list/
 ];
 
 // Install event - cache static resources
@@ -76,7 +96,7 @@ self.addEventListener('activate', event => {
     );
 });
 
-// Fetch event - implement offline-first strategy
+// Fetch event - implement enhanced offline-first strategy
 self.addEventListener('fetch', event => {
     const { request } = event;
     const url = new URL(request.url);
@@ -87,27 +107,29 @@ self.addEventListener('fetch', event => {
     }
     
     // Handle different types of requests
-    if (request.destination === 'document') {
-        // HTML pages - Network first, then cache
-        event.respondWith(networkFirstStrategy(request));
+    if (request.mode === 'navigate' || request.destination === 'document') {
+        // HTML pages - Network first, then cache, fall back to offline page
+        event.respondWith(handleNavigationRequest(request));
     } else if (isAPIRequest(request)) {
-        // API requests - Cache first for GET, network only for others
+        // API requests - Cache first for GET, network only with background sync for writes
         event.respondWith(apiRequestStrategy(request));
     } else if (isStaticResource(request)) {
-        // Static resources - Cache first
+        // Static resources - Cache first with network fallback
         event.respondWith(cacheFirstStrategy(request));
     } else {
-        // Default strategy - Network first
+        // Default strategy - Network first with cache fallback
         event.respondWith(networkFirstStrategy(request));
     }
 });
 
-// Network first strategy (for HTML pages)
-async function networkFirstStrategy(request) {
+// Handle navigation requests (HTML pages)
+async function handleNavigationRequest(request) {
     try {
+        // Try network first
         const networkResponse = await fetch(request);
         
         if (networkResponse.ok) {
+            // Update cache with fresh content
             const cache = await caches.open(CACHE_NAME);
             cache.put(request, networkResponse.clone());
             return networkResponse;
@@ -115,21 +137,51 @@ async function networkFirstStrategy(request) {
         
         throw new Error('Network response not ok');
     } catch (error) {
-        console.log('Service Worker: Network failed, trying cache:', request.url);
+        console.log('Service Worker: Navigation request failed, trying cache:', request.url);
+        
+        // Try cache
+        const cachedResponse = await caches.match(request);
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+        
+        // Fall back to offline page
+        console.log('Service Worker: No cached response, showing offline page');
+        const offlineResponse = await caches.match(OFFLINE_URL);
+        if (offlineResponse) {
+            return offlineResponse;
+        }
+        
+        // Last resort - return a basic offline message
+        return new Response('You are offline and no cached content is available.', {
+            status: 503,
+            headers: { 'Content-Type': 'text/html' }
+        });
+    }
+}
+
+// Network first strategy (default)
+async function networkFirstStrategy(request) {
+    try {
+        const networkResponse = await fetch(request);
+        
+        if (networkResponse.ok) {
+            // Update cache with fresh content
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(request, networkResponse.clone());
+            return networkResponse;
+        }
+        
+        throw new Error('Network response not ok');
+    } catch (error) {
+        console.log('Service Worker: Network request failed, falling back to cache:', request.url);
         
         const cachedResponse = await caches.match(request);
         if (cachedResponse) {
             return cachedResponse;
         }
         
-        // If it's a page request and we have no cache, return offline page
-        if (request.destination === 'document') {
-            const offlineResponse = await caches.match(OFFLINE_URL);
-            if (offlineResponse) {
-                return offlineResponse;
-            }
-        }
-        
+        console.error('Service Worker: No cached version available for:', request.url);
         throw error;
     }
 }
