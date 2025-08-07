@@ -416,7 +416,29 @@ def dashboard():
 @login_required
 def inventory():
     """Inventory management page"""
-    return render_template('inventory.html')
+    try:
+        # Get stats for initial display
+        inventory_stats = db_manager.get_inventory_stats() if db_manager is not None else {}
+        
+        # Prepare context for template
+        context = {
+            'total_products': inventory_stats.get('total', 0),
+            'in_stock_products': inventory_stats.get('total', 0) - inventory_stats.get('out_of_stock', 0),
+            'low_stock_products': inventory_stats.get('low_stock', 0),
+            'stock_value': f"{inventory_stats.get('inventory_value', 0):,.0f}",  # Format with commas
+            'categories': inventory_stats.get('categories', [])
+        }
+        
+        return render_template('inventory.html', **context)
+    except Exception as e:
+        print(f"Error loading inventory page: {e}")
+        # Fallback with default values
+        return render_template('inventory.html', 
+                             total_products=0, 
+                             in_stock_products=0, 
+                             low_stock_products=0, 
+                             stock_value='0',
+                             categories=[])
 
 
 @app.route('/inventory-launcher')

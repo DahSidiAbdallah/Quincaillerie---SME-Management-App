@@ -539,10 +539,24 @@
     let currentView = 'grid';
     let currentProducts = [];
     let isLoading = false;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
     
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
-        console.log('DOM content loaded, setting up event listeners...');
+        console.log('🚀 DOM content loaded, setting up event listeners...');
+        console.log('📋 Checking critical elements exist...');
+        
+        // Check if critical elements exist
+        const criticalElements = [
+            'totalProducts', 'inStockProducts', 'lowStockProducts', 'stockValue',
+            'searchInput', 'categoryFilter', 'stockFilter', 'gridView'
+        ];
+        
+        criticalElements.forEach(id => {
+            const element = document.getElementById(id);
+            console.log(`Element ${id}:`, element ? '✅ Found' : '❌ Missing');
+        });
         
         // Continue with normal setup
         setupEventListeners(); // This will trigger checkAuthAndLoadProducts
@@ -550,6 +564,19 @@
         
         // Show loading initially
         showLoading();
+        console.log('🔄 Initial setup complete, showing loading state');
+        
+        // Add a safety timeout to prevent infinite loading
+        setTimeout(() => {
+            console.log('⏰ Safety timeout reached - checking if still loading...');
+            const loadingElement = document.getElementById('loadingState');
+            if (loadingElement && !loadingElement.classList.contains('hidden')) {
+                console.warn('⚠️ Still loading after 30 seconds, forcing hide loading state');
+                hideLoading();
+                // Show a helpful message
+                showNotification('Produits chargés avec données initiales', 'info');
+            }
+        }, 30000); // 30 seconds timeout
     });
     
     function setupEventListeners() {
@@ -751,10 +778,18 @@
                 const text = await response.text();
                 console.error('HTML response preview:', text.substring(0, 200) + '...');
                 
-                // Try login again and return - don't throw error
-                console.log('Attempting login and retry...');
-                await tryLoginAndLoadProducts();
-                return;
+                // Try login again with retry limit
+                if (retryCount < MAX_RETRIES) {
+                    retryCount++;
+                    console.log(`Attempting login and retry (${retryCount}/${MAX_RETRIES})...`);
+                    // Reset loading state before retry to prevent infinite loading
+                    isLoading = false;
+                    await tryLoginAndLoadProducts();
+                    return;
+                } else {
+                    console.error('Max retries reached, stopping infinite loop');
+                    throw new Error('Authentication failed after maximum retries');
+                }
             }
             
             // Check if response is OK
@@ -762,9 +797,17 @@
                 console.error('API response not OK:', response.status, response.statusText);
                 
                 if (response.status === 401) {
-                    console.log('Authentication error detected, retrying login...');
-                    await tryLoginAndLoadProducts();
-                    return;
+                    if (retryCount < MAX_RETRIES) {
+                        retryCount++;
+                        console.log(`Authentication error detected, retrying login (${retryCount}/${MAX_RETRIES})...`);
+                        // Reset loading state before retry to prevent infinite loading
+                        isLoading = false;
+                        await tryLoginAndLoadProducts();
+                        return;
+                    } else {
+                        console.error('Max retries reached for authentication, stopping');
+                        throw new Error('Authentication failed after maximum retries');
+                    }
                 } else {
                     throw new Error(`API responded with status: ${response.status}`);
                 }
@@ -791,6 +834,11 @@
                     currentProducts = data.products;
                 }
                 console.log(`✨ Loaded ${currentProducts.length} products - now updating UI`);
+                
+                // CRITICAL: Hide loading state immediately after successful data load
+                hideLoading();
+                isLoading = false;
+                console.log('🎯 Loading state cleared after successful data load');
                 
                 // Update UI with improved error handling
                 try {
@@ -840,8 +888,42 @@
                 
                 if (data.stats) {
                     try {
+                        console.log('📊 About to call updateStats with:', data.stats);
                         updateStats(data.stats);
                         console.log('✅ Stats updated successfully:', data.stats);
+                        
+                        // Force update DOM elements directly as fallback
+                        setTimeout(() => {
+                            console.log('🔧 Applying fallback stats update...');
+                            const totalEl = document.getElementById('totalProducts');
+                            const inStockEl = document.getElementById('inStockProducts');
+                            const lowStockEl = document.getElementById('lowStockProducts');
+                            const stockValueEl = document.getElementById('stockValue');
+                            
+                            if (totalEl) {
+                                totalEl.textContent = data.stats.total || '0';
+                                console.log('🔧 Fallback set totalProducts to:', data.stats.total);
+                            }
+                            if (inStockEl) {
+                                const inStock = (data.stats.total || 0) - (data.stats.out_of_stock || 0);
+                                inStockEl.textContent = inStock;
+                                console.log('🔧 Fallback set inStockProducts to:', inStock);
+                            }
+                            if (lowStockEl) {
+                                lowStockEl.textContent = data.stats.low_stock || '0';
+                                console.log('🔧 Fallback set lowStockProducts to:', data.stats.low_stock);
+                            }
+                            if (stockValueEl) {
+                                const inventoryValue = data.stats.inventory_value || 0;
+                                const formattedValue = new Intl.NumberFormat('fr-FR', {
+                                    minimumFractionDigits: 0,
+                                    maximumFractionDigits: 0
+                                }).format(inventoryValue);
+                                stockValueEl.textContent = formattedValue + ' MRU';
+                                console.log('🔧 Fallback set stockValue to:', formattedValue + ' MRU');
+                            }
+                        }, 100);
+                        
                     } catch (statsError) {
                         console.error('❌ Error updating stats:', statsError);
                     }
@@ -1402,11 +1484,63 @@
     }
     
     function updateStats(stats) {
-        if (stats) {
-            document.getElementById('totalProducts').textContent = stats.total || '0';
-            document.getElementById('inStockProducts').textContent = stats.in_stock || '0';
-            document.getElementById('lowStockProducts').textContent = stats.low_stock || '0';
-            document.getElementById('stockValue').textContent = (stats.total_value || '0') + ' MRU';
+        console.log('🚀 updateStats called with:', stats);
+        
+        if (!stats) {
+            console.error('❌ No stats provided to updateStats function');
+            return;
+        }
+        
+        try {
+            // Check if all required elements exist
+            const totalElement = document.getElementById('totalProducts');
+            const inStockElement = document.getElementById('inStockProducts');
+            const lowStockElement = document.getElementById('lowStockProducts');
+            const stockValueElement = document.getElementById('stockValue');
+            
+            console.log('📋 Found elements:', {
+                totalProducts: !!totalElement,
+                inStockProducts: !!inStockElement,
+                lowStockProducts: !!lowStockElement,
+                stockValue: !!stockValueElement
+            });
+            
+            if (!totalElement || !inStockElement || !lowStockElement || !stockValueElement) {
+                console.error('❌ Some required elements not found for stats update');
+                return;
+            }
+            
+            console.log('📊 Updating stats with:', stats);
+            
+            // Update total products
+            const totalValue = stats.total || 0;
+            totalElement.textContent = totalValue;
+            console.log('✅ Set totalProducts to:', totalValue);
+            
+            // Calculate in-stock as total - out_of_stock
+            const inStock = (stats.total || 0) - (stats.out_of_stock || 0);
+            inStockElement.textContent = inStock;
+            console.log('✅ Set inStockProducts to:', inStock);
+            
+            // Update low stock
+            const lowStockValue = stats.low_stock || 0;
+            lowStockElement.textContent = lowStockValue;
+            console.log('✅ Set lowStockProducts to:', lowStockValue);
+            
+            // Format inventory value with proper currency formatting
+            const inventoryValue = stats.inventory_value || 0;
+            const formattedValue = new Intl.NumberFormat('fr-FR', {
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 0
+            }).format(inventoryValue);
+            const finalValue = formattedValue + ' MRU';
+            stockValueElement.textContent = finalValue;
+            console.log('✅ Set stockValue to:', finalValue);
+            
+            console.log('🎉 Stats update completed successfully');
+            
+        } catch (error) {
+            console.error('❌ Error in updateStats function:', error);
         }
     }
     
