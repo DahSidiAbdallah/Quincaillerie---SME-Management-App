@@ -111,8 +111,6 @@
 {% endblock %}
 
 {% block content %}
-<!-- Diagnostic Script - Will show a red panel in top right -->
-<script src="{{ url_for('static', filename='js/inventory-diagnostics.js') }}"></script>
 
 <div class="space-y-6">
     <!-- Header Section -->
@@ -519,28 +517,10 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- Network debugging script -->
-<!-- Network debugging script (safe version) -->
-<script src="{{ url_for('static', filename='js/network-debug.js') }}"></script>
-
-<!-- Direct API test button (emergency debug) -->
-<div id="debugPanel" style="position: fixed; top: 10px; right: 10px; z-index: 9999; background: #fff; border: 2px solid #f00; padding: 10px; border-radius: 5px; max-width: 300px;">
-    <h3 style="margin-top: 0; color: #f00;">⚠️ Debug Panel</h3>
-    <button id="directApiTestBtn" style="background: #f00; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer;">
-        Test API Directly
-    </button>
-    <div id="apiTestResult" style="margin-top: 10px; font-size: 12px; max-height: 150px; overflow-y: auto;"></div>
-</div>
-
 <script>
-    // Debug info - log when page loads
-    console.log('📝 Inventory page loaded at:', new Date().toISOString());
-    
     let currentView = 'grid';
     let currentProducts = [];
     let isLoading = false;
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
     
     // Initialize
     document.addEventListener('DOMContentLoaded', function() {
@@ -559,7 +539,7 @@
         });
         
         // Continue with normal setup
-        setupEventListeners(); // This will trigger checkAuthAndLoadProducts
+        setupEventListeners();
         calculateMargin(); // Initialize margin calculation
         
         // Show loading initially
@@ -593,114 +573,9 @@
         
         // Form submission
         document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
-        
-        // Check authentication status on page load
-        checkAuthAndLoadProducts();
-    }
-    
-    // Check authentication status before loading products
-    async function checkAuthAndLoadProducts() {
-        try {
-            console.log('🔑 Checking authentication status...');
-            
-            // Track the request start time for debugging
-            const startTime = new Date().getTime();
-            
-            const authCheck = await fetch('/api/auth/status', {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin' // Explicitly include cookies
-            });
-            
-            // Calculate response time
-            const responseTime = new Date().getTime() - startTime;
-            console.log(`Auth check response received in ${responseTime}ms with status:`, authCheck.status);
-            
-            // Log all response headers for debugging
-            console.log('Auth check response headers:', Object.fromEntries([...authCheck.headers.entries()]));
-            
-            if (!authCheck.ok) {
-                console.error('❌ Auth check failed with status:', authCheck.status);
-                
-                // Check if it's a redirect (HTML response)
-                const contentType = authCheck.headers.get('content-type') || '';
-                if (contentType.includes('text/html')) {
-                    console.error('⚠️ Received HTML response for auth check - likely a redirect');
-                    const htmlPreview = await authCheck.text();
-                    console.error('HTML preview:', htmlPreview.substring(0, 200));
-                    
-                    // Show a notification explaining the issue
-                    showNotification('Session invalide, redirection vers la page de connexion...', 'warning');
-                    
-                    // Redirect to the API test page to debug
-                    window.location.href = '/test-api';
-                    return;
-                }
-                
-                tryLoginAndLoadProducts();
-                return;
-            }
-            
-            const authData = await authCheck.json();
-            console.log('Authentication status check:', authData);
-            
-            if (authData.authenticated === true) {
-                console.log('✅ User is authenticated as', authData.user.username, '- loading products...');
-                loadProductsWithAuth();
-            } else {
-                console.log('⚠️ User is not authenticated, trying login...');
-                tryLoginAndLoadProducts();
-            }
-        } catch (error) {
-            console.error('❌ Error checking authentication:', error);
-            showNotification('Erreur lors de la vérification de l\'authentification', 'error');
-            tryLoginAndLoadProducts();
-        }
-    }
-    
-    // Try to login with default credentials and then load products
-    async function tryLoginAndLoadProducts() {
-        try {
-            console.log('Attempting auto-login with admin credentials...');
-            
-            const loginResponse = await fetch('/api/auth/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
-                },
-                body: JSON.stringify({
-                    username: 'admin',
-                    pin: '1234'
-                }),
-                credentials: 'same-origin' // Explicitly include cookies
-            });
-            
-            console.log('Login response status:', loginResponse.status);
-            
-            if (!loginResponse.ok) {
-                console.error('Login failed with status:', loginResponse.status);
-                showLoginRedirect();
-                return;
-            }
-            
-            const loginData = await loginResponse.json();
-            console.log('Login response:', loginData);
-            
-            if (loginData.success) {
-                console.log('Auto-login successful, loading products...');
-                loadProductsWithAuth();
-            } else {
-                console.error('Auto-login failed:', loginData.message);
-                showLoginRedirect();
-            }
-        } catch (error) {
-            console.error('Error during auto-login:', error);
-            showLoginRedirect();
-        }
+
+        // Load products on page load
+        loadProductsWithAuth();
     }
     
     // Show login redirect message and redirect to login page
@@ -775,39 +650,16 @@
             const contentType = response.headers.get('content-type') || '';
             if (contentType.includes('text/html')) {
                 console.error('⚠️ Received HTML response instead of JSON. This likely means a redirect occurred.');
-                const text = await response.text();
-                console.error('HTML response preview:', text.substring(0, 200) + '...');
-                
-                // Try login again with retry limit
-                if (retryCount < MAX_RETRIES) {
-                    retryCount++;
-                    console.log(`Attempting login and retry (${retryCount}/${MAX_RETRIES})...`);
-                    // Reset loading state before retry to prevent infinite loading
-                    isLoading = false;
-                    await tryLoginAndLoadProducts();
-                    return;
-                } else {
-                    console.error('Max retries reached, stopping infinite loop');
-                    throw new Error('Authentication failed after maximum retries');
-                }
+                showLoginRedirect();
+                return;
             }
             
             // Check if response is OK
             if (!response.ok) {
                 console.error('API response not OK:', response.status, response.statusText);
-                
                 if (response.status === 401) {
-                    if (retryCount < MAX_RETRIES) {
-                        retryCount++;
-                        console.log(`Authentication error detected, retrying login (${retryCount}/${MAX_RETRIES})...`);
-                        // Reset loading state before retry to prevent infinite loading
-                        isLoading = false;
-                        await tryLoginAndLoadProducts();
-                        return;
-                    } else {
-                        console.error('Max retries reached for authentication, stopping');
-                        throw new Error('Authentication failed after maximum retries');
-                    }
+                    showLoginRedirect();
+                    return;
                 } else {
                     throw new Error(`API responded with status: ${response.status}`);
                 }
