@@ -619,8 +619,8 @@
     }
     
     function loadMoreActivities() {
-        // Load more activities - could implement pagination
-        showNotification('Chargement de plus d\'activités...', 'info');
+        // Redirect to full activities report
+        window.location.href = "{{ url_for('reports') }}?tab=activities";
     }
     
     // Initialize dashboard

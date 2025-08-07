@@ -808,17 +808,18 @@ class DatabaseManager:
         try:
             # Calculate date range
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
-            
+            # Include today in the range
+            start_date = end_date - timedelta(days=days - 1)
+
             cursor.execute('''
-                SELECT 
+                SELECT
                     p.id, p.name, p.category,
-                    SUM(si.quantity) as quantity_sold,
-                    SUM(si.total_price) as total_sales
-                FROM sale_items si
-                JOIN products p ON si.product_id = p.id
-                JOIN sales s ON si.sale_id = s.id
-                WHERE s.sale_date BETWEEN ? AND ?
+                    SUM(sd.quantity) as quantity_sold,
+                    SUM(sd.total_price) as total_sales
+                FROM sale_details sd
+                JOIN products p ON sd.product_id = p.id
+                JOIN sales s ON sd.sale_id = s.id
+                WHERE DATE(s.sale_date) BETWEEN ? AND ?
                 AND s.is_deleted = 0
                 GROUP BY p.id
                 ORDER BY quantity_sold DESC
@@ -842,9 +843,9 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
-            # Calculate date range
+            # Calculate date range including today
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
+            start_date = end_date - timedelta(days=days - 1)
             
             # Daily sales data
             cursor.execute('''
