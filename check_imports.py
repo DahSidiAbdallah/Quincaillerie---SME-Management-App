@@ -41,7 +41,7 @@ def main():
     modules_to_check = [
         "app", 
         "app.app", 
-        "app.db.database", 
+        "app.data.database", 
         "app.api.inventory",
         "db.database",  # This is the problematic import
         "api.inventory"
@@ -58,11 +58,11 @@ def main():
         # Try both import styles
         try:
             from db.database import DatabaseManager
-            print("✓ Successfully imported from app.db.database")
+            print("✓ Successfully imported from app.data.database")
             db = DatabaseManager()
             print(f"  Database path: {db.db_path}")
         except ImportError as e:
-            print(f"✗ Failed to import from app.db.database: {e}")
+            print(f"✗ Failed to import from app.data.database: {e}")
             
             try:
                 from db.database import DatabaseManager

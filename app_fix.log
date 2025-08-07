@@ -1,0 +1,55 @@
+2025-08-01 19:55:55,643 - __main__ - INFO - ===== Quincaillerie App Fix Utility =====
+2025-08-01 19:55:55,644 - __main__ - INFO - Step 1: Checking database paths...
+2025-08-01 19:55:55,647 - __main__ - INFO - Using primary database: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\data\quincaillerie.db
+2025-08-01 19:55:55,649 - __main__ - INFO - Step 2: Fixing import statements...
+2025-08-01 19:55:55,651 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\check_database.py
+2025-08-01 19:55:55,654 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\check_imports.py
+2025-08-01 19:55:55,656 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\create_admin.py
+2025-08-01 19:55:55,663 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\debug_api_data.py
+2025-08-01 19:55:55,665 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\diagnose_app.py
+2025-08-01 19:55:55,668 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\fix_all_issues.py
+2025-08-01 19:55:55,671 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\fix_database_connection.py
+2025-08-01 19:55:55,672 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\fix_database_paths.py
+2025-08-01 19:55:55,675 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\path_diagnostics.py
+2025-08-01 19:55:55,676 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\populate_data.py
+2025-08-01 19:55:55,678 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\populate_main_db.py
+2025-08-01 19:55:56,889 - __main__ - ERROR - Error processing file C:\Users\DAH\Downloads\Quincaillerie & SME Management App\.venv\Lib\site-packages\joblib\test\test_func_inspect_special_encoding.py: 'utf-8' codec can't decode byte 0xa4 in position 64: invalid start byte
+2025-08-01 19:56:01,168 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\db\database.py
+2025-08-01 19:56:01,172 - __main__ - INFO - Fixed imports in: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\db\database.py
+2025-08-01 19:56:01,173 - __main__ - INFO - Fixed imports in 13 files
+2025-08-01 19:56:01,174 - __main__ - INFO - Step 3: Creating database redirector...
+2025-08-01 19:56:01,175 - __main__ - INFO - Created database redirector at: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\db\database.py
+2025-08-01 19:56:01,175 - __main__ - INFO - Step 4: Running database schema fix...
+2025-08-01 19:56:01,180 - __main__ - INFO - Running database schema fix...
+2025-08-01 19:56:01,181 - fix_database_schema - INFO - Starting database schema fix tool...
+2025-08-01 19:56:01,181 - fix_database_schema - INFO - Using database: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\data\quincaillerie.db
+2025-08-01 19:56:01,182 - fix_database_schema - INFO - Creating backup of database at: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\data\quincaillerie.db.bak.20250801195601
+2025-08-01 19:56:01,184 - fix_database_schema - INFO - Database backed up to: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\data\quincaillerie.db.bak.20250801195601
+2025-08-01 19:56:01,186 - fix_database_schema - INFO - Found tables: ['users', 'sqlite_sequence', 'products', 'stock_movements', 'sales', 'sale_items', 'capital_entries', 'expenses', 'client_debts', 'supplier_debts', 'cash_register', 'user_activity_log', 'ai_predictions', 'sync_queue', 'customers', 'user_profiles', 'user_preferences', 'notification_preferences', 'app_settings', 'sale_details', 'settings']
+2025-08-01 19:56:01,187 - fix_database_schema - INFO - Found 1 schema issues to fix
+2025-08-01 19:56:01,187 - fix_database_schema - INFO - Fixing 1 schema issues
+2025-08-01 19:56:01,188 - fix_database_schema - INFO - Executing: ALTER TABLE user_activity_log ADD COLUMN action_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+2025-08-01 19:56:01,189 - fix_database_schema - ERROR - Error executing SQL: ALTER TABLE user_activity_log ADD COLUMN action_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP: Cannot add a column with non-constant default
+2025-08-01 19:56:01,190 - fix_database_schema - INFO - Database schema fixed successfully!
+2025-08-01 19:56:01,196 - fix_database_schema - ERROR - Database manager file not found at: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\app\data\database.py
+2025-08-01 19:56:01,196 - fix_database_schema - INFO - Copying fixed database to: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\db\quincaillerie.db
+2025-08-01 19:56:01,198 - fix_database_schema - INFO - Database schema fix tool completed!
+2025-08-01 19:56:01,198 - fix_database_schema - INFO - Please restart your application to see the changes.
+2025-08-01 19:56:01,198 - __main__ - INFO - Database schema fix completed
+2025-08-01 19:56:01,198 - __main__ - INFO - Step 5: Syncing databases...
+2025-08-01 19:56:01,200 - __main__ - INFO - Copied database to: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\db\quincaillerie.db
+2025-08-01 19:56:01,201 - __main__ - INFO - Copied database to: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\db\quincaillerie.db
+2025-08-01 19:56:01,202 - __main__ - INFO - Step 6: Verifying app.py...
+2025-08-01 19:56:01,203 - __main__ - INFO - app.py appears to have correct imports
+2025-08-01 19:56:01,203 - __main__ - INFO - Step 7: Creating start scripts...
+2025-08-01 19:56:01,205 - __main__ - INFO - Created start scripts: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\start_fixed_app.bat and C:\Users\DAH\Downloads\Quincaillerie & SME Management App\start_fixed_app.ps1
+2025-08-01 19:56:01,205 - __main__ - INFO - Created run script: C:\Users\DAH\Downloads\Quincaillerie & SME Management App\run_fixed.py
+2025-08-01 19:56:01,206 - __main__ - INFO - Step 8: Checking database connectivity...
+2025-08-01 19:56:01,207 - __main__ - INFO - Database user_version: 0
+2025-08-01 19:56:01,208 - __main__ - INFO - Found 21 tables: users, sqlite_sequence, products, stock_movements, sales, sale_items, capital_entries, expenses, client_debts, supplier_debts, cash_register, user_activity_log, ai_predictions, sync_queue, customers, user_profiles, user_preferences, notification_preferences, app_settings, sale_details, settings
+2025-08-01 19:56:01,209 - __main__ - INFO - users count: 2
+2025-08-01 19:56:01,209 - __main__ - INFO - products count: 10
+2025-08-01 19:56:01,210 - __main__ - INFO - customers count: 4
+2025-08-01 19:56:01,210 - __main__ - INFO - sales count: 3
+2025-08-01 19:56:01,210 - __main__ - INFO - ===== Fix complete! =====
+2025-08-01 19:56:01,211 - __main__ - INFO - You can now run the application using start_fixed_app.bat or start_fixed_app.ps1

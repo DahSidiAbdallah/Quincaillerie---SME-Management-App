@@ -14,6 +14,11 @@ import sqlite3
 import os
 import json
 import sys
+
+# Add the current directory to Python path for module imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
 from datetime import datetime, timedelta
 import uuid
 from functools import wraps
@@ -214,6 +219,11 @@ def health_check():
 def offline():
     """Offline page for PWA"""
     return render_template('offline.html')
+
+@app.route('/offline-test')
+def offline_test():
+    """Test page for offline capabilities"""
+    return render_template('offline_test.html')
 
 @app.route('/admin/pwa')
 def pwa_admin():

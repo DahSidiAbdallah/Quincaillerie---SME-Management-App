@@ -21,7 +21,7 @@ if app_dir not in sys.path:
 os.environ['DATABASE_PATH'] = os.path.join(app_dir, 'app', 'data', 'quincaillerie.db')
 
 # Import DatabaseManager
-from app.db.database import DatabaseManager
+from app.data.database import DatabaseManager
 
 def main():
     """Create admin user for testing"""

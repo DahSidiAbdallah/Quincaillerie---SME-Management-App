@@ -48,7 +48,7 @@ def check_path_imports():
     # Try importing modules
     modules_to_check = [
         ('db.database', 'DatabaseManager'),
-        ('app.db.database', 'DatabaseManager'),
+        ('app.data.database', 'DatabaseManager'),
         ('app.api.inventory', 'inventory_bp'),
         ('app.api.customers', 'customers_bp'),
         ('app.app', 'app')

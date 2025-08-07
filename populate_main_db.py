@@ -38,7 +38,7 @@ def main():
     
     try:
         # Import database manager
-        from app.db.database import DatabaseManager
+        from app.data.database import DatabaseManager
         
         # Set environment variable for database path
         os.environ['DATABASE_PATH'] = db_path

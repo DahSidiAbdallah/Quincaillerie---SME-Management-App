@@ -1,6 +1,7 @@
 /**
  * Admin API diagnostic script
  * This script checks the connection to admin-related APIs and displays diagnostic info
+ * Enhanced with better UI and helper function integration
  */
 console.log('🔧 Admin API Diagnostics Tool starting...');
 
@@ -14,13 +15,92 @@ function setupDiagnosticsUI() {
     header.innerHTML = '<h3 style="margin: 0 0 10px 0; color: #3b82f6;">Admin API Diagnostics</h3>';
     header.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
     
+    const minimizeButton = document.createElement('button');
+    minimizeButton.textContent = '-';
+    minimizeButton.style.cssText = 'background: #3b82f6; color: white; border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer; margin-right: 5px;';
+    minimizeButton.onclick = () => {
+        const content = document.getElementById('admin-diagnostics-content');
+        const actions = document.getElementById('admin-diagnostics-actions');
+        if (content.style.display === 'none') {
+            content.style.display = 'block';
+            actions.style.display = 'flex';
+            minimizeButton.textContent = '-';
+            diagContainer.style.width = '400px';
+        } else {
+            content.style.display = 'none';
+            actions.style.display = 'none';
+            minimizeButton.textContent = '+';
+            diagContainer.style.width = '200px';
+        }
+    };
+    
     const closeButton = document.createElement('button');
     closeButton.textContent = 'X';
     closeButton.style.cssText = 'background: #ef4444; color: white; border: none; border-radius: 4px; padding: 2px 6px; cursor: pointer;';
     closeButton.onclick = () => diagContainer.remove();
     
+    header.appendChild(minimizeButton);
     header.appendChild(closeButton);
     diagContainer.appendChild(header);
+    
+    // Add action buttons
+    const actions = document.createElement('div');
+    actions.id = 'admin-diagnostics-actions';
+    actions.style.cssText = 'display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap;';
+    
+    // Reload data button
+    const reloadButton = document.createElement('button');
+    reloadButton.textContent = 'Reload Data';
+    reloadButton.style.cssText = 'background: #3b82f6; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;';
+    reloadButton.onclick = () => {
+        if (window.adminHelpers && window.adminHelpers.reloadData) {
+            window.adminHelpers.reloadData();
+            log('🔄 Data reload requested');
+        } else {
+            log('❌ Admin helpers not available', true);
+        }
+    };
+    actions.appendChild(reloadButton);
+    
+    // Check Alpine data button
+    const alpineButton = document.createElement('button');
+    alpineButton.textContent = 'Check Alpine Data';
+    alpineButton.style.cssText = 'background: #10b981; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;';
+    alpineButton.onclick = () => {
+        try {
+            const adminComponent = window.adminHelpers ? 
+                window.adminHelpers.getAdminComponent() : 
+                (Alpine && Alpine.$data ? Alpine.$data(document.querySelector('main[x-data]')) : null);
+                
+            if (adminComponent) {
+                log('✅ Alpine data accessible');
+                log(`Users: ${adminComponent.users ? adminComponent.users.length : 0}`);
+                log(`Settings: ${adminComponent.settings ? 'Available' : 'Not available'}`);
+                log(`Backups: ${adminComponent.backups ? adminComponent.backups.length : 0}`);
+            } else {
+                log('❌ Alpine data not accessible', true);
+            }
+        } catch (err) {
+            log(`❌ Error checking Alpine data: ${err.message}`, true);
+        }
+    };
+    actions.appendChild(alpineButton);
+    
+    // Force UI update button
+    const uiUpdateButton = document.createElement('button');
+    uiUpdateButton.textContent = 'Force UI Update';
+    uiUpdateButton.style.cssText = 'background: #8b5cf6; color: white; border: none; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;';
+    uiUpdateButton.onclick = () => {
+        if (window.adminHelpers && window.adminHelpers.refreshAlpineBindings) {
+            window.adminHelpers.refreshAlpineBindings();
+            log('🔄 Forced Alpine UI update');
+        } else {
+            log('❌ Alpine refresh helper not available', true);
+        }
+    };
+    actions.appendChild(uiUpdateButton);
+    
+    diagContainer.appendChild(actions);
     
     const content = document.createElement('div');
     content.id = 'admin-diagnostics-content';

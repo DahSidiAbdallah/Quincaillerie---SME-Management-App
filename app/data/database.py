@@ -13,7 +13,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
 import logging
 
+
+# Get the application directory
+app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 logger = logging.getLogger(__name__)
+
 
 class DatabaseManager:
     def __init__(self, db_path=None):
@@ -74,22 +78,6 @@ class DatabaseManager:
                     is_active BOOLEAN DEFAULT 1
                 )
             ''')
-
-            # Ensure table exists in older databases
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
-            if not cursor.fetchone():
-                cursor.execute('''
-                    CREATE TABLE customers (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        name TEXT NOT NULL,
-                        phone TEXT,
-                        email TEXT,
-                        address TEXT,
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        is_active BOOLEAN DEFAULT 1
-                    )
-                ''')
             
             # Products/Articles table (Phase 1.2)
             cursor.execute('''
@@ -518,11 +506,11 @@ class DatabaseManager:
         try:
             cursor.execute('''
                 SELECT 
-                    a.id, a.action_type, a.description, a.action_time,
+                    a.id, a.action_type, a.description, a.created_at,
                     u.username
                 FROM user_activity_log a
                 JOIN users u ON a.user_id = u.id
-                ORDER BY a.action_time DESC
+                ORDER BY a.created_at DESC
                 LIMIT ?
             ''', (limit,))
             
@@ -531,9 +519,9 @@ class DatabaseManager:
                 activity = dict(row)
                 
                 # Format date
-                if 'action_time' in activity:
+                if 'created_at' in activity:
                     try:
-                        action_time = datetime.fromisoformat(activity['action_time'].replace('Z', '+00:00'))
+                        action_time = datetime.fromisoformat(activity['created_at'].replace('Z', '+00:00'))
                         activity['formatted_time'] = action_time.strftime('%d/%m/%Y %H:%M')
                     except Exception:
                         activity['formatted_time'] = activity['action_time']
@@ -672,6 +660,75 @@ class DatabaseManager:
         finally:
             conn.close()
     
+    def get_sales_stats(self):
+        """Get sales statistics for dashboard"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Today's sales
+            today = datetime.now().strftime('%Y-%m-%d')
+            cursor.execute('''
+                SELECT 
+                    SUM(total_amount) as amount,
+                    COUNT(*) as count
+                FROM sales
+                WHERE DATE(sale_date) = ?
+                AND is_deleted = 0
+            ''', (today,))
+            today_result = cursor.fetchone()
+            
+            # This month's sales
+            this_month = datetime.now().strftime('%Y-%m')
+            cursor.execute('''
+                SELECT 
+                    SUM(total_amount) as amount,
+                    COUNT(*) as count
+                FROM sales
+                WHERE strftime('%Y-%m', sale_date) = ?
+                AND is_deleted = 0
+            ''', (this_month,))
+            month_result = cursor.fetchone()
+            
+            # Credit sales (pending debts)
+            cursor.execute('''
+                SELECT 
+                    SUM(total_amount - paid_amount) as amount,
+                    COUNT(*) as count
+                FROM sales
+                WHERE (total_amount - paid_amount) > 0
+                AND is_deleted = 0
+            ''')
+            credits_result = cursor.fetchone()
+            
+            return {
+                'today': {
+                    'amount': float(today_result['amount']) if today_result and today_result['amount'] else 0,
+                    'count': today_result['count'] if today_result else 0
+                },
+                'month': {
+                    'amount': float(month_result['amount']) if month_result and month_result['amount'] else 0,
+                    'count': month_result['count'] if month_result else 0
+                },
+                'credits': {
+                    'amount': float(credits_result['amount']) if credits_result and credits_result['amount'] else 0,
+                    'count': credits_result['count'] if credits_result else 0
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error fetching sales stats: {e}")
+            return {
+                'today': {'amount': 0, 'count': 0},
+                'month': {'amount': 0, 'count': 0},
+                'credits': {'amount': 0, 'count': 0}
+            }
+        finally:
+            conn.close()
+    
+    def get_total_products(self):
+        """Get total number of products"""
+        return self.get_inventory_stats().get('total', 0)
+    
     def get_pending_debts(self):
         """Get pending credit sales for dashboard"""
         conn = self.get_connection()
@@ -680,10 +737,10 @@ class DatabaseManager:
         try:
             cursor.execute('''
                 SELECT 
-                    SUM(remaining_amount) as total,
+                    SUM(total_amount - paid_amount) as total,
                     COUNT(*) as count
                 FROM sales
-                WHERE payment_status = 'partial'
+                WHERE is_credit = 1 OR paid_amount < total_amount
                 AND is_deleted = 0
             ''')
             
@@ -715,12 +772,22 @@ class DatabaseManager:
             sales_result = cursor.fetchone()
             total_sales = float(sales_result['total']) if sales_result and sales_result['total'] else 0
             
-            # Get total expenses
-            cursor.execute('''
-                SELECT SUM(amount) as total
-                FROM expenses
-                WHERE is_deleted = 0
-            ''')
+            # Get total expenses - check if is_deleted column exists first
+            cursor.execute('PRAGMA table_info(expenses)')
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            if 'is_deleted' in columns:
+                cursor.execute('''
+                    SELECT SUM(amount) as total
+                    FROM expenses
+                    WHERE is_deleted = 0
+                ''')
+            else:
+                # Use without is_deleted filter if column doesn't exist
+                cursor.execute('''
+                    SELECT SUM(amount) as total
+                    FROM expenses
+                ''')
             
             expenses_result = cursor.fetchone()
             total_expenses = float(expenses_result['total']) if expenses_result and expenses_result['total'] else 0
@@ -746,11 +813,11 @@ class DatabaseManager:
             cursor.execute('''
                 SELECT 
                     p.id, p.name, p.category,
-                    SUM(sd.quantity) as quantity_sold,
-                    SUM(sd.total_price) as total_sales
-                FROM sale_details sd
-                JOIN products p ON sd.product_id = p.id
-                JOIN sales s ON sd.sale_id = s.id
+                    SUM(si.quantity) as quantity_sold,
+                    SUM(si.total_price) as total_sales
+                FROM sale_items si
+                JOIN products p ON si.product_id = p.id
+                JOIN sales s ON si.sale_id = s.id
                 WHERE s.sale_date BETWEEN ? AND ?
                 AND s.is_deleted = 0
                 GROUP BY p.id

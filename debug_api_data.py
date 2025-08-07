@@ -24,7 +24,7 @@ db_path = os.path.join(app_dir, 'app', 'data', 'quincaillerie.db')
 os.environ['DATABASE_PATH'] = db_path
 
 # Import DatabaseManager
-from app.db.database import DatabaseManager
+from app.data.database import DatabaseManager
 
 def check_database_directly():
     """Check database tables directly with SQL"""

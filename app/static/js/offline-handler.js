@@ -149,9 +149,11 @@ async function processPendingOperations() {
         const pendingOps = await getPendingOperations();
         
         if (pendingOps.length === 0) {
+            console.log('No pending operations to process');
             return { success: true, processed: 0 };
         }
         
+        console.log(`Processing ${pendingOps.length} pending operations`);
         let processed = 0;
         let failed = 0;
         
@@ -174,11 +176,21 @@ async function processPendingOperations() {
                         endpoint = '/api/customers/create';
                         method = 'POST';
                         break;
+                    case 'update_inventory':
+                        endpoint = '/api/inventory/update-stock';
+                        method = 'PUT';
+                        break;
+                    case 'add_finance_record':
+                        endpoint = '/api/finance/records';
+                        method = 'POST';
+                        break;
                     // Add other operation types as needed
                     default:
                         console.warn('Unknown operation type:', op.type);
                         continue;
                 }
+                
+                console.log(`Processing operation: ${op.type}, ID: ${op.id}`);
                 
                 // Send the request to the server
                 const response = await fetch(endpoint, {
@@ -186,15 +198,47 @@ async function processPendingOperations() {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(op.data)
+                    body: JSON.stringify(op.data),
+                    credentials: 'same-origin'
                 });
                 
                 if (response.ok) {
                     // If successful, remove from pending operations
                     await deleteItem('pendingOperations', op.id);
                     processed++;
+                    
+                    // Update local data if needed
+                    if (op.type === 'update_product') {
+                        const products = await getAllData('products');
+                        const index = products.findIndex(p => p.id === op.data.id);
+                        if (index !== -1) {
+                            products[index] = { ...products[index], ...op.data };
+                            await storeData('products', products);
+                        }
+                    } else if (op.type === 'create_sale') {
+                        // Get response data to update local record with server ID
+                        try {
+                            const responseData = await response.json();
+                            if (responseData.success && responseData.sale_id) {
+                                const sales = await getAllData('sales');
+                                const localSale = sales.find(s => 
+                                    s.reference === op.data.reference || 
+                                    (s.created_at === op.data.created_at && !s.synced)
+                                );
+                                if (localSale) {
+                                    localSale.id = responseData.sale_id;
+                                    localSale.synced = true;
+                                    await storeData('sales', sales);
+                                }
+                            }
+                        } catch (parseError) {
+                            console.error('Error parsing response:', parseError);
+                        }
+                    }
+                    
+                    console.log(`Operation ${op.id} processed successfully`);
                 } else {
-                    console.error('Failed to process operation:', op);
+                    console.error(`Failed to process operation: ${op.id}, Status: ${response.status}`);
                     failed++;
                 }
             } catch (error) {

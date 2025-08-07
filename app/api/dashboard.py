@@ -110,8 +110,8 @@ def get_top_products():
         
         # Format monetary values
         for product in products:
-            if 'total_amount' in product and product['total_amount']:
-                product['total_amount'] = f"{product['total_amount']:,.2f}".replace(',', ' ').replace('.', ',')
+            if 'total_sales' in product and product['total_sales']:
+                product['total_sales'] = f"{product['total_sales']:,.2f}".replace(',', ' ').replace('.', ',')
         
         return jsonify({'success': True, 'products': products})
     except Exception as e:

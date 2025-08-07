@@ -1,0 +1,24 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Database Module Redirect
+This file redirects imports from 'db.database' to 'app.db.database'
+"""
+
+import os
+import sys
+import logging
+
+# Get the current file's directory
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the project root directory (one level up)
+project_dir = os.path.dirname(current_dir)
+
+# Always use the data database regardless of any other environment settings
+os.environ['DATABASE_PATH'] = os.path.join(project_dir, 'app', 'data', 'quincaillerie.db')
+
+logger = logging.getLogger(__name__)
+logger.info(f"Database redirector setting DATABASE_PATH to: {os.environ['DATABASE_PATH']}")
+
+# Import everything from app.db.database
+from app.db.database import *

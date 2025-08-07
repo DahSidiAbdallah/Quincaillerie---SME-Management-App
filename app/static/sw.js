@@ -369,8 +369,34 @@ self.addEventListener('sync', event => {
     
     if (event.tag === 'sync-queued-requests') {
         event.waitUntil(syncQueuedRequests());
+    } else if (event.tag === 'sync-pending-operations') {
+        event.waitUntil(syncPendingOperations());
+    } else if (event.tag === 'sync-all') {
+        event.waitUntil(Promise.all([
+            syncQueuedRequests(),
+            syncPendingOperations()
+        ]));
     }
 });
+
+// Sync pending operations from the offline-handler
+async function syncPendingOperations() {
+    try {
+        const clients = await self.clients.matchAll();
+        
+        // Request the main thread to process pending operations
+        clients.forEach(client => {
+            client.postMessage({
+                type: 'PROCESS_PENDING_OPERATIONS'
+            });
+        });
+        
+        return true;
+    } catch (error) {
+        console.error('Service Worker: Error triggering pending operations sync:', error);
+        return false;
+    }
+}
 
 // Sync queued requests when back online
 async function syncQueuedRequests() {
@@ -380,24 +406,61 @@ async function syncQueuedRequests() {
         const store = transaction.objectStore('sync_queue');
         
         const requests = await store.getAll();
+        let successCount = 0;
+        let failCount = 0;
         
         for (const requestData of requests) {
             try {
-                const response = await fetch(requestData.url, {
+                console.log(`Service Worker: Syncing ${requestData.method} request to ${requestData.url}`);
+                
+                // For requests with credentials, ensure they're included
+                const fetchOptions = {
                     method: requestData.method,
                     headers: requestData.headers,
-                    body: requestData.body
-                });
+                    body: requestData.body,
+                    credentials: 'same-origin'
+                };
+                
+                const response = await fetch(requestData.url, fetchOptions);
                 
                 if (response.ok) {
                     // Remove from sync queue
                     await store.delete(requestData.id);
                     console.log('Service Worker: Synced request:', requestData.url);
+                    successCount++;
+                    
+                    // Parse response to handle any follow-up actions
+                    try {
+                        const responseData = await response.clone().json();
+                        
+                        // Update cache with new data if available
+                        if (responseData && responseData.updateCacheUrl) {
+                            updateCacheInBackground(new Request(responseData.updateCacheUrl));
+                        }
+                    } catch (parseError) {
+                        // Non-JSON response is okay
+                    }
                 } else {
-                    console.log('Service Worker: Sync failed for request:', requestData.url);
+                    console.log('Service Worker: Sync failed for request:', requestData.url, response.status);
+                    failCount++;
+                    
+                    // If it's a 401, don't retry as it needs authentication
+                    if (response.status === 401 || response.status === 403) {
+                        await store.delete(requestData.id);
+                        
+                        // Notify clients about authentication issue
+                        const clients = await self.clients.matchAll();
+                        clients.forEach(client => {
+                            client.postMessage({
+                                type: 'AUTH_REQUIRED',
+                                requestUrl: requestData.url
+                            });
+                        });
+                    }
                 }
             } catch (error) {
                 console.error('Service Worker: Error syncing request:', requestData.url, error);
+                failCount++;
             }
         }
         
@@ -406,7 +469,9 @@ async function syncQueuedRequests() {
         clients.forEach(client => {
             client.postMessage({
                 type: 'SYNC_COMPLETED',
-                syncedCount: requests.length
+                syncedCount: successCount,
+                failedCount: failCount,
+                totalCount: requests.length
             });
         });
         

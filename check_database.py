@@ -31,7 +31,7 @@ def main():
     logger.info(f"Using database: {os.environ['DATABASE_PATH']}")
     
     try:
-        from app.db.database import DatabaseManager
+        from app.data.database import DatabaseManager
         
         # Create an instance of DatabaseManager
         db_manager = DatabaseManager()

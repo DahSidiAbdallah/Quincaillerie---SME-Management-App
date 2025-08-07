@@ -60,7 +60,7 @@ def update_redirector():
 # -*- coding: utf-8 -*-
 """
 Database Module Redirect
-This file redirects imports from 'db.database' to 'app.db.database'
+This file redirects imports from 'db.database' to 'app.data.database'
 """
 
 import os
@@ -78,8 +78,8 @@ os.environ['DATABASE_PATH'] = os.path.join(project_dir, 'app', 'data', 'quincail
 logger = logging.getLogger(__name__)
 logger.info(f"Database redirector setting DATABASE_PATH to: {os.environ['DATABASE_PATH']}")
 
-# Import everything from app.db.database
-from app.db.database import *
+# Import everything from app.data.database
+from app.data.database import *
 '''
         
         # Write the new content

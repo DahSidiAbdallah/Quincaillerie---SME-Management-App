@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run App with All Features",
+			"type": "shell",
+			"command": ".\\run_full_features.ps1",
+			"group": "run",
+			"problemMatcher": [],
+			"isBackground": true
+		}
+	]
+}

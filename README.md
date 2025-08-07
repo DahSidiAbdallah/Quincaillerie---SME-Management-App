@@ -119,9 +119,11 @@ Quincaillerie & SME Management App/
 
 ### 🌐 **PWA (Progressive Web App)**
 - ✅ Installation sur mobile/desktop
-- ✅ Fonctionnement hors ligne
-- ✅ Synchronisation automatique
+- ✅ Fonctionnement hors ligne complet
+- ✅ Synchronisation automatique en arrière-plan
 - ✅ Notifications push
+- ✅ Architecture offline-first robuste
+- ✅ Gestion des conflits de synchronisation
 
 ### 🔒 **Sécurité**
 - ✅ Authentification par PIN
@@ -142,11 +144,27 @@ cd app
 python app.py
 ```
 
+### Exécuter avec toutes les fonctionnalités (Windows)
+```bash
+# Utiliser le script PowerShell
+.\run_full_features.ps1
+
+# OU le script Batch
+.\run_full_features.bat
+```
+
 ### Tester l'application
 ```bash
 cd app
 python -m pytest tests/
 ```
+
+### Tester les fonctionnalités hors ligne
+Accédez à http://localhost:5000/offline-test pour tester toutes les capacités hors ligne:
+- Vérification du Service Worker
+- Test de synchronisation en arrière-plan
+- Test du stockage hors ligne
+- Test des modules en mode déconnecté
 
 ### Créer une sauvegarde
 ```bash
@@ -168,11 +186,15 @@ cd app
 waitress-serve --host=0.0.0.0 --port=5000 app:app
 ```
 
-## 📞 Support
+## � Documentation
+
+Pour plus de détails sur l'architecture offline-first, consultez le fichier [OFFLINE_ARCHITECTURE.md](./OFFLINE_ARCHITECTURE.md).
+
+## �📞 Support
 
 - **Auteur:** Dah Sidi Abdallah
-- **Date:** 24 Juillet 2025
-- **Version:** 1.0.0
+- **Date:** 30 Juillet 2025
+- **Version:** 1.2.0
 
 ## 📄 Licence
 

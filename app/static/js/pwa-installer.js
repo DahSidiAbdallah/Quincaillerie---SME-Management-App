@@ -79,7 +79,37 @@ if ('serviceWorker' in navigator) {
             
             switch (data.type) {
                 case 'SYNC_COMPLETED':
-                    showSyncNotification(data.syncedCount);
+                    showSyncNotification(data.syncedCount, data.failedCount);
+                    // Refresh data in the UI if applicable
+                    if (typeof refreshAppData === 'function') {
+                        refreshAppData();
+                    }
+                    break;
+                    
+                case 'PROCESS_PENDING_OPERATIONS':
+                    // Call the offline handler to process pending operations
+                    if (window.offlineData && window.offlineData.processPendingOperations) {
+                        window.offlineData.processPendingOperations()
+                            .then(result => {
+                                if (result.processed > 0) {
+                                    showSyncNotification(result.processed, result.failed);
+                                    // Refresh data in the UI if applicable
+                                    if (typeof refreshAppData === 'function') {
+                                        refreshAppData();
+                                    }
+                                }
+                            })
+                            .catch(err => console.error('Error processing pending operations:', err));
+                    }
+                    break;
+                
+                case 'AUTH_REQUIRED':
+                    // Redirect to login page if authentication is required
+                    showToast('Veuillez vous connecter pour synchroniser les données', 'warning', 5000);
+                    // Wait a moment before redirecting to allow the user to see the message
+                    setTimeout(() => {
+                        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+                    }, 2000);
                     break;
                     
                 case 'CACHE_UPDATED':
@@ -270,18 +300,56 @@ function showUpdateNotification() {
 }
 
 // Show sync notification
-function showSyncNotification(count) {
-    if (count === 0) return;
+function showSyncNotification(successCount, failCount = 0) {
+    if (successCount === 0 && failCount === 0) return;
     
-    showToast(`${count} action${count > 1 ? 's' : ''} synchronisée${count > 1 ? 's' : ''}`);
+    if (failCount > 0) {
+        showToast(
+            `${successCount} action${successCount > 1 || successCount === 0 ? 's' : ''} synchronisée${successCount > 1 ? 's' : ''}, 
+            ${failCount} échec${failCount > 1 ? 's' : ''}`,
+            'warning',
+            5000
+        );
+    } else {
+        showToast(
+            `${successCount} action${successCount > 1 ? 's' : ''} synchronisée${successCount > 1 ? 's' : ''} avec succès`,
+            'success',
+            3000
+        );
+    }
 }
 
 // Show toast notification
-function showToast(message, duration = 3000) {
+function showToast(message, type = 'success', duration = 3000) {
     // Create toast element
     const toast = document.createElement('div');
-    toast.className = 'fixed bottom-4 left-4 bg-blue-600 text-white px-4 py-2 rounded-md shadow-lg z-50 transform translate-y-full transition-transform duration-300 ease-in-out';
-    toast.textContent = message;
+    
+    // Set color based on type
+    let bgColor = 'bg-blue-600'; // default/info
+    
+    if (type === 'success') {
+        bgColor = 'bg-green-600';
+    } else if (type === 'error') {
+        bgColor = 'bg-red-600';
+    } else if (type === 'warning') {
+        bgColor = 'bg-yellow-600';
+    }
+    
+    toast.className = `fixed bottom-4 left-4 ${bgColor} text-white px-4 py-2 rounded-md shadow-lg z-50 transform translate-y-full transition-transform duration-300 ease-in-out`;
+    
+    // Add icon based on type
+    let icon = '';
+    if (type === 'success') {
+        icon = '<svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>';
+    } else if (type === 'error') {
+        icon = '<svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>';
+    } else if (type === 'warning') {
+        icon = '<svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>';
+    } else { // info
+        icon = '<svg class="inline-block w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>';
+    }
+    
+    toast.innerHTML = `<div class="flex items-center">${icon}<span>${message}</span></div>`;
     
     document.body.appendChild(toast);
     

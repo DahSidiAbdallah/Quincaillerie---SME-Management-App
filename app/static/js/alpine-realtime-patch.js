@@ -82,6 +82,8 @@
             patchMethod('deleteUser', function(user) {
                 console.log('🔄 Real-time UI update for deleteUser');
                 if (window.adminHelpers && window.adminHelpers.removeUserFromUI) {
+                    // Show optimistic UI update
+                    window.adminHelpers.showToast(`Suppression de l'utilisateur ${user.username}...`);
                     window.adminHelpers.removeUserFromUI(user.id);
                 }
             });
@@ -90,17 +92,39 @@
             patchMethod('toggleUserStatus', function(user) {
                 console.log('🔄 Real-time UI update for toggleUserStatus');
                 if (window.adminHelpers && window.adminHelpers.updateUserInUI) {
+                    const newStatus = !user.is_active;
                     // Toggle is_active in the UI immediately for better UX
-                    window.adminHelpers.updateUserInUI(user.id, { is_active: !user.is_active });
+                    window.adminHelpers.updateUserInUI(user.id, { is_active: newStatus });
+                    // Show status update toast
+                    window.adminHelpers.showToast(
+                        `Utilisateur ${user.username} ${newStatus ? 'activé' : 'désactivé'}`,
+                        false,
+                        2000
+                    );
                 }
             });
             
             // Patch createBackup method
             patchMethod('createBackup', function() {
                 console.log('🔄 Real-time UI update for createBackup - will refresh data');
+                // Show optimistic toast
+                const toast = window.adminHelpers && window.adminHelpers.showToast 
+                    ? window.adminHelpers.showToast('Création de la sauvegarde en cours...', false, 0)
+                    : null;
+                    
                 setTimeout(() => {
                     if (this.loadData) {
                         this.loadData();
+                        
+                        // Update toast once complete
+                        if (toast) {
+                            toast.textContent = 'Sauvegarde créée avec succès';
+                            toast.style.background = '#10b981';
+                            setTimeout(() => {
+                                toast.style.opacity = '0';
+                                setTimeout(() => toast.remove(), 300);
+                            }, 2000);
+                        }
                     }
                 }, 500);
             });
@@ -108,16 +132,33 @@
             // Patch saveSettings method
             patchMethod('saveSettings', function() {
                 console.log('🔄 Real-time UI update for saveSettings');
-                // Settings save is handled by the original function
+                // Show optimistic toast
+                if (window.adminHelpers && window.adminHelpers.showToast) {
+                    window.adminHelpers.showToast('Paramètres enregistrés avec succès', false, 2000);
+                }
+                // If we have updateSettingsInUI helper, use it to ensure UI stays in sync with saved data
+                if (window.adminHelpers && window.adminHelpers.updateSettingsInUI && this.settings) {
+                    window.adminHelpers.updateSettingsInUI(this.settings);
+                }
             });
             
             // Patch deleteBackup method
             patchMethod('deleteBackup', function(backup) {
                 console.log('🔄 Real-time UI update for deleteBackup');
+                // Show optimistic toast
+                if (window.adminHelpers && window.adminHelpers.showToast) {
+                    window.adminHelpers.showToast('Suppression de la sauvegarde...', false, 0);
+                }
+                
                 if (window.adminHelpers && window.adminHelpers.refreshBackupList) {
                     setTimeout(() => {
                         if (this.loadData) {
                             this.loadData();
+                            
+                            // Show completion toast
+                            if (window.adminHelpers && window.adminHelpers.showToast) {
+                                window.adminHelpers.showToast('Sauvegarde supprimée avec succès', false, 2000);
+                            }
                         }
                     }, 500);
                 }

@@ -1,0 +1,417 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Offline Capabilities - Quincaillerie Management{% endblock %}
+
+{% block extra_head %}
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="{{ url_for('static', filename='js/offline-handler.js') }}"></script>
+<script src="{{ url_for('static', filename='js/offline-tester.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900">Test Offline Capabilities</h1>
+        <p class="text-gray-600 mt-2">Use this page to verify that all features work properly in offline mode</p>
+        
+        <!-- Offline Status Indicator -->
+        <div class="mt-4 flex items-center">
+            <div id="status-indicator" class="w-4 h-4 rounded-full bg-gray-500 mr-2"></div>
+            <span id="status-text" class="font-medium text-gray-700">Checking status...</span>
+        </div>
+    </div>
+    
+    <!-- Test Controls -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div class="px-4 py-5 sm:px-6">
+            <h2 class="text-lg leading-6 font-medium text-gray-900">Test Controls</h2>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">Use these controls to simulate offline conditions and test sync</p>
+        </div>
+        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <div class="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                <div>
+                    <button id="btn-offline-test" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                        <i class="fas fa-network-wired mr-2"></i>
+                        Run Offline Tests
+                    </button>
+                    <p class="mt-1 text-xs text-gray-500">Test service worker and offline storage capabilities</p>
+                </div>
+                
+                <div>
+                    <button id="btn-force-sync" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                        <i class="fas fa-sync-alt mr-2"></i>
+                        Force Sync
+                    </button>
+                    <p class="mt-1 text-xs text-gray-500">Manually trigger background sync process</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Module Tests -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div class="px-4 py-5 sm:px-6">
+            <h2 class="text-lg leading-6 font-medium text-gray-900">Module Tests</h2>
+            <p class="mt-1 max-w-2xl text-sm text-gray-500">Test each module's offline capabilities</p>
+        </div>
+        
+        <!-- Inventory Module Test -->
+        <div class="border-t border-gray-200">
+            <dl>
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Inventory Module</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <div class="space-y-4">
+                            <div>
+                                <button id="test-inventory-load" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                    Test Load Products
+                                </button>
+                                <span id="inventory-load-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                            
+                            <div>
+                                <button id="test-inventory-update" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-indigo-700 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                                    Test Update Stock
+                                </button>
+                                <span id="inventory-update-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                        </div>
+                    </dd>
+                </div>
+                
+                <!-- Sales Module Test -->
+                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Sales Module</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <div class="space-y-4">
+                            <div>
+                                <button id="test-sales-load" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                    Test Load Sales
+                                </button>
+                                <span id="sales-load-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                            
+                            <div>
+                                <button id="test-sales-create" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-green-700 bg-green-100 hover:bg-green-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                                    Test Create Sale
+                                </button>
+                                <span id="sales-create-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                        </div>
+                    </dd>
+                </div>
+                
+                <!-- Finance Module Test -->
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Finance Module</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <div class="space-y-4">
+                            <div>
+                                <button id="test-finance-load" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    Test Load Finance Data
+                                </button>
+                                <span id="finance-load-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                            
+                            <div>
+                                <button id="test-finance-record" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-blue-700 bg-blue-100 hover:bg-blue-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    Test Add Financial Record
+                                </button>
+                                <span id="finance-record-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                        </div>
+                    </dd>
+                </div>
+                
+                <!-- Customers Module Test -->
+                <div class="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Customers Module</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <div class="space-y-4">
+                            <div>
+                                <button id="test-customers-load" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                                    Test Load Customers
+                                </button>
+                                <span id="customers-load-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                            
+                            <div>
+                                <button id="test-customers-create" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-yellow-700 bg-yellow-100 hover:bg-yellow-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500">
+                                    Test Create Customer
+                                </button>
+                                <span id="customers-create-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                        </div>
+                    </dd>
+                </div>
+                
+                <!-- Reports Module Test -->
+                <div class="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+                    <dt class="text-sm font-medium text-gray-500">Reports Module</dt>
+                    <dd class="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+                        <div class="space-y-4">
+                            <div>
+                                <button id="test-reports-load" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-purple-700 bg-purple-100 hover:bg-purple-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500">
+                                    Test Load Reports
+                                </button>
+                                <span id="reports-load-result" class="ml-3 text-sm text-gray-500">Not tested</span>
+                            </div>
+                        </div>
+                    </dd>
+                </div>
+            </dl>
+        </div>
+    </div>
+    
+    <!-- Log Output -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
+        <div class="px-4 py-5 sm:px-6 flex justify-between items-center">
+            <div>
+                <h2 class="text-lg leading-6 font-medium text-gray-900">Test Logs</h2>
+                <p class="mt-1 max-w-2xl text-sm text-gray-500">Results of offline tests will appear here</p>
+            </div>
+            <button id="clear-logs" class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded text-gray-700 bg-gray-100 hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500">
+                Clear Logs
+            </button>
+        </div>
+        <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
+            <div id="log-container" class="bg-gray-100 p-4 rounded-md font-mono text-sm h-60 overflow-y-auto">
+                <div class="text-gray-500">Logs will appear here...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const statusIndicator = document.getElementById('status-indicator');
+    const statusText = document.getElementById('status-text');
+    const logContainer = document.getElementById('log-container');
+    
+    // Function to update online/offline status
+    function updateOnlineStatus() {
+        if (navigator.onLine) {
+            statusIndicator.className = 'w-4 h-4 rounded-full bg-green-500 mr-2';
+            statusText.textContent = 'Online';
+            statusText.className = 'font-medium text-green-700';
+            logEntry('System is online', 'status');
+        } else {
+            statusIndicator.className = 'w-4 h-4 rounded-full bg-red-500 mr-2';
+            statusText.textContent = 'Offline';
+            statusText.className = 'font-medium text-red-700';
+            logEntry('System is offline', 'status');
+        }
+    }
+    
+    // Initial status check
+    updateOnlineStatus();
+    
+    // Add event listeners for online/offline events
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    
+    // Function to add log entry
+    function logEntry(message, type = 'info') {
+        const timestamp = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = 'mb-1';
+        
+        let textColor = 'text-gray-800';
+        if (type === 'error') textColor = 'text-red-600';
+        if (type === 'success') textColor = 'text-green-600';
+        if (type === 'warning') textColor = 'text-yellow-600';
+        if (type === 'status') textColor = 'text-blue-600';
+        
+        entry.innerHTML = `<span class="text-gray-500">[${timestamp}]</span> <span class="${textColor}">${message}</span>`;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+    
+    // Clear logs
+    document.getElementById('clear-logs').addEventListener('click', function() {
+        logContainer.innerHTML = '';
+        logEntry('Logs cleared', 'status');
+    });
+    
+    // Run offline tests
+    document.getElementById('btn-offline-test').addEventListener('click', function() {
+        logEntry('Starting offline capability tests...', 'status');
+        window.offlineTester.testAndDisplay();
+    });
+    
+    // Force sync
+    document.getElementById('btn-force-sync').addEventListener('click', async function() {
+        logEntry('Forcing background sync...', 'status');
+        
+        if ('serviceWorker' in navigator && 'SyncManager' in window) {
+            try {
+                const registration = await navigator.serviceWorker.ready;
+                await registration.sync.register('sync-all');
+                logEntry('Background sync requested successfully', 'success');
+            } catch (err) {
+                logEntry(`Error requesting sync: ${err.message}`, 'error');
+            }
+        } else {
+            logEntry('Background sync not supported by your browser', 'error');
+        }
+    });
+    
+    // Test functions for each module
+    async function setupModuleTests() {
+        // Only proceed if offline handler is available
+        if (!window.offlineData) {
+            logEntry('Offline data handler not available - cannot run module tests', 'error');
+            return;
+        }
+        
+        // Inventory module tests
+        document.getElementById('test-inventory-load').addEventListener('click', async function() {
+            try {
+                logEntry('Testing inventory load...', 'status');
+                const resultSpan = document.getElementById('inventory-load-result');
+                resultSpan.textContent = 'Testing...';
+                
+                const products = await window.offlineData.getProducts();
+                if (products && products.length > 0) {
+                    logEntry(`Successfully loaded ${products.length} products`, 'success');
+                    resultSpan.textContent = `✅ Loaded ${products.length} products`;
+                    resultSpan.className = 'ml-3 text-sm text-green-500';
+                } else {
+                    logEntry('No products found or failed to load products', 'warning');
+                    resultSpan.textContent = '⚠️ No products found';
+                    resultSpan.className = 'ml-3 text-sm text-yellow-500';
+                }
+            } catch (error) {
+                logEntry(`Error loading inventory: ${error.message}`, 'error');
+                document.getElementById('inventory-load-result').textContent = '❌ Error';
+                document.getElementById('inventory-load-result').className = 'ml-3 text-sm text-red-500';
+            }
+        });
+        
+        document.getElementById('test-inventory-update').addEventListener('click', async function() {
+            try {
+                logEntry('Testing inventory stock update...', 'status');
+                const resultSpan = document.getElementById('inventory-update-result');
+                resultSpan.textContent = 'Testing...';
+                
+                // Get a product to update
+                const products = await window.offlineData.getProducts();
+                if (!products || products.length === 0) {
+                    throw new Error('No products available to update');
+                }
+                
+                const testProduct = products[0];
+                const originalStock = testProduct.quantity || 0;
+                const testData = {
+                    id: testProduct.id,
+                    quantity: originalStock + 1,
+                    updated_at: new Date().toISOString()
+                };
+                
+                // Store pending operation
+                await window.offlineData.storePendingOperation('update_product', testData);
+                logEntry(`Stored stock update operation for product ${testProduct.id}`, 'success');
+                resultSpan.textContent = '✅ Update queued for sync';
+                resultSpan.className = 'ml-3 text-sm text-green-500';
+            } catch (error) {
+                logEntry(`Error updating inventory: ${error.message}`, 'error');
+                document.getElementById('inventory-update-result').textContent = '❌ Error';
+                document.getElementById('inventory-update-result').className = 'ml-3 text-sm text-red-500';
+            }
+        });
+        
+        // Add similar handlers for other modules
+        // Sales module tests
+        document.getElementById('test-sales-load').addEventListener('click', async function() {
+            try {
+                logEntry('Testing sales load...', 'status');
+                const resultSpan = document.getElementById('sales-load-result');
+                resultSpan.textContent = 'Testing...';
+                
+                const sales = await window.offlineData.getAllData('sales');
+                if (sales && sales.length > 0) {
+                    logEntry(`Successfully loaded ${sales.length} sales records`, 'success');
+                    resultSpan.textContent = `✅ Loaded ${sales.length} sales`;
+                    resultSpan.className = 'ml-3 text-sm text-green-500';
+                } else {
+                    logEntry('No sales found or failed to load sales', 'warning');
+                    resultSpan.textContent = '⚠️ No sales found';
+                    resultSpan.className = 'ml-3 text-sm text-yellow-500';
+                }
+            } catch (error) {
+                logEntry(`Error loading sales: ${error.message}`, 'error');
+                document.getElementById('sales-load-result').textContent = '❌ Error';
+                document.getElementById('sales-load-result').className = 'ml-3 text-sm text-red-500';
+            }
+        });
+        
+        document.getElementById('test-sales-create').addEventListener('click', async function() {
+            try {
+                logEntry('Testing sales creation...', 'status');
+                const resultSpan = document.getElementById('sales-create-result');
+                resultSpan.textContent = 'Testing...';
+                
+                // Create a test sale
+                const testSale = {
+                    reference: `TEST-${Date.now().toString().substr(-6)}`,
+                    date: new Date().toISOString(),
+                    customer_id: null,
+                    items: [{ product_id: 1, quantity: 1, price: 10.0 }],
+                    total: 10.0,
+                    payment_method: 'cash',
+                    notes: 'Test sale created offline'
+                };
+                
+                const result = await window.offlineData.createSale(testSale);
+                if (result.success) {
+                    if (result.offline) {
+                        logEntry('Sale created and stored for offline sync', 'success');
+                        resultSpan.textContent = '✅ Created offline';
+                    } else {
+                        logEntry('Sale created and sent to server', 'success');
+                        resultSpan.textContent = '✅ Created online';
+                    }
+                    resultSpan.className = 'ml-3 text-sm text-green-500';
+                } else {
+                    throw new Error(result.error || 'Failed to create sale');
+                }
+            } catch (error) {
+                logEntry(`Error creating sale: ${error.message}`, 'error');
+                document.getElementById('sales-create-result').textContent = '❌ Error';
+                document.getElementById('sales-create-result').className = 'ml-3 text-sm text-red-500';
+            }
+        });
+        
+        // Setup other module tests similarly
+        // Customers test
+        document.getElementById('test-customers-load').addEventListener('click', async function() {
+            try {
+                logEntry('Testing customers load...', 'status');
+                const resultSpan = document.getElementById('customers-load-result');
+                resultSpan.textContent = 'Testing...';
+                
+                const customers = await window.offlineData.getCustomers();
+                if (customers && customers.length > 0) {
+                    logEntry(`Successfully loaded ${customers.length} customers`, 'success');
+                    resultSpan.textContent = `✅ Loaded ${customers.length} customers`;
+                    resultSpan.className = 'ml-3 text-sm text-green-500';
+                } else {
+                    logEntry('No customers found or failed to load customers', 'warning');
+                    resultSpan.textContent = '⚠️ No customers found';
+                    resultSpan.className = 'ml-3 text-sm text-yellow-500';
+                }
+            } catch (error) {
+                logEntry(`Error loading customers: ${error.message}`, 'error');
+                document.getElementById('customers-load-result').textContent = '❌ Error';
+                document.getElementById('customers-load-result').className = 'ml-3 text-sm text-red-500';
+            }
+        });
+    }
+    
+    // Initialize module tests
+    setupModuleTests();
+});
+</script>
+{% endblock %}
