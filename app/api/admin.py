@@ -16,8 +16,8 @@ from datetime import datetime
 # Add parent directory to Python path for imports
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Import DatabaseManager from the correct location
-from app.data.database import DatabaseManager
+# Import DatabaseManager from the unified location
+from db.database import DatabaseManager
 
 # Optional dependency: psutil
 try:
@@ -743,48 +743,54 @@ def admin_user_operations(user_id):
 def admin_debug():
     """Debug endpoint for admin API"""
     try:
+        # Restrict to admins only
+        if session.get('user_role') != 'admin':
+            response = jsonify({'success': False, 'message': 'Accès administrateur requis'})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 403
+
         # Check session status
         session_data = {k: v for k, v in session.items()} if session else {}
-        
+
         # Check database connectivity
         db_status = "OK"
         settings = None
         users = None
         tables = []
         error = None
-        
+
         try:
             conn = db_manager.get_connection()
             cursor = conn.cursor()
-            
+
             # Get list of tables
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
             tables = [row[0] for row in cursor.fetchall()]
-            
+
             # Check settings
             try:
                 settings = db_manager.get_app_settings()
-            except Exception as e:
-                settings = {"error": str(e)}
-            
+            except Exception as inner_e:
+                settings = {"error": str(inner_e)}
+
             # Check users
             try:
-                users = db_manager.get_users()
-                users = [{"id": u["id"], "username": u["username"], "role": u["role"]} for u in users]
-            except Exception as e:
-                users = {"error": str(e)}
-            
+                users_raw = db_manager.get_users()
+                users = [{"id": u["id"], "username": u["username"], "role": u["role"]} for u in users_raw]
+            except Exception as inner_e:
+                users = {"error": str(inner_e)}
+
             conn.close()
-        except Exception as e:
-            db_status = f"ERROR: {str(e)}"
-            error = str(e)
-        
+        except Exception as db_e:
+            db_status = f"ERROR: {str(db_e)}"
+            error = str(db_e)
+
         # Check file system access
         fs_status = "OK"
         backup_dir_exists = False
         backup_dir_writable = False
         backups = []
-        
+
         try:
             backup_dir_exists = os.path.exists(BACKUP_DIR)
             if backup_dir_exists:
@@ -796,11 +802,11 @@ def admin_debug():
                     os.remove(test_file)
                 except Exception:
                     backup_dir_writable = False
-                
+
                 backups = [f for f in os.listdir(BACKUP_DIR) if f.endswith('.json')]
-        except Exception as e:
-            fs_status = f"ERROR: {str(e)}"
-        
+        except Exception as fs_e:
+            fs_status = f"ERROR: {str(fs_e)}"
+
         debug_data = {
             "server_time": datetime.now().isoformat(),
             "session": session_data,
@@ -821,7 +827,7 @@ def admin_debug():
             "python_version": sys.version,
             "working_directory": os.getcwd(),
         }
-        
+
         response = jsonify({'success': True, 'debug': debug_data})
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response

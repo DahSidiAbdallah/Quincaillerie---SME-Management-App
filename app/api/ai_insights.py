@@ -33,21 +33,22 @@ def get_stock_predictions():
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
+
+    conn = None
     try:
         # Get products with potential stock issues
         predictions = stock_predictor.predict_stock_alerts()
-        
+
         # Store predictions in cache
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Clear old predictions
         cursor.execute('''
             DELETE FROM ai_predictions 
             WHERE prediction_type = 'stock_out' AND created_at < datetime('now', '-1 day')
         ''')
-        
+
         # Store new predictions
         for prediction in predictions:
             cursor.execute('''
@@ -63,26 +64,31 @@ def get_stock_predictions():
                 date.today().isoformat(),
                 (datetime.now() + timedelta(hours=24)).isoformat()
             ))
-        
+
         conn.commit()
-        conn.close()
-        
+
         # Log AI prediction request
         db_manager.log_user_action(
             session['user_id'],
             'ai_stock_prediction',
             f'Prédictions stock générées: {len(predictions)} produits'
         )
-        
+
         return jsonify({
             'success': True,
             'predictions': predictions,
             'generated_at': datetime.now().isoformat()
         })
-        
+
     except Exception as e:
         logger.error(f"Error generating stock predictions: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération des prédictions'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @ai_bp.route('/sales-forecast', methods=['GET'])
 def get_sales_forecast():
@@ -91,6 +97,7 @@ def get_sales_forecast():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         # Get parameters
         product_id = request.args.get('product_id')
@@ -122,7 +129,6 @@ def get_sales_forecast():
         ))
         
         conn.commit()
-        conn.close()
         
         # Log AI forecast request
         db_manager.log_user_action(
@@ -140,6 +146,12 @@ def get_sales_forecast():
     except Exception as e:
         logger.error(f"Error generating sales forecast: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération des prévisions'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @ai_bp.route('/restock-suggestions', methods=['GET'])
 def get_restock_suggestions():
@@ -147,20 +159,21 @@ def get_restock_suggestions():
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
+
+    conn = None
     try:
         suggestions = stock_predictor.generate_restock_suggestions()
-        
+
         # Store suggestions in cache
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Clear old suggestions
         cursor.execute('''
             DELETE FROM ai_predictions 
             WHERE prediction_type = 'restock_suggestion' AND created_at < datetime('now', '-1 day')
         ''')
-        
+
         # Store new suggestions
         for suggestion in suggestions:
             cursor.execute('''
@@ -176,26 +189,31 @@ def get_restock_suggestions():
                 date.today().isoformat(),
                 (datetime.now() + timedelta(days=3)).isoformat()
             ))
-        
+
         conn.commit()
-        conn.close()
-        
+
         # Log restock suggestions request
         db_manager.log_user_action(
             session['user_id'],
             'ai_restock_suggestions',
             f'Suggestions réapprovisionnement: {len(suggestions)} produits'
         )
-        
+
         return jsonify({
             'success': True,
             'suggestions': suggestions,
             'generated_at': datetime.now().isoformat()
         })
-        
+
     except Exception as e:
         logger.error(f"Error generating restock suggestions: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération des suggestions'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @ai_bp.route('/capital-efficiency', methods=['GET'])
 def get_capital_efficiency():
@@ -204,6 +222,7 @@ def get_capital_efficiency():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -291,8 +310,6 @@ def get_capital_efficiency():
             }
         }
         
-        conn.close()
-        
         # Log efficiency analysis
         db_manager.log_user_action(
             session['user_id'],
@@ -309,6 +326,12 @@ def get_capital_efficiency():
     except Exception as e:
         logger.error(f"Error calculating capital efficiency: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors du calcul d\'efficacité'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @ai_bp.route('/price-suggestions', methods=['GET'])
 def get_price_suggestions():
@@ -317,6 +340,7 @@ def get_price_suggestions():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -448,6 +472,12 @@ def get_price_suggestions():
     except Exception as e:
         logger.error(f"Error generating price suggestions: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération des suggestions de prix'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @ai_bp.route('/smart-alerts', methods=['GET'])
 def get_smart_alerts():
@@ -456,6 +486,7 @@ def get_smart_alerts():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -585,8 +616,6 @@ def get_smart_alerts():
                 'priority': 3
             })
         
-        conn.close()
-        
         # Sort alerts by priority and severity
         priority_order = {'critical': 3, 'warning': 2, 'info': 1}
         alerts.sort(key=lambda x: (x['priority'], priority_order.get(x['severity'], 0)), reverse=True)
@@ -612,6 +641,12 @@ def get_smart_alerts():
     except Exception as e:
         logger.error(f"Error generating smart alerts: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération des alertes'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @ai_bp.route('/summary-assistant', methods=['GET'])
 def get_ai_summary():
@@ -620,6 +655,7 @@ def get_ai_summary():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -676,8 +712,6 @@ def get_ai_summary():
             FROM client_debts WHERE status = 'pending'
         ''')
         debts = dict(cursor.fetchone())
-        
-        conn.close()
         
         # Generate natural language summary
         summary_parts = []
@@ -754,3 +788,9 @@ def get_ai_summary():
     except Exception as e:
         logger.error(f"Error generating AI summary: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération du résumé'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass

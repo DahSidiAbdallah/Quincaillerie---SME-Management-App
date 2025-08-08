@@ -32,6 +32,8 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'quincaillerie-app-2025-secure-key')
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+# Enable/disable debug and test pages via environment flag (default off)
+app.config['DEBUG_PAGES'] = os.environ.get('DEBUG_PAGES', '0') in ('1', 'true', 'True')
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -453,49 +455,54 @@ def inventory():
             'stock_value': f"{inventory_stats.get('inventory_value', 0):,.0f}",  # numeric only; template will add currency
             'categories': inventory_stats.get('categories', [])
         }
-        
-        return render_template('inventory.html', **context)
+
+        # Pass debug flag for conditional client assets
+        debug_pages = app.config.get('DEBUG_PAGES')
+        return render_template('inventory.html', debug_pages=debug_pages, **context)
     except Exception as e:
         print(f"Error loading inventory page: {e}")
         # Fallback with default values
-        return render_template('inventory.html', 
-                             total_products=0, 
-                             in_stock_products=0, 
-                             low_stock_products=0, 
-                             stock_value='0',
-                             categories=[])
+        return render_template(
+            'inventory.html',
+            total_products=0,
+            in_stock_products=0,
+            low_stock_products=0,
+            stock_value='0',
+            categories=[],
+            debug_pages=app.config.get('DEBUG_PAGES')
+        )
 
 
-@app.route('/inventory-launcher')
-def inventory_launcher():
-    """Inventory launcher page with auto-login option"""
-    return render_template('inventory_launcher.html')
+if app.config.get('DEBUG_PAGES'):
+    @app.route('/inventory-launcher')
+    def inventory_launcher():
+        """Inventory launcher page with auto-login option (debug only)"""
+        return render_template('inventory_launcher.html')
 
+    @app.route('/debug/inventory')
+    def debug_inventory():
+        """Debug page for inventory API (debug only)"""
+        return render_template('debug_inventory.html')
 
-@app.route('/debug/inventory')
-def debug_inventory():
-    """Debug page for inventory API"""
-    return render_template('debug_inventory.html')
+    @app.route('/login-test')
+    def login_test():
+        """Test login and inventory API functionality (debug only)"""
+        return render_template('login_test.html')
 
-@app.route('/login-test')
-def login_test():
-    """Test login and inventory API functionality"""
-    return render_template('login_test.html')
+    @app.route('/test-api')
+    def test_api():
+        """Test API functionality directly (debug only)"""
+        return render_template('test_api.html')
 
-@app.route('/test-api')
-def test_api():
-    """Test API functionality directly"""
-    return render_template('test_api.html')
+    @app.route('/test-inventory')
+    def test_inventory():
+        """Test inventory API functionality (debug only)"""
+        return render_template('test_inventory.html')
 
-@app.route('/test-inventory')
-def test_inventory():
-    """Test inventory API functionality"""
-    return render_template('test_inventory.html')
-
-@app.route('/minimal-test')
-def minimal_test():
-    """Minimal test for inventory API"""
-    return render_template('minimal_test.html')
+    @app.route('/minimal-test')
+    def minimal_test():
+        """Minimal test for inventory API (debug only)"""
+        return render_template('minimal_test.html')
 
 
 @app.route('/customers')

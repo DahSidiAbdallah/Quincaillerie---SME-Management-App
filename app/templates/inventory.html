@@ -698,7 +698,9 @@
 {% endblock %}
 
 {% block extra_scripts %}
+{% if debug_pages %}
 <script src="{{ url_for('static', filename='js/inventory-diagnostics.js') }}"></script>
+{% endif %}
 <script>
     let currentView = 'grid';
     let currentProducts = [];

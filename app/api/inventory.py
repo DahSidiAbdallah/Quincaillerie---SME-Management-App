@@ -55,6 +55,7 @@ def get_products():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -136,13 +137,17 @@ def get_products():
         # Fetch inventory stats for the page
         stats = db_manager.get_inventory_stats()
 
-        conn.close()
-
         return jsonify({'success': True, 'products': products, 'stats': stats})
         
     except Exception as e:
         logger.error(f"Error fetching products: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits', 'details': str(e)}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/products', methods=['POST'])
 def create_product():
@@ -150,17 +155,18 @@ def create_product():
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
+
     data = request.get_json()
     required_fields = ['name', 'purchase_price', 'sale_price']
-    
+
     if not data or not all(field in data for field in required_fields):
         return jsonify({'success': False, 'message': 'Champs requis manquants'}), 400
-    
+
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Map incoming fields to schema
         name = data['name']
         description = data.get('description', '')
@@ -180,18 +186,17 @@ def create_product():
         ''', (
             name, description, purchase_price, selling_price, sku, barcode, category, supplier, current_stock, reorder_level, session['user_id']
         ))
-        
+
         product_id = cursor.lastrowid
         conn.commit()
-        conn.close()
-        
+
         # Log the creation
         db_manager.log_user_action(
             session['user_id'],
             'create_product',
             f'Création produit: {name}'
         )
-        
+
         # Add to sync queue (store sanitized data)
         db_manager.add_to_sync_queue('products', product_id, 'insert', {
             'name': name,
@@ -204,12 +209,18 @@ def create_product():
             'sku': sku,
             'barcode': barcode
         })
-        
+
         return jsonify({'success': True, 'product_id': product_id, 'message': 'Produit créé avec succès'})
-        
+
     except Exception as e:
         logger.error(f"Error creating product: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la création du produit'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):
@@ -218,6 +229,7 @@ def get_product(product_id):
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -256,8 +268,6 @@ def get_product(product_id):
         ''', (product_id,))
         
         movements = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
         result = dict(product)
         # Aliases and defaults for frontend compatibility
         result['code'] = result.get('sku') or ''
@@ -275,6 +285,12 @@ def get_product(product_id):
     except Exception as e:
         logger.error(f"Error fetching product: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération du produit'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/products/<int:product_id>', methods=['PUT'])
 def update_product(product_id):
@@ -287,6 +303,7 @@ def update_product(product_id):
     if not data:
         return jsonify({'success': False, 'message': 'Données requises'}), 400
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -351,12 +368,17 @@ def update_product(product_id):
             # Add to sync queue
             db_manager.add_to_sync_queue('products', product_id, 'update', data)
         
-        conn.close()
         return jsonify({'success': True, 'message': 'Produit mis à jour avec succès'})
         
     except Exception as e:
         logger.error(f"Error updating product: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour du produit'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/products/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
@@ -364,15 +386,16 @@ def delete_product(product_id):
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
+
     # Only admin can delete products
     if session.get('user_role') != 'admin':
         return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
-    
+
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Check if product exists and has no pending operations (handle optional is_active)
         cursor.execute('PRAGMA table_info(products)')
         _pcols = {row[1] for row in cursor.fetchall()}
@@ -383,27 +406,32 @@ def delete_product(product_id):
         product = cursor.fetchone()
         if not product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
-        
+
         # Deactivate instead of delete to preserve data integrity
         cursor.execute('UPDATE products SET is_active = 0 WHERE id = ?', (product_id,))
         conn.commit()
-        conn.close()
-        
+
         # Log the deletion
         db_manager.log_user_action(
             session['user_id'],
             'delete_product',
             f'Suppression produit: {product[0]}'
         )
-        
+
         # Add to sync queue
         db_manager.add_to_sync_queue('products', product_id, 'delete')
-        
+
         return jsonify({'success': True, 'message': 'Produit supprimé avec succès'})
-        
+
     except Exception as e:
         logger.error(f"Error deleting product: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la suppression du produit'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/stock-movement', methods=['POST'])
 def add_stock_movement():
@@ -421,6 +449,7 @@ def add_stock_movement():
     if data['movement_type'] not in ['in', 'out', 'adjustment']:
         return jsonify({'success': False, 'message': 'Type de mouvement invalide'}), 400
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -510,7 +539,6 @@ def add_stock_movement():
         # Add to sync queue
         db_manager.add_to_sync_queue('stock_movements', movement_id, 'insert', data)
 
-        conn.close()
         return jsonify({
             'success': True, 
             'movement_id': movement_id,
@@ -521,6 +549,12 @@ def add_stock_movement():
     except Exception as e:
         logger.error(f"Error adding stock movement: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de l\'enregistrement du mouvement'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/stock-movements', methods=['GET'])
 def get_stock_movements():
@@ -529,6 +563,7 @@ def get_stock_movements():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -578,13 +613,17 @@ def get_stock_movements():
         
         cursor.execute(query, params)
         movements = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
         return jsonify({'success': True, 'movements': movements})
         
     except Exception as e:
         logger.error(f"Error fetching stock movements: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des mouvements'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/categories', methods=['GET'])
 def get_categories():
@@ -593,6 +632,7 @@ def get_categories():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -610,13 +650,17 @@ def get_categories():
         ''')
         
         categories = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
         return jsonify({'success': True, 'categories': categories})
         
     except Exception as e:
         logger.error(f"Error fetching categories: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des catégories'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/suppliers', methods=['GET'])
 def get_suppliers():
@@ -625,6 +669,7 @@ def get_suppliers():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -642,13 +687,17 @@ def get_suppliers():
         ''')
         
         suppliers = [dict(row) for row in cursor.fetchall()]
-        conn.close()
-        
         return jsonify({'success': True, 'suppliers': suppliers})
         
     except Exception as e:
         logger.error(f"Error fetching suppliers: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des fournisseurs'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/low-stock', methods=['GET'])
 def get_low_stock_items():
@@ -657,6 +706,7 @@ def get_low_stock_items():
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -701,13 +751,17 @@ def get_low_stock_items():
             d['sale_price'] = float(d.get('sale_price') or d.get('selling_price') or 0)
             d['min_stock_alert'] = int(d.get('min_stock_alert') or d.get('reorder_level') or 0)
             products.append(d)
-        conn.close()
-
         return jsonify({'success': True, 'products': products})
 
     except Exception as e:
         logger.error(f"Error fetching low stock items: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits en rupture', 'details': str(e)}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 # filepath: c:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\api\inventory.py
 
@@ -1229,6 +1283,7 @@ def lookup_by_barcode(barcode):
     if auth_check:
         return auth_check
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -1244,8 +1299,6 @@ def lookup_by_barcode(barcode):
         ''', (barcode,))
         
         product = cursor.fetchone()
-        conn.close()
-        
         if not product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
             
@@ -1254,6 +1307,12 @@ def lookup_by_barcode(barcode):
     except Exception as e:
         logger.error(f"Error looking up product by barcode: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la recherche par code-barres'}), 500
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/inventory-count', methods=['POST'])
 def record_inventory_count():

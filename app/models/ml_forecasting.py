@@ -180,10 +180,26 @@ class StockPredictor:
     def _generate_restock_suggestion(self, product_data) -> Optional[Dict[str, Any]]:
         """Generate restock suggestion for individual product"""
         try:
-            current_stock = product_data['current_stock']
-            total_sold = product_data['total_sold'] or 0
-            sales_days = product_data['sales_days'] or 0
-            total_profit = product_data['total_profit'] or 0
+            # Sanitize numeric fields (sqlite NULL -> pandas NaN)
+            def _num(val, default=0):
+                try:
+                    if val is None:
+                        return default
+                    # pandas/np NaN handling
+                    if isinstance(val, float) and np.isnan(val):
+                        return default
+                    if isinstance(val, (np.floating,)) and np.isnan(float(val)):
+                        return default
+                    return val
+                except Exception:
+                    return default
+
+            current_stock = int(_num(product_data.get('current_stock'), 0))
+            total_sold = _num(product_data.get('total_sold'), 0)
+            sales_days = int(_num(product_data.get('sales_days'), 0))
+            total_profit = _num(product_data.get('total_profit'), 0)
+            min_stock_alert = int(_num(product_data.get('min_stock_alert'), 5))
+            purchase_price = float(_num(product_data.get('purchase_price'), 0))
             
             # Skip if no sales history
             if total_sold == 0:
@@ -191,30 +207,33 @@ class StockPredictor:
             
             # Calculate velocity metrics
             daily_sales = total_sold / max(sales_days, 1)
-            profit_per_unit = total_profit / total_sold if total_sold > 0 else 0
+            profit_per_unit = (float(total_profit) / float(total_sold)) if total_sold > 0 else 0
             
             # Calculate suggested restock quantity
             # Base on 30 days of sales + safety stock
-            suggested_quantity = int(daily_sales * 30 + product_data['min_stock_alert'])
+            base_qty = (daily_sales * 30) + min_stock_alert
+            if isinstance(base_qty, float) and np.isnan(base_qty):
+                base_qty = float(min_stock_alert)
+            suggested_quantity = int(max(0, round(base_qty)))
             
             # Adjust based on profitability
             if profit_per_unit > 100:  # High profit items
-                suggested_quantity = int(suggested_quantity * 1.2)
+                suggested_quantity = int(max(0, round(suggested_quantity * 1.2)))
             elif profit_per_unit < 20:  # Low profit items
-                suggested_quantity = int(suggested_quantity * 0.8)
+                suggested_quantity = int(max(0, round(suggested_quantity * 0.8)))
             
             # Ensure minimum order
-            suggested_quantity = max(suggested_quantity, product_data['min_stock_alert'] * 2)
+            suggested_quantity = max(suggested_quantity, int(min_stock_alert) * 2)
             
             # Calculate investment required
-            investment_required = suggested_quantity * product_data['purchase_price']
+            investment_required = float(suggested_quantity) * purchase_price
             
             # Calculate priority score
-            velocity_score = min(daily_sales * 10, 50)  # Max 50 points
-            profit_score = min(profit_per_unit / 10, 30)  # Max 30 points
+            velocity_score = min(max(0.0, float(daily_sales) * 10.0), 50.0)  # Max 50 points
+            profit_score = min(max(0.0, float(profit_per_unit) / 10.0), 30.0)  # Max 30 points
             stock_urgency = max(0, 20 - current_stock)  # Max 20 points
             
-            priority_score = velocity_score + profit_score + stock_urgency
+            priority_score = float(velocity_score) + float(profit_score) + float(stock_urgency)
             
             # Determine priority level
             if priority_score >= 70:
@@ -229,12 +248,12 @@ class StockPredictor:
                 'product_name': product_data['name'],
                 'current_stock': current_stock,
                 'suggested_quantity': suggested_quantity,
-                'investment_required': round(investment_required, 0),
-                'daily_sales_rate': round(daily_sales, 2),
-                'profit_per_unit': round(profit_per_unit, 0),
+                'investment_required': round(float(investment_required), 0),
+                'daily_sales_rate': round(float(daily_sales), 2),
+                'profit_per_unit': round(float(profit_per_unit), 0),
                 'priority': priority,
                 'priority_score': round(priority_score, 1),
-                'confidence': min(0.9, sales_days / 30),  # Higher confidence with more data
+                'confidence': min(0.9, (sales_days / 30) if sales_days else 0.0),  # Higher confidence with more data
                 'reasoning': self._generate_restock_reasoning(priority, daily_sales, profit_per_unit, current_stock)
             }
             
