@@ -375,6 +375,12 @@ def dashboard():
             # Get activity log and top selling products
             recent_activities = db_manager.get_recent_activities(limit=10) if db_manager is not None else []
             top_selling_products = db_manager.get_top_selling_products(days=30, limit=5) if db_manager is not None else []
+            # Broaden the window for first paint if recent window is empty
+            if not top_selling_products and db_manager is not None:
+                try:
+                    top_selling_products = db_manager.get_top_selling_products(days=3650, limit=5)
+                except Exception:
+                    top_selling_products = []
             
             # Get sales chart data for visualization
             sales_chart_data = db_manager.get_sales_chart_data(days=7) if db_manager is not None else {'daily': {'labels': [], 'data': []}, 'weekly': {'labels': [], 'data': []}}

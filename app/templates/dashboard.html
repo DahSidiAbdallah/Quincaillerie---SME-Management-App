@@ -117,7 +117,33 @@
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h3 class="text-lg font-semibold text-gray-900 mb-4">Produits les Plus Vendus</h3>
             <div class="space-y-4" id="topProducts">
-                <!-- Will be populated by JavaScript -->
+                {% if top_selling_products and top_selling_products|length > 0 %}
+                    {% for product in top_selling_products %}
+                    <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg mb-2">
+                        <div class="flex items-center">
+                            <div class="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                                <span class="text-blue-600 font-semibold">{{ loop.index }}</span>
+                            </div>
+                            <div>
+                                <p class="font-medium text-gray-900">{{ product.name }}</p>
+                                <p class="text-sm text-gray-500">{{ product.quantity_sold or 0 }} unités vendues</p>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-semibold text-gray-900">{{ format_currency(product.total_sales or 0) }}</p>
+                            <p class="text-sm text-gray-500">{{ product.category or '' }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="animate-pulse flex space-x-4">
+                        <div class="rounded bg-gray-200 h-10 w-10"></div>
+                        <div class="flex-1 space-y-2 py-1">
+                            <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                            <div class="h-3 bg-gray-100 rounded w-1/2"></div>
+                        </div>
+                    </div>
+                {% endif %}
             </div>
             
             <div class="mt-4 text-center">
@@ -277,24 +303,56 @@
 </main>
 {% endblock %}
 
-{% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% block extra_scripts %}
+<!-- Initial sales chart JSON injected server-side for non-empty first paint -->
+<script id="initial-sales-data" type="application/json">
+{{ (sales_chart_data or {'daily': {'labels': [], 'data': []}, 'weekly': {'labels': [], 'data': []}}) | tojson }}
+</script>
 
 <script>
+    // Pre-seed initial sales chart data from server render for fast first paint (parsed from JSON script tag)
+    (function seedInitialSalesChart(){
+        try {
+            const node = document.getElementById('initial-sales-data');
+            window.__INITIAL_SALES_CHART__ = node ? JSON.parse(node.textContent || '{}') : {};
+        } catch (e) {
+            console.warn('Failed to parse initial sales chart data', e);
+            window.__INITIAL_SALES_CHART__ = {};
+        }
+    })();
+
     // Sales Chart
     let salesChart;
+    let salesChartReady = false; // track if chart is available
     let salesChartDataCache = null; // cache last fetched sales chart data
     
     function initializeSalesChart() {
+        // Guard: if Chart.js failed to load (offline/CDN blocked), skip chart setup gracefully
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js not available. Skipping chart initialization.');
+            const container = document.getElementById('salesChart');
+            if (container && container.parentElement) {
+                container.parentElement.innerHTML = '<div class="text-sm text-gray-500">Graphique indisponible hors-ligne.</div>';
+            }
+            salesChartReady = false;
+            return;
+        }
+
+        // Choose initial data from server-side render when available
+        const initial = window.__INITIAL_SALES_CHART__ || {};
+        const hasInitialDaily = initial.daily && Array.isArray(initial.daily.labels) && initial.daily.labels.length > 0;
+        const defaultDailyLabels = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+        const initialLabels = hasInitialDaily ? initial.daily.labels : defaultDailyLabels;
+        const initialData = hasInitialDaily ? initial.daily.data : [0, 0, 0, 0, 0, 0, 0];
+
         const ctx = document.getElementById('salesChart').getContext('2d');
-        
         salesChart = new Chart(ctx, {
             type: 'line',
             data: {
-                labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
+                labels: initialLabels,
                 datasets: [{
                     label: `Ventes (${window.AppConfig?.currentCurrency || 'MRU'})`,
-                    data: [0, 0, 0, 0, 0, 0, 0],
+                    data: initialData,
                     borderColor: 'rgb(59, 130, 246)',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                     tension: 0.4,
@@ -321,16 +379,20 @@
                 }
             }
         });
-        
-        // Load actual sales data
+        // Seed cache with server-provided data to enable instant period switching
+        if (initial && (initial.daily || initial.weekly)) {
+            salesChartDataCache = { success: true, daily: initial.daily || { labels: [], data: [] }, weekly: initial.weekly || { labels: [], data: [] } };
+        }
+
+        salesChartReady = true;
+        // Kick off async refresh; UI already shows initial data
         loadSalesChartData('daily');
     }
     
     async function loadSalesChartData(period) {
         try {
             console.log('Loading sales chart data for period:', period);
-            const response = await fetch('/api/dashboard/sales-chart');
-            const data = await response.json();
+            const data = await (window.apiFetch ? window.apiFetch('/api/dashboard/sales-chart') : (await fetch('/api/dashboard/sales-chart', { credentials: 'same-origin' })).json());
             console.log('Sales chart response:', data);
             if (data.success) {
                 salesChartDataCache = data;
@@ -380,9 +442,12 @@
             }
         }
         
-        salesChart.data.labels = newLabels;
-        salesChart.data.datasets[0].data = newData;
-        salesChart.update();
+        // Only update if chart exists
+        if (salesChartReady && salesChart) {
+            salesChart.data.labels = newLabels;
+            salesChart.data.datasets[0].data = newData;
+            salesChart.update();
+        }
         
         // Change button styles safely (add/remove classes)
         document.querySelectorAll('.sales-chart-btn').forEach(btn => {
@@ -435,8 +500,7 @@
     async function loadTopProducts() {
         try {
             console.log('Loading top products...');
-            const response = await fetch('/api/dashboard/top-products');
-            const data = await response.json();
+            const data = await (window.apiFetch ? window.apiFetch('/api/dashboard/top-products') : (await fetch('/api/dashboard/top-products', { credentials: 'same-origin' })).json());
             
             console.log('Top products response:', data);
             
@@ -470,7 +534,7 @@
             } else {
                 console.error('No products data or API error:', data);
                 const container = document.getElementById('topProducts');
-                container.innerHTML = '<p class="text-gray-500">Aucun produit trouvé</p>';
+                container.innerHTML = '<p class="text-gray-500">Aucun produit trouvé</p><p class="text-xs text-gray-400">(Astuce: effectuez ou importez des ventes récentes pour remplir cette section)</p>';
             }
         } catch (error) {
             console.error('Error loading top products:', error);
@@ -629,28 +693,15 @@
     // Initialize dashboard
     document.addEventListener('DOMContentLoaded', function() {
         console.log('Dashboard initialization started...');
-        
-        try {
-            initializeSalesChart();
-            console.log('Sales chart initialized');
-            
-            updateDashboardData();
-            console.log('Dashboard data update started');
-            
-            loadTopProducts();
-            console.log('Top products loading started');
-            
-            loadSalesChartData('daily');
-            console.log('Sales chart data loading started');
-            
-            loadRecentActivities();
-            console.log('Recent activities loading started');
-            
-            loadAIInsights();
-            console.log('AI insights loading started');
-        } catch (error) {
-            console.error('Error during dashboard initialization:', error);
-        }
+
+        // Initialize chart safely without blocking other sections
+        try { initializeSalesChart(); } catch (e) { console.error('Chart init failed', e); }
+
+        // Always proceed to load other sections, even if chart fails
+        try { updateDashboardData(); } catch (e) { console.error('Stats load failed', e); }
+        try { loadTopProducts(); } catch (e) { console.error('Top products load failed', e); }
+        try { loadRecentActivities(); } catch (e) { console.error('Activities load failed', e); }
+        try { loadAIInsights(); } catch (e) { console.error('AI insights load failed', e); }
         
         // Update data every 5 minutes
         setInterval(updateDashboardData, 5 * 60 * 1000);

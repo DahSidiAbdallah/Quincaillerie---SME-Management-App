@@ -5,7 +5,7 @@ Dashboard API for Quincaillerie & SME Management App
 Provides endpoints for dashboard data
 """
 
-from flask import Blueprint, jsonify, session
+from flask import Blueprint, jsonify, session, request
 from datetime import datetime, timedelta
 import logging
 from db.database import DatabaseManager
@@ -40,15 +40,39 @@ def get_dashboard_stats():
         # Get cash balance
         cash_balance = db_manager.get_cash_balance() or 0
 
-        # Calculate yesterday's sales for comparison (optional; 0 if unavailable)
-        # Placeholder until DatabaseManager implements a proper method
-        yesterday_sales = 0
+        # Calculate yesterday's sales for comparison
+        yesterday_total = 0.0
+        conn = None
+        try:
+            conn = db_manager.get_connection()
+            cursor = conn.cursor()
+            today = datetime.now().strftime('%Y-%m-%d')
+            cursor.execute(
+                '''
+                SELECT SUM(total_amount) as total, COUNT(*) as count
+                FROM sales
+                WHERE DATE(sale_date) = DATE(?, '-1 day')
+                AND is_deleted = 0
+                ''',
+                (today,),
+            )
+            row = cursor.fetchone()
+            if row and row['total'] is not None:
+                yesterday_total = float(row['total']) or 0.0
+        except Exception as _e:
+            yesterday_total = 0.0
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
 
         # Calculate sales change percentage
         sales_change = 0.0
-        if yesterday_sales and yesterday_sales > 0:
+        if yesterday_total and yesterday_total > 0:
             try:
-                sales_change = ((float(today_sales_amount) - float(yesterday_sales)) / float(yesterday_sales)) * 100.0
+                sales_change = ((float(today_sales_amount) - float(yesterday_total)) / float(yesterday_total)) * 100.0
             except Exception:
                 sales_change = 0.0
 
@@ -72,11 +96,45 @@ def get_dashboard_stats():
         logger.error(f"Error fetching dashboard stats: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
+@dashboard_bp.route('/yesterday-sales')
+def get_yesterday_sales():
+    """Get yesterday's sales summary (total and count)."""
+    conn = None
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        today = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute(
+            '''
+            SELECT SUM(total_amount) as total, COUNT(*) as count
+            FROM sales
+            WHERE DATE(sale_date) = DATE(?, '-1 day')
+            AND is_deleted = 0
+            ''',
+            (today,),
+        )
+        row = cursor.fetchone()
+        result = {
+            'total': float(row['total']) if row and row['total'] else 0.0,
+            'count': int(row['count']) if row and row['count'] else 0,
+        }
+        return jsonify({'success': True, 'yesterday': result})
+    except Exception as e:
+        logger.error(f"Error fetching yesterday sales: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
+
 @dashboard_bp.route('/activities')
 def get_dashboard_activities():
     """Get recent activities for dashboard"""
     try:
-        activities = db_manager.get_recent_activities(limit=10)
+        limit = int(request.args.get('limit', 10))
+        activities = db_manager.get_recent_activities(limit=limit)
         
         # Format activities for frontend display
         formatted_activities = []
@@ -103,6 +161,9 @@ def get_top_products():
     try:
         # Get top selling products
         products = db_manager.get_top_selling_products(days=30, limit=5)
+        # Fallback: if no recent sales, broaden the window to all-time to avoid empty UI
+        if not products:
+            products = db_manager.get_top_selling_products(days=3650, limit=5)
         # Ensure numeric monetary values are returned (frontend applies formatting)
         for product in products:
             try:
