@@ -82,9 +82,9 @@
             <i class="fas fa-plus mr-2"></i>
             Nouvelle Vente
         </button>
-        <button @click="showCustomerModal = true" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center">
-            <i class="fas fa-user-plus mr-2"></i>
-            Nouveau Client
+        <button @click="showCustomerListModal = true" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-users mr-2"></i>
+            Voir Clients
         </button>
         <button @click="generateReport()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center">
             <i class="fas fa-file-alt mr-2"></i>
@@ -100,7 +100,7 @@
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200">
             <div class="flex justify-between items-center">
-                <h3 class="text-lg font-medium text-gray-900">Transactions Récentes</h3>
+                <h3 class="text-lg font-medium text-gray-900">Toutes les Ventes</h3>
                 <div class="flex space-x-2">
                     <input type="text" x-model="searchTerm" placeholder="Rechercher..." class="border border-gray-300 rounded-md px-3 py-2 text-sm">
                     <select x-model="filterStatus" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
@@ -154,6 +154,12 @@
                                 <button @click="printInvoice(sale)" class="text-purple-600 hover:text-purple-900">
                                     <i class="fas fa-print"></i>
                                 </button>
+                                <button x-show="sale.status === 'pending'" @click="markSalePaid(sale)" class="text-emerald-600 hover:text-emerald-800 ml-3" title="Marquer payé">
+                                    <i class="fas fa-check-circle"></i>
+                                </button>
+                                <button x-show="window.AppConfig?.userRole === 'admin'" @click="openDeleteSale(sale)" class="text-red-600 hover:text-red-800 ml-3" title="Supprimer">
+                                    <i class="fas fa-trash"></i>
+                                </button>
                             </td>
                         </tr>
                     </template>
@@ -186,12 +192,17 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Client</label>
-                            <select x-model="newSale.customer_id" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            <div class="flex gap-2">
+                            <select x-model.number="newSale.customer_id" class="flex-1 border border-gray-300 rounded-md px-3 py-2" required>
                                 <option value="">Sélectionner un client</option>
                                 <template x-for="customer in customers" :key="customer.id">
                                     <option :value="customer.id" x-text="customer.name"></option>
                                 </template>
                             </select>
+                            <button type="button" @click="showCustomerListModal = true" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-md" title="Parcourir les clients">
+                                <i class="fas fa-users"></i>
+                            </button>
+                            </div>
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Mode de Paiement</label>
@@ -208,10 +219,10 @@
                         <label class="block text-sm font-medium text-gray-700 mb-2">Produits</label>
                         <div class="border border-gray-300 rounded-md p-4">
                             <div class="flex gap-2 mb-2">
-                                <select x-model="selectedProduct" class="flex-1 border border-gray-300 rounded-md px-3 py-2">
+                                <select x-model.number="selectedProductId" class="flex-1 border border-gray-300 rounded-md px-3 py-2">
                                     <option value="">Sélectionner un produit</option>
                                     <template x-for="product in products" :key="product.id">
-                                            <option :value="product" x-text="product.name + ' - ' + (window.formatCurrency ? window.formatCurrency(product.price) : (product.price + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))) "></option>
+                                            <option :value="product.id" x-text="product.name + ' - ' + (window.formatCurrency ? window.formatCurrency(product.price) : (product.price + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))) "></option>
                                     </template>
                                 </select>
                                 <input type="number" x-model="selectedQuantity" placeholder="Quantité" min="1" class="w-24 border border-gray-300 rounded-md px-3 py-2">
@@ -256,46 +267,49 @@
         </div>
     </div>
 
-    <!-- New Customer Modal -->
-    <div x-show="showCustomerModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
-        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 lg:w-1/3 shadow-lg rounded-md bg-white">
-            <div class="mt-3">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-medium text-gray-900">Nouveau Client</h3>
-                    <button @click="showCustomerModal = false" class="text-gray-400 hover:text-gray-600">
+    <!-- New Customer Modal removed by request -->
+
+    <!-- Customer List Modal -->
+    <div x-show="showCustomerListModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+        <div class="relative top-16 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Liste des Clients</h3>
+                <div class="flex items-center gap-2">
+                    <a href="/customers" class="text-sm text-blue-600 hover:text-blue-800" title="Gérer les clients dans la page dédiée">Gérer</a>
+                    <button @click="showCustomerListModal = false" class="text-gray-400 hover:text-gray-600">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
-
-                <form @submit.prevent="createCustomer()">
-                    <div class="grid grid-cols-1 gap-4 mb-4">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Nom</label>
-                            <input type="text" x-model="newCustomer.name" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
-                            <input type="text" x-model="newCustomer.phone" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                            <input type="email" x-model="newCustomer.email" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Adresse</label>
-                            <input type="text" x-model="newCustomer.address" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        </div>
-                    </div>
-
-                    <div class="flex justify-end space-x-3">
-                        <button type="button" @click="showCustomerModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
-                            Annuler
-                        </button>
-                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md">
-                            Ajouter
-                        </button>
-                    </div>
-                </form>
+            </div>
+            <div class="mb-3">
+                <input type="text" x-model="customerSearchTerm" placeholder="Rechercher un client (nom, téléphone)" class="w-full border border-gray-300 rounded-md px-3 py-2">
+            </div>
+            <div class="max-h-[60vh] overflow-y-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nom</th>
+                            <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Téléphone</th>
+                            <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="c in filteredCustomersList" :key="c.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 text-sm" x-text="c.name"></td>
+                                <td class="px-4 py-2 text-sm text-gray-600" x-text="c.phone || '-' "></td>
+                                <td class="px-4 py-2 text-sm text-right">
+                                    <button @click="selectCustomer(c)" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded">
+                                        Sélectionner
+                                    </button>
+                                </td>
+                            </tr>
+                        </template>
+                        <tr x-show="filteredCustomersList.length === 0">
+                            <td colspan="3" class="px-4 py-6 text-center text-gray-500">Aucun client</td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -404,6 +418,25 @@
             </div>
         </div>
     </div>
+
+    <!-- Delete Sale Modal -->
+    <div x-show="showDeleteSaleModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+        <div class="relative top-24 mx-auto p-5 border w-11/12 md:w-1/3 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-lg font-medium text-gray-900">Supprimer la vente</h3>
+                    <button @click="showDeleteSaleModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <p class="text-gray-700 mb-4">Êtes-vous sûr de vouloir supprimer la vente #<span x-text="deleteSaleData?.id"></span> ? Cette action va restaurer le stock.</p>
+                <div class="flex justify-end gap-2">
+                    <button @click="showDeleteSaleModal = false" class="px-4 py-2 rounded-md border">Annuler</button>
+                    <button @click="confirmDeleteSale()" class="px-4 py-2 rounded-md bg-red-600 text-white">Supprimer</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </main>
 {% endblock %}
 
@@ -423,17 +456,21 @@ function salesManager() {
         products: [],
         showNewSaleModal: false,
         showCustomerModal: false,
+    showCustomerListModal: false,
     showEditSaleModal: false,
     showViewSaleModal: false,
+    showDeleteSaleModal: false,
         isLoading: false,
         newSale: { customer_id: '', payment_method: 'cash', items: [] },
         newCustomer: { name: '', phone: '', email: '', address: '' },
     editSaleData: null,
     viewSaleData: null,
-        selectedProduct: '',
+    deleteSaleData: null,
+        selectedProductId: '',
         selectedQuantity: 1,
         searchTerm: '',
         filterStatus: '',
+        customerSearchTerm: '',
         init() {
             this.loadData();
         },
@@ -442,9 +479,8 @@ function salesManager() {
             this.toasts.push(t);
             setTimeout(() => { this.toasts = this.toasts.filter(x => x.id !== t.id); }, timeout);
         },
-        loadData() {
-        fetch('/api/sales?limit=100')
-                .then(r => r.json())
+    loadData() {
+    apiFetch('/api/sales?limit=100000')
                 .then(data => { if (data.success) { this.sales = (data.sales||[]).map(s=>({
                     id: s.id,
                     customer_name: s.customer_name || s.customer || 'Client',
@@ -455,20 +491,36 @@ function salesManager() {
                 })); } })
                 .catch(err => console.error('Error loading sales:', err));
 
-            fetch('/api/sales/stats')
-                .then(r => r.json())
+            apiFetch('/api/sales/stats')
                 .then(data => { if (data.success) { this.stats = data.stats || this.stats; } })
                 .catch(err => console.error('Error loading sales stats:', err));
 
-            fetch('/api/inventory/products')
-                .then(r => r.json())
+            apiFetch('/api/inventory/products')
                 .then(data => { if (data.success) { this.products = data.products.map(p => ({id:p.id,name:p.name,price:p.sale_price,stock:p.current_stock})) || []; } })
                 .catch(err => console.error('Error loading products:', err));
 
-            fetch('/api/customers')
-                .then(r => r.json())
+            apiFetch('/api/customers')
                 .then(data => { if (data.success) { this.customers = data.customers || []; this.stats.active_customers = this.customers.length; } })
                 .catch(err => console.error('Error loading customers:', err));
+        },
+        openDeleteSale(sale) {
+            this.deleteSaleData = sale;
+            this.showDeleteSaleModal = true;
+        },
+        confirmDeleteSale() {
+            if (!this.deleteSaleData) return;
+            apiFetch(`/api/sales/sales/${this.deleteSaleData.id}`, { method: 'DELETE' })
+                .then(data=>{
+                    if (data.success) {
+                        this.showToast('success','Vente supprimée');
+                        this.showDeleteSaleModal = false;
+                        this.deleteSaleData = null;
+                        this.loadData();
+                    } else {
+                        this.showToast('error', data.message || 'Échec de la suppression');
+                    }
+                })
+                .catch(err=>{ console.error(err); this.showToast('error','Erreur lors de la suppression'); });
         },
         get filteredSales() {
             return this.sales.filter(sale => {
@@ -478,15 +530,25 @@ function salesManager() {
                 return matchesSearch && matchesStatus;
             });
         },
+        get filteredCustomersList() {
+            const term = (this.customerSearchTerm || '').toLowerCase();
+            return (this.customers || []).filter(c =>
+                !term || (c.name && c.name.toLowerCase().includes(term)) || (c.phone && c.phone.toLowerCase().includes(term))
+            );
+        },
+        selectCustomer(c) {
+            if (!c || !c.id) return;
+            this.newSale.customer_id = c.id;
+            this.showCustomerListModal = false;
+            this.showToast('success', `Client sélectionné: ${c.name}`);
+        },
         addProduct() {
-            if (!this.selectedProduct || this.selectedQuantity < 1) return;
-            this.newSale.items.push({
-                id: this.selectedProduct.id,
-                name: this.selectedProduct.name,
-                price: this.selectedProduct.price,
-                quantity: parseInt(this.selectedQuantity)
-            });
-            this.selectedProduct = '';
+            const pid = this.selectedProductId;
+            if (!pid || this.selectedQuantity < 1) return;
+            const p = this.products.find(x => x.id == pid);
+            if (!p) return;
+            this.newSale.items.push({ id: p.id, name: p.name, price: p.price, quantity: parseInt(this.selectedQuantity) });
+            this.selectedProductId = '';
             this.selectedQuantity = 1;
         },
         removeProduct(index) {
@@ -508,12 +570,10 @@ function salesManager() {
                 paid_amount: paid_amount,
                 sale_items
             };
-            fetch('/api/sales/sales', {
+            apiFetch('/api/sales/sales', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(saleData)
+                body: saleData
             })
-            .then(r => r.json())
             .then(data => {
                 if (data.success) {
                     this.showNewSaleModal = false;
@@ -527,11 +587,23 @@ function salesManager() {
         .catch(err => { console.error('Error creating sale:', err); this.showToast('error','Erreur lors de la création de la vente'); });
         },
         viewSale(sale) {
-            fetch(`/api/sales/sales/${sale.id}`)
-                .then(r=>r.json())
+            apiFetch(`/api/sales/sales/${sale.id}`)
                 .then(data=>{
                     if(data.success){
-                        this.viewSaleData = data.sale;
+                        const s = data.sale || {};
+                        // Frontend safety: if no items, synthesize a single summary line
+                        if (!Array.isArray(s.items) || s.items.length === 0) {
+                            const total = Number(s.total_amount ?? s.total ?? 0) || 0;
+                            s.items = [{
+                                id: null,
+                                product_id: null,
+                                product_name: 'Vente (non détaillée)',
+                                quantity: 1,
+                                unit_price: total,
+                                total_price: total
+                            }];
+                        }
+                        this.viewSaleData = s;
                         this.showViewSaleModal = true;
                     } else {
                         this.showToast('error', data.message || 'Impossible de charger la vente');
@@ -541,8 +613,7 @@ function salesManager() {
         },
         editSale(sale) {
             // Load full sale details then open modal
-            fetch(`/api/sales/sales/${sale.id}`)
-                .then(r=>r.json())
+            apiFetch(`/api/sales/sales/${sale.id}`)
                 .then(data=>{
                     if(data.success){
                         const s = data.sale || {};
@@ -568,8 +639,7 @@ function salesManager() {
                 credit_due_date: this.editSaleData.credit_due_date || null,
                 notes: this.editSaleData.notes
             };
-            fetch(`/api/sales/sales/${this.editSaleData.id}`,{ method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) })
-                .then(r=>r.json())
+            apiFetch(`/api/sales/sales/${this.editSaleData.id}`,{ method:'PUT', body: payload })
                 .then(data=>{
                     if(data.success){
                         this.showToast('success','Vente mise à jour');
@@ -581,6 +651,21 @@ function salesManager() {
                     }
                 })
                 .catch(err=>{ console.error(err); this.showToast('error','Erreur lors de la mise à jour'); });
+        },
+        async markSalePaid(sale){
+            try{
+                const data = await apiFetch(`/api/sales/sales/${sale.id}/status`, { method:'PUT', body:{ status:'paid' } });
+                if(data.success){
+                    this.showToast('success', 'Vente marquée payée');
+                    // Reload both the sales list and stats to sync the KPI
+                    this.loadData();
+                } else {
+                    this.showToast('error', data.message || 'Impossible de mettre à jour le statut');
+                }
+            } catch(e){
+                console.error(e);
+                this.showToast('error', 'Erreur lors de la mise à jour du statut');
+            }
         },
         printInvoice(sale) {
             // If view modal is open, print its content; otherwise open it first
@@ -622,9 +707,10 @@ function salesManager() {
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
+                    const createdId = data.customer_id;
                     fetch('/api/customers')
                         .then(r=>r.json())
-                        .then(d=>{ if(d.success){ this.customers=d.customers||[]; if(this.newSale && d.customer_id){ this.newSale.customer_id=d.customer_id; } this.stats.active_customers=this.customers.length; } });
+                        .then(d=>{ if(d.success){ this.customers=d.customers||[]; if(this.newSale && createdId){ this.newSale.customer_id=createdId; } this.stats.active_customers=this.customers.length; } });
                     this.showCustomerModal=false;
                     this.newCustomer={ name:'', phone:'', email:'', address:'' };
             this.showToast('success','Client ajouté avec succès');

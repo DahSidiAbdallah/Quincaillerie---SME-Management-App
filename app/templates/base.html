@@ -22,6 +22,8 @@
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Icons (Font Awesome) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     
     <!-- Chart.js for analytics -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -178,6 +180,10 @@
                                class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
                                 💰 Ventes
                             </a>
+                            <a href="{{ url_for('customers') }}" 
+                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                                👥 Clients
+                            </a>
                             <a href="{{ url_for('finance') }}" 
                                class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
                                 💳 Finance
@@ -273,6 +279,10 @@
                     <a href="{{ url_for('sales') }}" 
                        class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
                         💰 Ventes
+                    </a>
+                    <a href="{{ url_for('customers') }}" 
+                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                        👥 Clients
                     </a>
                     <a href="{{ url_for('finance') }}" 
                        class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">

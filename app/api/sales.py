@@ -129,8 +129,8 @@ def create_sale():
             cursor.execute('''
                 INSERT INTO client_debts 
                 (client_name, client_phone, sale_id, total_amount, paid_amount, 
-                 remaining_amount, due_date, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 remaining_amount, due_date, created_by, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 data.get('customer_name', ''),
                 data.get('customer_phone', ''),
@@ -139,7 +139,8 @@ def create_sale():
                 float(data['paid_amount']),
                 debt_amount,
                 data.get('credit_due_date'),
-                session['user_id']
+                session['user_id'],
+                'pending'
             ))
         
         conn.commit()
@@ -322,13 +323,23 @@ def get_sales_stats():
         ''')
         active_customers = cursor.fetchone()
         
-        # Get pending payments (credit sales not fully paid)
+        # Get pending payments primarily from client_debts table
         cursor.execute('''
             SELECT COUNT(*) as count
             FROM client_debts
-            WHERE remaining_amount > 0 AND status = 'pending'
+            WHERE remaining_amount > 0
         ''')
-        pending_payments = cursor.fetchone()
+        pending_from_debts = cursor.fetchone()
+
+        # Include legacy credit sales that don't yet have a matching debt row
+        cursor.execute('''
+            SELECT COUNT(*) as count
+            FROM sales s
+            WHERE s.is_credit = 1 AND NOT EXISTS (
+                SELECT 1 FROM client_debts cd WHERE cd.sale_id = s.id
+            )
+        ''')
+        legacy_credit_pending = cursor.fetchone()
         
         # Get monthly revenue
         cursor.execute('''
@@ -344,7 +355,7 @@ def get_sales_stats():
         stats = {
             'today_sales': float(today_sales['amount'] or 0),
             'active_customers': active_customers['count'],
-            'pending_payments': pending_payments['count'],
+            'pending_payments': (pending_from_debts['count'] or 0) + (legacy_credit_pending['count'] or 0),
             'monthly_revenue': float(monthly_revenue['amount'] or 0)
         }
         
@@ -414,6 +425,152 @@ def update_sale(sale_id):
     except Exception as e:
         logger.error(f"Error updating sale: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour de la vente'}), 500
+
+@sales_bp.route('/sales/<int:sale_id>', methods=['DELETE'])
+def delete_sale(sale_id):
+    """Delete a sale and reverse stock movements (admin only)"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    if session.get('user_role') != 'admin':
+        return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        # Fetch sale and items
+        cursor.execute('SELECT * FROM sales WHERE id = ?', (sale_id,))
+        sale = cursor.fetchone()
+        if not sale:
+            return jsonify({'success': False, 'message': 'Vente non trouvée'}), 404
+
+        cursor.execute('SELECT * FROM sale_items WHERE sale_id = ?', (sale_id,))
+        items = [dict(row) for row in cursor.fetchall()]
+
+        # Start transaction
+        cursor.execute('BEGIN TRANSACTION')
+
+        # Reverse stock for each item and record movement
+        for it in items:
+            product_id = it['product_id']
+            qty = int(it['quantity'])
+            unit_price = float(it.get('unit_price', 0) or 0)
+            total_amount = float(it.get('total_price', unit_price * qty))
+
+            # Update stock
+            cursor.execute('SELECT current_stock FROM products WHERE id = ?', (product_id,))
+            prod = cursor.fetchone()
+            if prod is None:
+                conn.rollback()
+                return jsonify({'success': False, 'message': f'Produit {product_id} introuvable pour restauration de stock'}), 404
+            new_stock = (prod[0] or 0) + qty
+            cursor.execute('UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_stock, product_id))
+
+            # Stock movement entry
+            cursor.execute('''
+                INSERT INTO stock_movements (product_id, movement_type, quantity, unit_price, total_amount, reference, notes, created_by)
+                VALUES (?, 'in', ?, ?, ?, ?, ?, ?)
+            ''', (
+                product_id,
+                qty,
+                unit_price,
+                total_amount,
+                f'Annulation vente #{sale_id}',
+                'Restauration du stock suite à suppression de la vente',
+                session['user_id']
+            ))
+
+        # Get sale items (prefer new schema sale_items; gracefully fallback to legacy sale_details)
+        items: list[dict] = []
+        try:
+            cursor.execute('''
+                SELECT si.*, p.name as product_name, p.purchase_price
+                FROM sale_items si
+                LEFT JOIN products p ON si.product_id = p.id
+                WHERE si.sale_id = ?
+            ''', (sale_id,))
+            items = [dict(row) for row in cursor.fetchall()]
+        except Exception:
+            # If sale_items table doesn't exist in this DB variant, ignore and fallback
+            items = []
+
+    # Fallback: some legacy sales store lines in sale_details
+        if not items:
+            try:
+                cursor.execute('''
+                    SELECT sd.*, p.name as product_name, p.purchase_price
+                    FROM sale_details sd
+                    LEFT JOIN products p ON sd.product_id = p.id
+                    WHERE sd.sale_id = ?
+                ''', (sale_id,))
+                legacy_rows = cursor.fetchall()
+                items = []
+                for r in legacy_rows:
+                    row = dict(r)
+                    # Normalize expected fields used by the frontend
+                    qty = row.get('quantity')
+                    try:
+                        qty = int(qty) if qty is not None else 0
+                    except Exception:
+                        qty = int(float(qty) if qty is not None else 0)
+                    unit_price = row.get('unit_price')
+                    try:
+                        unit_price = float(unit_price) if unit_price is not None else 0.0
+                    except Exception:
+                        unit_price = 0.0
+                    total_price = row.get('total_price')
+                    try:
+                        total_price = float(total_price) if total_price is not None else unit_price * qty
+                    except Exception:
+                        total_price = unit_price * qty
+                    row['quantity'] = qty
+                    row['unit_price'] = unit_price
+                    row['total_price'] = total_price
+                    # product_name may be None if product was deleted; frontend handles with fallback '#<id>'
+                    items.append(row)
+            except Exception:
+                # No legacy table; keep items as-is
+                pass
+
+        # Final safety: if still no items (legacy aggregated sale without detail rows),
+        # synthesize a single summary line so the UI isn't empty.
+        if not items:
+            try:
+                unit = float(sale.get('total_amount') or 0)
+            except Exception:
+                unit = 0.0
+            items = [{
+                'id': None,
+                'product_id': None,
+                'product_name': 'Vente (non détaillée)',
+                'quantity': 1,
+                'unit_price': unit,
+                'total_price': unit
+            }]
+
+        # Finally delete the sale
+        cursor.execute('DELETE FROM sales WHERE id = ?', (sale_id,))
+
+        conn.commit()
+        conn.close()
+
+        # Log and sync
+        db_manager.log_user_action(
+            session['user_id'],
+            'delete_sale',
+            f'Suppression vente #{sale_id}'
+        )
+        try:
+            db_manager.add_to_sync_queue('sales', sale_id, 'delete', {})
+        except Exception:
+            pass
+
+        return jsonify({'success': True, 'message': 'Vente supprimée et stock restauré'})
+
+    except Exception as e:
+        logger.error(f"Error deleting sale: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la suppression de la vente'}), 500
 
 @sales_bp.route('/debts', methods=['GET'])
 def get_client_debts():
@@ -504,6 +661,18 @@ def record_debt_payment(debt_id):
             SET paid_amount = ?, remaining_amount = ?, status = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         ''', (new_paid_amount, new_remaining_amount, new_status, debt_id))
+
+        # If fully paid, ensure the parent sale reflects paid status
+        if new_status == 'paid' and debt.get('sale_id'):
+            try:
+                cursor.execute('''
+                    UPDATE sales
+                    SET paid_amount = total_amount, is_credit = 0, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (debt['sale_id'],))
+            except Exception:
+                # If sales schema differs, ignore gracefully
+                pass
         
         conn.commit()
         conn.close()
@@ -536,6 +705,76 @@ def record_debt_payment(debt_id):
     except Exception as e:
         logger.error(f"Error recording debt payment: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de l\'enregistrement du paiement'}), 500
+
+
+@sales_bp.route('/sales/<int:sale_id>/status', methods=['PUT'])
+def update_sale_status(sale_id):
+    """Update sale status. Currently supports marking a credit sale as paid."""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    data = request.get_json(silent=True) or {}
+    status = (data.get('status') or '').lower()
+    if status not in ('paid',):
+        return jsonify({'success': False, 'message': "Statut non supporté. Utilisez 'paid'."}), 400
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT * FROM sales WHERE id = ?', (sale_id,))
+        sale = cursor.fetchone()
+        if not sale:
+            return jsonify({'success': False, 'message': 'Vente non trouvée'}), 404
+
+        sale = dict(sale)
+
+        if status == 'paid':
+            # If already paid, no-op
+            if not sale.get('is_credit') and float(sale.get('paid_amount', 0) or 0) >= float(sale.get('total_amount', 0) or 0):
+                conn.close()
+                return jsonify({'success': True, 'message': 'La vente est déjà payée'})
+
+            cursor.execute('BEGIN TRANSACTION')
+            # Update sale
+            cursor.execute('''
+                UPDATE sales
+                SET paid_amount = total_amount, is_credit = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (sale_id,))
+
+            # Update any associated debt to paid
+            try:
+                cursor.execute('''
+                    UPDATE client_debts
+                    SET paid_amount = total_amount, remaining_amount = 0, status = 'paid', updated_at = CURRENT_TIMESTAMP
+                    WHERE sale_id = ?
+                ''', (sale_id,))
+            except Exception:
+                pass
+
+            conn.commit()
+            conn.close()
+
+            # Log and sync
+            db_manager.log_user_action(
+                session['user_id'],
+                'update_sale_status',
+                f'Marquée payée vente #{sale_id}'
+            )
+            try:
+                db_manager.add_to_sync_queue('sales', sale_id, 'update', {'status': 'paid'})
+            except Exception:
+                pass
+
+            return jsonify({'success': True, 'message': 'Vente marquée comme payée'})
+
+    except Exception as e:
+        logger.error(f"Error updating sale status: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour du statut de la vente'}), 500
+    # Fallback (shouldn't reach here)
+    return jsonify({'success': False, 'message': 'Requête invalide'}), 400
 
 @sales_bp.route('/statistics', methods=['GET'])
 def get_sales_statistics():

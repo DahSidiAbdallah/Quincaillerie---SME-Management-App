@@ -698,6 +698,7 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script type="application/json" id="initial-products-data">{{ (initial_products or []) | tojson }}</script>
 {% if debug_pages %}
 <script src="{{ url_for('static', filename='js/inventory-diagnostics.js') }}"></script>
 {% endif %}
@@ -866,8 +867,24 @@
                 window.__inventoryPageInitialized = true;
             }
 
-            // Show loading initially
-            showLoading();
+            // If server seeded initial products, render them immediately for first paint
+            try {
+                const initialTag = document.getElementById('initial-products-data');
+                if (initialTag && initialTag.textContent) {
+                    const parsed = JSON.parse(initialTag.textContent);
+                    if (Array.isArray(parsed) && parsed.length) {
+                        currentProducts = parsed;
+                        hideLoading();
+                        displayProducts();
+                    } else {
+                        showLoading();
+                    }
+                } else {
+                    showLoading();
+                }
+            } catch (_) {
+                showLoading();
+            }
             console.log('🔄 Initial setup complete, showing loading state');
 
             // Add early safety checks to prevent infinite loading
@@ -920,8 +937,8 @@
         // Form submission
         document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
 
-        // Load products on page load
-        loadProductsWithAuth();
+    // Load products on page load (async refresh)
+    loadProductsWithAuth();
     }
     
     // Show login redirect message and redirect to login page
@@ -953,9 +970,13 @@
             const params = new URLSearchParams();
             if (searchInput && searchInput.value) params.append('search', searchInput.value);
             if (categoryFilter && categoryFilter.value) params.append('category', categoryFilter.value);
-            if (stockFilter && stockFilter.value && 
-                (stockFilter.value === 'low_stock' || stockFilter.value === 'out_of_stock')) {
-                params.append('low_stock', 'true');
+            if (stockFilter && stockFilter.value) {
+                if (stockFilter.value === 'low_stock') {
+                    params.append('low_stock', 'true');
+                } else if (stockFilter.value === 'out_of_stock') {
+                    params.append('out_of_stock', 'true');
+                }
+                // 'in_stock' uses default behavior (no special param)
             }
             
             console.log('🔍 Fetching products with params:', params.toString());
@@ -1210,48 +1231,11 @@
                 return;
             }
             
-            // Direct approach instead of using createProductCard
+            // Use reusable card factory to ensure consistent actions/selection support
             currentProducts.forEach((product, index) => {
                 try {
-                    console.log(`⚙️ Creating card for product ${index + 1}/${currentProducts.length}: ${product.name}`);
-                    
-                    // Create card directly with simplified approach
-                    const card = document.createElement('div');
-                    card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-                    
-                    // Make sure we have the required properties with defaults
-                    const currentStock = product.current_stock || 0;
-                    const minStock = product.min_stock_alert || 0;
-                    const name = product.name || 'Unnamed Product';
-                    const category = product.category || 'No Category';
-                    const price = product.sale_price || 0;
-                    
-                    // Determine stock level class
-                    let stockClass = 'bg-green-100 text-green-800';
-                    if (currentStock <= 0) {
-                        stockClass = 'bg-red-100 text-red-800';
-                    } else if (currentStock <= minStock) {
-                        stockClass = 'bg-yellow-100 text-yellow-800';
-                    }
-                    
-                    card.innerHTML = `
-                        <div class="flex items-start justify-between mb-4">
-                            <div class="flex-1">
-                                <h3 class="font-bold text-lg">${name}</h3>
-                                <p class="text-gray-600 text-sm">${category}</p>
-                            </div>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="font-bold text-lg">${window.formatCurrency ? window.formatCurrency(price) : (Number(price||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
-                            <span class="${stockClass} text-sm px-2 py-1 rounded-full">
-                                Stock: ${currentStock}
-                            </span>
-                        </div>
-                    `;
-                    
-                    // Add click handler
-                    card.addEventListener('click', () => editProduct(product.id));
-                    
+                    console.log(`⚙️ Creating card for product ${index + 1}/${currentProducts.length}: ${product?.name || 'Produit'}`);
+                    const card = createProductCard(product);
                     container.appendChild(card);
                 } catch (cardError) {
                     console.error(`❌ Error creating card for product ${index}:`, cardError);
@@ -1273,17 +1257,16 @@
                 if (container && currentProducts && currentProducts.length > 0) {
                     container.innerHTML = '';
                     currentProducts.forEach(product => {
-                        const card = document.createElement('div');
-                        card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-                        card.innerHTML = `
-                            <h3 class="font-bold text-lg">${product.name || 'Unnamed Product'}</h3>
-                            <p class="text-gray-600 text-sm">${product.category || 'No Category'}</p>
-                            <div class="flex justify-between items-center mt-2">
-                                <span class="font-semibold">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
-                                <span>Stock: ${product.current_stock || 0}</span>
-                            </div>
-                        `;
-                        container.appendChild(card);
+                        try {
+                            const card = createProductCard(product);
+                            container.appendChild(card);
+                        } catch (e) {
+                            // Minimal fallback if factory fails
+                            const div = document.createElement('div');
+                            div.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+                            div.textContent = product?.name || 'Produit';
+                            container.appendChild(div);
+                        }
                     });
                     console.log('✅ Fallback display successful');
                 }
@@ -1508,7 +1491,15 @@
     // Product operations
     async function loadProductData(productId) {
         try {
-            const response = await fetch(`/api/inventory/products/${productId}`);
+            const response = await fetch(`/api/inventory/products/${productId}` , {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -1524,7 +1515,8 @@
                 document.getElementById('purchasePrice').value = product.purchase_price || '';
                 document.getElementById('salePrice').value = product.sale_price;
                 document.getElementById('currentStock').value = product.current_stock;
-                document.getElementById('minStock').value = product.min_stock || '';
+                // Prefer reorder_level/min_stock_alert for min stock
+                document.getElementById('minStock').value = (product.reorder_level ?? product.min_stock_alert ?? product.min_stock ?? '');
                 document.getElementById('maxStock').value = product.max_stock || '';
                 document.getElementById('supplier').value = product.supplier || '';
                 document.getElementById('location').value = product.location || '';
@@ -1554,7 +1546,11 @@
                 method: method,
                 headers: {
                     'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
                 },
+                credentials: 'same-origin',
+                cache: 'no-store',
                 body: JSON.stringify(productData)
             });
             
@@ -1598,7 +1594,13 @@
         
         try {
             const response = await fetch(`/api/inventory/products/${productId}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
             });
             
             const result = await response.json();
@@ -1618,7 +1620,15 @@
         // Add this function to inventory.html
     function adjustStock(productId) {
         // Get product details
-        fetch(`/api/inventory/products/${productId}`)
+        fetch(`/api/inventory/products/${productId}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -1718,12 +1728,15 @@
         };
         
         // Send to API
-        fetch('/api/inventory/adjust-stock', {
+    fetch('/api/inventory/adjust-stock', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest'
-            },
+        'X-Requested-With': 'XMLHttpRequest',
+        'Accept': 'application/json'
+        },
+        credentials: 'same-origin',
+        cache: 'no-store',
             body: JSON.stringify(data)
         })
         .then(response => response.json())
@@ -1745,7 +1758,15 @@
         // Add this function to inventory.html
     function viewDetails(productId) {
         // Get product details with extended info
-        fetch(`/api/inventory/products/${productId}/details`)
+        fetch(`/api/inventory/products/${productId}/details`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
@@ -1854,7 +1875,7 @@
                                                     movements.map(m => `
                                                     <tr>
                                                         <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${new Date(m.movement_date).toLocaleDateString()}
+                                                            ${new Date(m.movement_time || m.movement_date || m.created_at || Date.now()).toLocaleDateString()}
                                                         </td>
                                                         <td class="px-4 py-2 text-sm">
                                                             <span class="px-2 py-1 text-xs font-medium rounded-full 
@@ -2143,8 +2164,11 @@
             method: 'POST',
             body: formData,
             headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
         })
         .then(response => response.json())
         .then(data => {
@@ -2283,8 +2307,11 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
                 },
+                credentials: 'same-origin',
+                cache: 'no-store',
                 body: JSON.stringify({
                     operation: operation,
                     product_ids: selectedProducts,
@@ -2343,7 +2370,15 @@
         }
         
         try {
-            const response = await fetch(`/api/inventory/products?search=${encodeURIComponent(searchTerm)}`);
+            const response = await fetch(`/api/inventory/products?search=${encodeURIComponent(searchTerm)}`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
             const data = await response.json();
             
             if (data.success && data.products && data.products.length > 0) {
@@ -2453,8 +2488,11 @@
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest'
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
                 },
+                credentials: 'same-origin',
+                cache: 'no-store',
                 body: JSON.stringify({
                     reference: reference,
                     notes: notes,
@@ -2495,7 +2533,15 @@
         document.getElementById('deleteImageBtn').disabled = true;
         
         // Check if product has image
-        fetch(`/api/inventory/products/${productId}`)
+        fetch(`/api/inventory/products/${productId}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success && data.product) {
@@ -2551,8 +2597,11 @@
                 method: 'POST',
                 body: formData,
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
             });
             
             const data = await response.json();
@@ -2586,8 +2635,11 @@
             const response = await fetch(`/api/inventory/product-image/${productId}`, {
                 method: 'DELETE',
                 headers: {
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
             });
             
             const data = await response.json();

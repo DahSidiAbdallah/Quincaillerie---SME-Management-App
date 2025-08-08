@@ -1,88 +1,8 @@
-<!DOCTYPE html>
-<html lang="{{ current_language }}">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clients - Quincaillerie Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script src="{{ url_for('static', filename='js/common.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/customer.js') }}"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-</head>
-<body class="bg-gray-50">
-    <!-- Header Navigation -->
-    <header class="bg-slate-800 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-16">
-                <div class="flex items-center">
-                    <i class="fas fa-wrench mr-2"></i>
-                    <h1 class="text-xl font-bold">Quincaillerie</h1>
-                </div>
-                
-                <!-- Main Navigation -->
-                <nav class="hidden md:flex space-x-6">
-                    <a href="/dashboard" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-tachometer-alt mr-2"></i>Tableau de bord
-                    </a>
-                    <a href="/inventory" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-boxes mr-2"></i>Inventaire
-                    </a>
-                    <a href="/sales" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-shopping-cart mr-2"></i>Ventes
-                    </a>
-                    <a href="/customers" class="flex items-center px-3 py-2 rounded-md text-sm font-medium bg-blue-600">
-                        <i class="fas fa-users mr-2"></i>Clients
-                    </a>
-                    <a href="/finance" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-chart-line mr-2"></i>Finance
-                    </a>
-                    <a href="/reports" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-chart-bar mr-2"></i>Rapports
-                    </a>
-                    <a href="/admin" class="flex items-center px-3 py-2 rounded-md text-sm font-medium hover:bg-slate-700">
-                        <i class="fas fa-cog mr-2"></i>Admin
-                    </a>
-                </nav>
-                
-                <!-- User Menu -->
-                <div class="flex items-center space-x-4">
-                    <span class="text-green-400"><i class="fas fa-circle text-xs"></i> Synchronisé</span>
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-globe"></i>
-                        <div class="relative" x-data="{ open: false }">
-                            <button @click="open = !open" class="bg-slate-700 text-white rounded px-2 py-1 text-sm flex items-center">
-                                {{ supported_languages[current_language] }}
-                                <svg class="ml-1 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                                </svg>
-                            </button>
-                            <div x-show="open" @click.away="open = false" 
-                                 class="absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg py-1 z-50">
-                                {% for lang_code, lang_name in supported_languages.items() %}
-                                <button onclick="changeLanguage('{{ lang_code }}')"
-                                       class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left">
-                                    {{ lang_name }}
-                                </button>
-                                {% endfor %}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        <i class="fas fa-user"></i>
-                        <span class="text-sm">{{ current_user }}</span>
-                        <span class="bg-blue-600 text-xs px-2 py-1 rounded">{{ user_role }}</span>
-                    </div>
-                    <button onclick="handleLogout()" class="text-red-400 hover:text-red-300">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </header>
+{% extends "base.html" %}
+{% block title %}Clients - Quincaillerie Management{% endblock %}
 
-    <!-- Main Content -->
-    <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="customerManager()">
+{% block content %}
+    <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="customerManager()">
         <!-- Page Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Gestion des Clients</h1>
@@ -244,35 +164,15 @@
                 </div>
             </div>
         </div>
-    </main>
+    </div>
+{% endblock %}
 
-    <!-- Footer -->
-    <footer class="bg-slate-800 text-white py-4 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <p>&copy; {{ current_year }} Quincaillerie Management v{{ app_version }}</p>
-            <div class="flex items-center space-x-4">
-                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
-                <span>Mode: {{ user_role|title }}</span>
-                <span>Utilisateur: {{ current_user }}</span>
-            </div>
-        </div>
-    </footer>
-
-    <script>
-        // Additional functions for customer management
-        document.addEventListener('alpine:init', () => {
-            Alpine.data('customerManager', customerManager);
-        });
-
-        // Export customers function
-        function exportCustomers() {
-            // To be implemented
-            alert('Fonctionnalité d\'exportation à implémenter');
-        }
-    </script>
+{% block extra_scripts %}
+<script src="{{ url_for('static', filename='js/customer.js') }}"></script>
+<script>
+    document.addEventListener('alpine:init', () => { Alpine.data('customerManager', customerManager); });
+    function exportCustomers() { window.open('/api/reports/export/customers', '_blank'); }
     
-    <style>
-        [x-cloak] { display: none !important; }
-    </style>
-</body>
-</html>
+</script>
+<style>[x-cloak]{display:none!important;}</style>
+{% endblock %}

@@ -447,7 +447,7 @@ def inventory():
     try:
         # Get stats for initial display
         inventory_stats = db_manager.get_inventory_stats() if db_manager is not None else {}
-        
+
         # Prepare context for template
         # Determine currency for server-side formatting if needed
         current_currency = 'MRU'
@@ -458,14 +458,59 @@ def inventory():
         except Exception:
             pass
 
+        # Server-seed a small initial set of products for first paint
+        initial_products = []
+        if db_manager is not None:
+            conn = None
+            try:
+                conn = db_manager.get_connection()
+                cur = conn.cursor()
+                # Detect optional columns
+                cur.execute("PRAGMA table_info(products)")
+                product_cols = {row[1] for row in cur.fetchall()}
+                active_clause = " WHERE p.is_active = 1" if 'is_active' in product_cols else " WHERE 1=1"
+                # Basic product snapshot for first paint (limit 24)
+                query = f"""
+                    SELECT 
+                        p.*, 
+                        (p.purchase_price * p.current_stock) as stock_value
+                    FROM products p
+                    {active_clause}
+                    ORDER BY p.name ASC
+                    LIMIT 24
+                """
+                cur.execute(query)
+                rows = cur.fetchall()
+                for r in rows:
+                    item = dict(r)
+                    # Frontend-friendly aliases and safe defaults
+                    item['sale_price'] = float(item.get('sale_price') or item.get('selling_price') or 0)
+                    item['selling_price'] = float(item.get('selling_price') or item.get('sale_price') or 0)
+                    item['min_stock_alert'] = int(item.get('min_stock_alert') or item.get('reorder_level') or 0)
+                    item['reorder_level'] = int(item.get('reorder_level') or item.get('min_stock_alert') or 0)
+                    item['code'] = item.get('sku') or ''
+                    item['unit'] = item.get('unit') or 'pièce'
+                    item['location'] = item.get('location') or ''
+                    item['image_path'] = item.get('image_url') or None
+                    initial_products.append(item)
+            except Exception:
+                initial_products = []
+            finally:
+                try:
+                    if conn:
+                        conn.close()
+                except Exception:
+                    pass
+
         context = {
             'total_products': inventory_stats.get('total', 0),
             'in_stock_products': inventory_stats.get('total', 0) - inventory_stats.get('out_of_stock', 0),
             'low_stock_products': inventory_stats.get('low_stock', 0),
-            'stock_value': f"{inventory_stats.get('inventory_value', 0):,.0f}",  # numeric only; template will add currency
-            'categories': inventory_stats.get('categories', [])
+            # Pass numeric; template formatter will render currency
+            'stock_value': inventory_stats.get('inventory_value', 0),
+            'categories': inventory_stats.get('categories', []),
+            'initial_products': initial_products,
         }
-
         # Pass debug flag for conditional client assets
         debug_pages = app.config.get('DEBUG_PAGES')
         return render_template('inventory.html', debug_pages=debug_pages, **context)
@@ -477,7 +522,7 @@ def inventory():
             total_products=0,
             in_stock_products=0,
             low_stock_products=0,
-            stock_value='0',
+            stock_value=0,
             categories=[],
             debug_pages=app.config.get('DEBUG_PAGES')
         )

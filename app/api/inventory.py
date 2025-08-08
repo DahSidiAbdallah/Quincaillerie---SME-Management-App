@@ -54,24 +54,26 @@ def get_products():
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
+
     conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Get query parameters
         category = request.args.get('category')
         search = request.args.get('search')
         low_stock = request.args.get('low_stock', 'false').lower() == 'true'
         out_of_stock = request.args.get('out_of_stock', 'false').lower() == 'true'
-        
+        in_stock = request.args.get('in_stock', 'false').lower() == 'true'
+
         # Detect optional columns for robust filtering
         cursor.execute("PRAGMA table_info(products)")
         product_cols = {row[1] for row in cursor.fetchall()}
 
         # Base query
-        query = '''
+        query = (
+            """
             SELECT 
                 p.*, 
                 u.username as created_by_name,
@@ -79,22 +81,23 @@ def get_products():
             FROM products p
             LEFT JOIN users u ON p.created_by = u.id
             WHERE 1=1
-        '''
+            """
+        )
         # Apply active filter only if column exists
         if 'is_active' in product_cols:
             query += ' AND p.is_active = 1'
         params = []
-        
+
         # Add filters
         if category:
             query += ' AND p.category = ?'
             params.append(category)
-        
+
         if search:
             query += ' AND (p.name LIKE ? OR p.description LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)'
-            like = f'%{search}%'
+            like = f"%{search}%"
             params.extend([like, like, like, like])
-        
+
         if low_stock:
             if 'reorder_level' in product_cols:
                 query += ' AND p.current_stock <= p.reorder_level'
@@ -109,39 +112,39 @@ def get_products():
 
         if out_of_stock:
             query += ' AND p.current_stock <= 0'
-        
+
+        if in_stock:
+            query += ' AND p.current_stock > 0'
+
         query += ' ORDER BY p.name ASC'
-        
+
         cursor.execute(query, params)
         raw_rows = cursor.fetchall()
         products = []
         for row in raw_rows:
             item = dict(row)
             # Provide frontend-friendly aliases and defaults
-            item.setdefault('sale_price', float(item.get('sale_price') or item.get('selling_price') or 0))
-            item.setdefault('selling_price', float(item.get('selling_price') or item.get('sale_price') or 0))
-            item.setdefault('min_stock_alert', int(item.get('min_stock_alert') or item.get('reorder_level') or 0))
-            item.setdefault('reorder_level', int(item.get('reorder_level') or item.get('min_stock_alert') or 0))
+            item['sale_price'] = float(item.get('sale_price') or item.get('selling_price') or 0)
+            item['selling_price'] = float(item.get('selling_price') or item.get('sale_price') or 0)
+            item['min_stock_alert'] = int(item.get('min_stock_alert') or item.get('reorder_level') or 0)
+            item['reorder_level'] = int(item.get('reorder_level') or item.get('min_stock_alert') or 0)
             # Code/SKU alias
             item['code'] = item.get('sku') or ''
-            # Unit/location not in schema; provide safe defaults
-            item.setdefault('unit', 'pièce')
-            item.setdefault('location', '')
+            # Unit/location defaults
+            item['unit'] = item.get('unit') or 'pièce'
+            item['location'] = item.get('location') or ''
             # Image path
-            if item.get('image_url'):
-                item['image_path'] = item['image_url']
-            else:
-                item['image_path'] = None
+            item['image_path'] = item.get('image_url') or None
             products.append(item)
 
         # Fetch inventory stats for the page
         stats = db_manager.get_inventory_stats()
 
         return jsonify({'success': True, 'products': products, 'stats': stats})
-        
+
     except Exception as e:
         logger.error(f"Error fetching products: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits', 'details': str(e)}), 500
+        return jsonify({'success': False, 'message': "Erreur lors de la récupération des produits", 'details': str(e)}), 500
     finally:
         try:
             if conn:
