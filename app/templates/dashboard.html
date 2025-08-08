@@ -283,6 +283,7 @@
 <script>
     // Sales Chart
     let salesChart;
+    let salesChartDataCache = null; // cache last fetched sales chart data
     
     function initializeSalesChart() {
         const ctx = document.getElementById('salesChart').getContext('2d');
@@ -330,10 +331,9 @@
             console.log('Loading sales chart data for period:', period);
             const response = await fetch('/api/dashboard/sales-chart');
             const data = await response.json();
-            
             console.log('Sales chart response:', data);
-            
             if (data.success) {
+                salesChartDataCache = data;
                 updateSalesChart(period, data);
                 console.log('Sales chart updated successfully');
             } else {
@@ -346,6 +346,16 @@
     
     function updateSalesChart(period, data = null) {
         let newData, newLabels;
+        // If no fresh data provided, try cache; if still missing, fetch and return
+        if (!data) {
+            if (salesChartDataCache && salesChartDataCache.success) {
+                data = salesChartDataCache;
+            } else {
+                // Fetch then update with the requested period
+                loadSalesChartData(period);
+                return;
+            }
+        }
         
         if (data && data.success) {
             if (period === 'weekly' && data.weekly) {
@@ -374,28 +384,19 @@
         salesChart.data.datasets[0].data = newData;
         salesChart.update();
         
-        // Change button styles
-        if (period === 'weekly') {
-            document.querySelectorAll('.sales-chart-btn').forEach(btn => {
-                if (btn.innerText.includes('Hebdomadaire')) {
-                    btn.classList.replace('bg-gray-100', 'bg-blue-100');
-                    btn.classList.replace('text-gray-600', 'text-blue-600');
-                } else {
-                    btn.classList.replace('bg-blue-100', 'bg-gray-100');
-                    btn.classList.replace('text-blue-600', 'text-gray-600');
-                }
-            });
-        } else {
-            document.querySelectorAll('.sales-chart-btn').forEach(btn => {
-                if (btn.innerText.includes('Journalier')) {
-                    btn.classList.replace('bg-gray-100', 'bg-blue-100');
-                    btn.classList.replace('text-gray-600', 'text-blue-600');
-                } else {
-                    btn.classList.replace('bg-blue-100', 'bg-gray-100');
-                    btn.classList.replace('text-blue-600', 'text-gray-600');
-                }
-            });
-        }
+        // Change button styles safely (add/remove classes)
+        document.querySelectorAll('.sales-chart-btn').forEach(btn => {
+            const isWeekly = btn.innerText.includes('Hebdomadaire');
+            const isDaily = btn.innerText.includes('Journalier');
+            const active = (period === 'weekly' && isWeekly) || (period === 'daily' && isDaily);
+            if (active) {
+                btn.classList.remove('bg-gray-100', 'text-gray-600');
+                btn.classList.add('bg-blue-100', 'text-blue-600');
+            } else {
+                btn.classList.remove('bg-blue-100', 'text-blue-600');
+                btn.classList.add('bg-gray-100', 'text-gray-600');
+            }
+        });
     }
     
     // Real-time data updates

@@ -348,37 +348,49 @@ def get_price_suggestions():
         product_id = request.args.get('product_id')
         target_margin = float(request.args.get('target_margin', 25))  # Default 25% margin
         
+        # Determine detail table availability (sale_items preferred, fallback to sale_details)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_items'")
+        has_sale_items = cursor.fetchone() is not None
+        detail_table = 'sale_items' if has_sale_items else 'sale_details'
+        detail_alias = 'si'
+
         if product_id:
             # Suggestions for specific product
-            cursor.execute('''
+            cursor.execute(
+                f'''
                 SELECT p.*, 
-                       AVG(si.unit_price) as avg_selling_price,
-                       SUM(si.quantity) as total_sold,
+                       AVG({detail_alias}.unit_price) as avg_selling_price,
+                       SUM({detail_alias}.quantity) as total_sold,
                        COUNT(DISTINCT s.id) as sales_count
                 FROM products p
-                LEFT JOIN sale_items si ON p.id = si.product_id
-                LEFT JOIN sales s ON si.sale_id = s.id
+                LEFT JOIN {detail_table} {detail_alias} ON p.id = {detail_alias}.product_id
+                LEFT JOIN sales s ON {detail_alias}.sale_id = s.id
                 WHERE p.id = ? AND p.is_active = 1
                 GROUP BY p.id
-            ''', (product_id,))
-            
-            products = [dict(cursor.fetchone())]
+                ''',
+                (product_id,),
+            )
+
+            row = cursor.fetchone()
+            products = [dict(row)] if row else []
         else:
             # Suggestions for all products
-            cursor.execute('''
+            cursor.execute(
+                f'''
                 SELECT p.*, 
-                       AVG(si.unit_price) as avg_selling_price,
-                       SUM(si.quantity) as total_sold,
+                       AVG({detail_alias}.unit_price) as avg_selling_price,
+                       SUM({detail_alias}.quantity) as total_sold,
                        COUNT(DISTINCT s.id) as sales_count
                 FROM products p
-                LEFT JOIN sale_items si ON p.id = si.product_id
-                LEFT JOIN sales s ON si.sale_id = s.id
+                LEFT JOIN {detail_table} {detail_alias} ON p.id = {detail_alias}.product_id
+                LEFT JOIN sales s ON {detail_alias}.sale_id = s.id
                 WHERE p.is_active = 1
                 GROUP BY p.id
                 ORDER BY total_sold DESC
                 LIMIT 50
-            ''')
-            
+                '''
+            )
+
             products = [dict(row) for row in cursor.fetchall()]
         
         suggestions = []
@@ -387,8 +399,9 @@ def get_price_suggestions():
             if not product or product['purchase_price'] is None:
                 continue
             
-            current_price = product['sale_price']
-            purchase_price = product['purchase_price']
+            # Use selling_price (as per DB schema)
+            current_price = product.get('selling_price') or product.get('sale_price') or 0
+            purchase_price = product.get('purchase_price') or 0
             avg_selling_price = product['avg_selling_price'] or current_price
             total_sold = product['total_sold'] or 0
             

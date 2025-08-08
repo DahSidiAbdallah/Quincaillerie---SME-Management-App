@@ -165,12 +165,16 @@ def inject_globals():
     """Inject global variables into all templates"""
     # Determine current currency from settings if possible
     current_currency = 'MRU'
+    ai_enabled = True
     try:
         if db_manager is not None:
             settings = db_manager.get_app_settings()
             current_currency = (settings.get('currency') or 'MRU').upper()
+            # Gate AI features with settings flag (default True if missing)
+            ai_enabled = bool(settings.get('ai_features_enabled', True))
     except Exception as _e:
         current_currency = 'MRU'
+        ai_enabled = True
 
     # Simple money formatter for templates
     def format_currency(value):
@@ -191,7 +195,8 @@ def inject_globals():
         'current_year': datetime.now().year,
         'is_minimal_mode': not MODULES_AVAILABLE,
         'current_currency': current_currency,
-        'format_currency': format_currency
+    'format_currency': format_currency,
+    'ai_features_enabled': ai_enabled
     }
 
 # Main Routes
@@ -364,8 +369,7 @@ def dashboard():
             
             # Get revenue and financial data
             total_revenue = db_manager.get_total_revenue() if db_manager is not None else 0
-            pending_debts_data = db_manager.get_pending_debts() if db_manager is not None else {'total': 0, 'count': 0}
-            pending_debts = pending_debts_data.get('total', 0) if pending_debts_data else 0
+            pending_debts = db_manager.get_pending_debts() if db_manager is not None else {'total': 0, 'count': 0}
             cash_balance = db_manager.get_cash_balance() if db_manager is not None else 0
             
             # Get activity log and top selling products
@@ -473,6 +477,7 @@ def inventory():
         )
 
 
+# Debug-only pages are only registered when DEBUG_PAGES is enabled
 if app.config.get('DEBUG_PAGES'):
     @app.route('/inventory-launcher')
     def inventory_launcher():
@@ -1432,119 +1437,9 @@ def set_language(language):
     
     return redirect(redirect_url)
 
-# Dashboard API endpoints
-@app.route('/api/dashboard/stats')
-@login_required
-def dashboard_stats():
-    """Get dashboard statistics"""
-    if MODULES_AVAILABLE and db_manager is not None:
-        try:
-            # Return numeric values for currency; frontend will format with current currency
-            def as_number(value):
-                try:
-                    return float(value or 0)
-                except Exception:
-                    return 0.0
+# Dashboard API endpoints are provided by the dashboard blueprint (/api/dashboard/*)
 
-            # Fetch detailed statistics from database
-            inv_stats = db_manager.get_inventory_stats()
-            total_products = inv_stats.get('total', 0)
-            low_stock_items = db_manager.get_low_stock_items() if db_manager is not None else []
-            today_sales_data = db_manager.get_today_sales() if db_manager is not None else {'total': 0, 'count': 0}
-            total_revenue_val = db_manager.get_total_revenue() if db_manager is not None else 0
-            pending_debts_data = db_manager.get_pending_debts() if db_manager is not None else {'total': 0, 'count': 0}
-            cash_balance_val = db_manager.get_cash_balance() if db_manager is not None else 0
-
-            # Build response aligned with frontend expectations
-            stats = {
-                'total_products': total_products,
-                'low_stock_count': len(low_stock_items) if isinstance(low_stock_items, list) else 0,
-                'today_sales_count': today_sales_data.get('count', 0),
-                'today_sales': as_number(today_sales_data.get('total', 0)),
-                'total_revenue': as_number(total_revenue_val),
-                'pending_debts_count': pending_debts_data.get('count', 0),
-                'pending_debts': as_number(pending_debts_data.get('total', 0)),
-                'cash_balance': as_number(cash_balance_val)
-            }
-
-            return jsonify({'success': True, 'stats': stats})
-        except Exception as e:
-            logger.error(f"Error fetching dashboard stats: {e}")
-            return jsonify({'success': False, 'error': str(e)})
-    else:
-        # Fallback data for minimal mode
-        return jsonify({
-            'success': False,
-            'message': 'Statistics not available in minimal mode'
-        })
-
-@app.route('/api/dashboard/activities')
-@login_required
-def dashboard_activities():
-    """Get recent activities for dashboard"""
-    if MODULES_AVAILABLE and db_manager is not None:
-        try:
-            # Get limit parameter with default value
-            limit = request.args.get('limit', 10, type=int)
-            
-            # Fetch raw activities
-            rows = db_manager.get_recent_activities(limit=limit) if db_manager is not None else []
-
-            # Map to frontend-friendly shape
-            def determine_activity_type(action_type: str):
-                at = (action_type or '').lower()
-                if 'vente' in at or 'sale' in at:
-                    return 'sale'
-                if 'stock' in at or 'inventory' in at:
-                    return 'stock'
-                if 'login' in at or 'connexion' in at:
-                    return 'login'
-                if 'paiement' in at or 'payment' in at:
-                    return 'payment'
-                return 'other'
-
-            def time_ago(ts: str):
-                if not ts:
-                    return "Récemment"
-                try:
-                    t = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
-                    diff = datetime.now() - t
-                    if diff.days > 0:
-                        return f"Il y a {diff.days} jour{'s' if diff.days > 1 else ''}"
-                    if diff.seconds >= 3600:
-                        h = diff.seconds // 3600
-                        return f"Il y a {h} heure{'s' if h > 1 else ''}"
-                    if diff.seconds >= 60:
-                        m = diff.seconds // 60
-                        return f"Il y a {m} minute{'s' if m > 1 else ''}"
-                    return "À l'instant"
-                except Exception:
-                    return "Récemment"
-
-            activities = []
-            for r in rows:
-                action = (r.get('action_type') if isinstance(r, dict) else (r[0] if r else '')) or ''
-                description = (r.get('description') if isinstance(r, dict) else '') or ''
-                created = (r.get('created_at') if isinstance(r, dict) else None) or ''
-                username = (r.get('username') if isinstance(r, dict) else '') or ''
-                activities.append({
-                    'type': determine_activity_type(action),
-                    'title': action or 'Action',
-                    'description': description or '',
-                    'time_ago': time_ago(created),
-                    'user': username or ''
-                })
-
-            return jsonify({'success': True, 'activities': activities})
-        except Exception as e:
-            logger.error(f"Error fetching activities: {e}")
-            return jsonify({'success': False, 'error': str(e)})
-    else:
-        # Fallback data for minimal mode
-        return jsonify({
-            'success': False,
-            'message': 'Activities not available in minimal mode'
-        })
+# Dashboard activities are served by the dashboard blueprint
 
 # API Routes for offline synchronization
 @app.route('/api/sync/status')
