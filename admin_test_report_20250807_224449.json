@@ -1,0 +1,131 @@
+{
+  "summary": {
+    "total_tests": 20,
+    "passed": 13,
+    "failed": 7,
+    "success_rate": 65.0
+  },
+  "tests": [
+    {
+      "test": "File exists: app/templates/admin.html",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/templates/admin.html",
+      "timestamp": "2025-08-07T22:44:33.171075"
+    },
+    {
+      "test": "File exists: app/templates/settings.html",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/templates/settings.html",
+      "timestamp": "2025-08-07T22:44:33.171246"
+    },
+    {
+      "test": "File exists: app/api/admin.py",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/api/admin.py",
+      "timestamp": "2025-08-07T22:44:33.171386"
+    },
+    {
+      "test": "File exists: app/api/settings.py",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/api/settings.py",
+      "timestamp": "2025-08-07T22:44:33.171547"
+    },
+    {
+      "test": "File exists: app/data/database.py",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/data/database.py",
+      "timestamp": "2025-08-07T22:44:33.171660"
+    },
+    {
+      "test": "File exists: app/static/js/admin-diagnostics.js",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/static/js/admin-diagnostics.js",
+      "timestamp": "2025-08-07T22:44:33.171806"
+    },
+    {
+      "test": "Template syntax: app/templates/admin.html",
+      "success": false,
+      "message": "Missing: Alpine.js",
+      "timestamp": "2025-08-07T22:44:33.172533"
+    },
+    {
+      "test": "Template syntax: app/templates/settings.html",
+      "success": false,
+      "message": "Missing: Alpine.js",
+      "timestamp": "2025-08-07T22:44:33.173073"
+    },
+    {
+      "test": "get_users()",
+      "success": true,
+      "message": "Found 2 users",
+      "timestamp": "2025-08-07T22:44:33.174143"
+    },
+    {
+      "test": "get_app_settings()",
+      "success": true,
+      "message": "Found 10 settings",
+      "timestamp": "2025-08-07T22:44:33.174795"
+    },
+    {
+      "test": "set_app_settings()",
+      "success": false,
+      "message": "no such column: tax_rate",
+      "timestamp": "2025-08-07T22:44:33.175640"
+    },
+    {
+      "test": "create_user() validation",
+      "success": true,
+      "message": "Correctly rejects empty data",
+      "timestamp": "2025-08-07T22:44:33.176430"
+    },
+    {
+      "test": "GET /api/admin/settings",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:44:35.257151"
+    },
+    {
+      "test": "GET /api/admin/users",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:44:37.325738"
+    },
+    {
+      "test": "GET /api/admin/backups",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:44:39.384649"
+    },
+    {
+      "test": "GET /api/admin/logs",
+      "success": false,
+      "message": "Status: 404",
+      "timestamp": "2025-08-07T22:44:41.461152"
+    },
+    {
+      "test": "GET /api/admin/system-info",
+      "success": false,
+      "message": "Status: 404",
+      "timestamp": "2025-08-07T22:44:43.503993"
+    },
+    {
+      "test": "GET /api/settings/user-info",
+      "success": true,
+      "message": "Status: 200",
+      "timestamp": "2025-08-07T22:44:45.584283"
+    },
+    {
+      "test": "GET /api/settings/preferences",
+      "success": false,
+      "message": "Status: 404",
+      "timestamp": "2025-08-07T22:44:47.655656"
+    },
+    {
+      "test": "GET /api/settings/notifications",
+      "success": false,
+      "message": "Status: 404",
+      "timestamp": "2025-08-07T22:44:49.721411"
+    }
+  ],
+  "timestamp": "2025-08-07T22:44:49.726523"
+}

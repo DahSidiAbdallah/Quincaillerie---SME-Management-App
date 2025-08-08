@@ -548,6 +548,381 @@ def get_low_stock_items():
         logger.error(f"Error fetching low stock items: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits en rupture'}), 500
 
+# filepath: c:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\api\inventory.py
+
+# Add these new API endpoints to your inventory.py file
+
+@inventory_bp.route('/products/<int:product_id>/details', methods=['GET'])
+def get_product_details(product_id):
+    """Get detailed product info including stock movements and sales"""
+    if not require_auth():
+        return jsonify({'success': False, 'message': 'Authentication required'})
+    
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get product details
+        cursor.execute('''
+            SELECT * FROM products WHERE id = ? AND is_active = 1
+        ''', (product_id,))
+        
+        product = cursor.fetchone()
+        if not product:
+            return jsonify({'success': False, 'message': 'Product not found'})
+        
+        # Get stock movements
+        cursor.execute('''
+            SELECT 
+                id, movement_type, quantity, reference_id, reference_type, 
+                notes, movement_date
+            FROM stock_movements
+            WHERE product_id = ?
+            ORDER BY movement_date DESC
+            LIMIT 50
+        ''', (product_id,))
+        
+        movements = []
+        for row in cursor.fetchall():
+            movements.append(dict(row))
+        
+        # Get sales history
+        cursor.execute('''
+            SELECT 
+                sd.quantity, sd.unit_price, sd.total_price,
+                s.sale_date, s.invoice_number
+            FROM sale_details sd
+            JOIN sales s ON sd.sale_id = s.id
+            WHERE sd.product_id = ? AND s.is_deleted = 0
+            ORDER BY s.sale_date DESC
+            LIMIT 50
+        ''', (product_id,))
+        
+        sales = []
+        for row in cursor.fetchall():
+            sales.append(dict(row))
+        
+        return jsonify({
+            'success': True,
+            'product': dict(product),
+            'movements': movements,
+            'sales': sales
+        })
+    
+    except Exception as e:
+        logger.error(f"Error getting product details: {e}")
+        return jsonify({'success': False, 'message': f"Error: {str(e)}"})
+    finally:
+        conn.close()
+
+@inventory_bp.route('/adjust-stock', methods=['POST'])
+def adjust_stock():
+    """Adjust product stock with proper tracking"""
+    if not require_auth():
+        return jsonify({'success': False, 'message': 'Authentication required'})
+    
+    data = request.json
+    if not data:
+        return jsonify({'success': False, 'message': 'No data provided'})
+    
+    product_id = data.get('product_id')
+    adjustment_type = data.get('adjustment_type')
+    quantity = data.get('quantity', 0)
+    reason = data.get('reason')
+    notes = data.get('notes', '')
+    
+    if not product_id or not adjustment_type or quantity <= 0:
+        return jsonify({'success': False, 'message': 'Missing required fields'})
+    
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get current stock
+        cursor.execute('SELECT current_stock FROM products WHERE id = ?', (product_id,))
+        product = cursor.fetchone()
+        
+        if not product:
+            return jsonify({'success': False, 'message': 'Product not found'})
+        
+        current_stock = product['current_stock']
+        new_stock = current_stock
+        movement_type = 'adjustment'
+        
+        # Calculate new stock based on adjustment type
+        if adjustment_type == 'add':
+            new_stock = current_stock + quantity
+            movement_type = 'in'
+        elif adjustment_type == 'subtract':
+            if quantity > current_stock:
+                return jsonify({
+                    'success': False, 
+                    'message': f'Stock insuffisant. Stock actuel: {current_stock}'
+                })
+            new_stock = current_stock - quantity
+            movement_type = 'out'
+        elif adjustment_type == 'set':
+            if quantity < 0:
+                return jsonify({'success': False, 'message': 'La quantité ne peut pas être négative'})
+            new_stock = quantity
+            
+            # Determine movement type based on stock change
+            if new_stock > current_stock:
+                movement_type = 'in'
+                quantity = new_stock - current_stock
+            elif new_stock < current_stock:
+                movement_type = 'out'
+                quantity = current_stock - new_stock
+            else:
+                # No change in stock
+                return jsonify({'success': True, 'message': 'Aucun changement de stock nécessaire'})
+        
+        # Update product stock
+        cursor.execute('''
+            UPDATE products
+            SET current_stock = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (new_stock, product_id))
+        
+        # Record stock movement
+        cursor.execute('''
+            INSERT INTO stock_movements (
+                product_id, movement_type, quantity, reference_type, 
+                notes, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?)
+        ''', (
+            product_id, 
+            movement_type, 
+            quantity, 
+            reason, 
+            notes, 
+            session.get('user_id', 0)
+        ))
+        
+        # Log user action
+        db_manager.log_user_action(
+            user_id=session.get('user_id', 0),
+            action_type='stock_adjustment',
+            description=f"Ajusté le stock du produit #{product_id}: {movement_type} {quantity} ({reason})"
+        )
+        
+        conn.commit()
+        return jsonify({
+            'success': True, 
+            'message': 'Stock ajusté avec succès',
+            'new_stock': new_stock
+        })
+    
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error adjusting stock: {e}")
+        return jsonify({'success': False, 'message': f"Error: {str(e)}"})
+    finally:
+        conn.close()
+
+@inventory_bp.route('/download-import-template', methods=['GET'])
+def download_import_template():
+    """Provide template file for product import"""
+    import io
+    import csv
+    from flask import Response
+    
+    # Create CSV in memory
+    output = io.StringIO()
+    writer = csv.writer(output)
+    
+    # Write header row
+    writer.writerow([
+        'name', 'description', 'purchase_price', 'selling_price', 'sku',
+        'barcode', 'category', 'supplier', 'initial_stock', 'current_stock',
+        'reorder_level', 'min_order_quantity', 'unit'
+    ])
+    
+    # Write example row
+    writer.writerow([
+        'Marteau', 'Marteau de charpentier', '500', '800', 'MAR-001',
+        '123456789', 'Outils', 'Fournisseur XYZ', '10', '10', '5', '1', 'pièce'
+    ])
+    
+    # Return CSV file
+    output.seek(0)
+    return Response(
+        output,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=import_template.csv'}
+    )
+
+@inventory_bp.route('/import-products', methods=['POST'])
+def import_products():
+    """Import products from CSV/Excel file"""
+    if not require_auth():
+        return jsonify({'success': False, 'message': 'Authentication required'})
+    
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': 'Aucun fichier trouvé'})
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'success': False, 'message': 'Aucun fichier sélectionné'})
+    
+    # Process based on file extension
+    filename = file.filename.lower()
+    
+    try:
+        imported_count = 0
+        error_count = 0
+        errors = []
+        
+        if filename.endswith('.csv'):
+            # Process CSV
+            import csv
+            decoded_file = file.stream.read().decode('utf-8')
+            csv_reader = csv.DictReader(decoded_file.splitlines())
+            imported_count, error_count, errors = process_product_import(csv_reader)
+        
+        elif filename.endswith('.xlsx'):
+            # Process Excel
+            import pandas as pd
+            df = pd.read_excel(file)
+            records = df.to_dict('records')
+            imported_count, error_count, errors = process_product_import(records)
+        
+        else:
+            return jsonify({
+                'success': False, 
+                'message': 'Format de fichier non supporté. Utilisez CSV ou Excel (.xlsx)'
+            })
+        
+        return jsonify({
+            'success': True,
+            'imported_count': imported_count,
+            'error_count': error_count,
+            'errors': errors[:10]  # Return only first 10 errors
+        })
+    
+    except Exception as e:
+        logger.error(f"Error importing products: {e}")
+        return jsonify({'success': False, 'message': f"Erreur d'importation: {str(e)}"})
+
+def process_product_import(records):
+    """Process product records for import"""
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    imported_count = 0
+    error_count = 0
+    errors = []
+    
+    try:
+        # Start transaction
+        conn.execute('BEGIN TRANSACTION')
+        
+        for idx, record in enumerate(records, 1):
+            try:
+                # Clean and validate record
+                name = str(record.get('name', '')).strip()
+                if not name:
+                    errors.append(f"Ligne {idx}: Nom du produit manquant")
+                    error_count += 1
+                    continue
+                
+                # Try to convert prices to numbers
+                try:
+                    purchase_price = float(record.get('purchase_price', 0))
+                    selling_price = float(record.get('selling_price', 0))
+                except ValueError:
+                    errors.append(f"Ligne {idx}: Prix invalide")
+                    error_count += 1
+                    continue
+                
+                # Check required fields
+                if purchase_price <= 0 or selling_price <= 0:
+                    errors.append(f"Ligne {idx}: Prix invalides")
+                    error_count += 1
+                    continue
+                
+                # Check if product with same SKU already exists
+                sku = str(record.get('sku', '')).strip()
+                if sku:
+                    cursor.execute('SELECT id FROM products WHERE sku = ?', (sku,))
+                    if cursor.fetchone():
+                        errors.append(f"Ligne {idx}: SKU déjà existant")
+                        error_count += 1
+                        continue
+                
+                # Prepare product data
+                product_data = {
+                    'name': name,
+                    'description': str(record.get('description', '')).strip(),
+                    'purchase_price': purchase_price,
+                    'selling_price': selling_price,
+                    'sku': sku,
+                    'barcode': str(record.get('barcode', '')).strip(),
+                    'category': str(record.get('category', '')).strip(),
+                    'supplier': str(record.get('supplier', '')).strip(),
+                    'current_stock': int(record.get('current_stock', 0)),
+                    'reorder_level': int(record.get('reorder_level', 5)),
+                    'min_order_quantity': int(record.get('min_order_quantity', 1)),
+                    'created_by': session.get('user_id', 0)
+                }
+                
+                # Insert product
+                cursor.execute('''
+                    INSERT INTO products (
+                        name, description, purchase_price, selling_price, sku, barcode,
+                        category, supplier, current_stock, reorder_level, min_order_quantity,
+                        created_by, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ''', (
+                    product_data['name'], product_data['description'],
+                    product_data['purchase_price'], product_data['selling_price'],
+                    product_data['sku'], product_data['barcode'], product_data['category'],
+                    product_data['supplier'], product_data['current_stock'],
+                    product_data['reorder_level'], product_data['min_order_quantity'],
+                    product_data['created_by']
+                ))
+                
+                # Get product ID
+                product_id = cursor.lastrowid
+                
+                # Add stock movement if initial stock > 0
+                if product_data['current_stock'] > 0:
+                    cursor.execute('''
+                        INSERT INTO stock_movements (
+                            product_id, movement_type, quantity, reference_type, 
+                            notes, created_by
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                    ''', (
+                        product_id, 'in', product_data['current_stock'], 
+                        'initial_import', 'Import initial', product_data['created_by']
+                    ))
+                
+                imported_count += 1
+            
+            except Exception as e:
+                error_count += 1
+                errors.append(f"Ligne {idx}: {str(e)}")
+        
+        # Commit transaction if we have any successful imports
+        if imported_count > 0:
+            conn.commit()
+            
+            # Log the import action
+            db_manager.log_user_action(
+                user_id=session.get('user_id', 0),
+                action_type='product_import',
+                description=f"Importé {imported_count} produits (avec {error_count} erreurs)"
+            )
+        else:
+            conn.rollback()
+        
+        return imported_count, error_count, errors
+    
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error in product import processing: {e}")
+        raise
+    finally:
+        conn.close()
 
 @inventory_bp.route('/export', methods=['GET'])
 def export_inventory():
@@ -559,3 +934,140 @@ def export_inventory():
 def inventory_report_file():
     """Download inventory report (CSV)"""
     return redirect(url_for('reports.export_report', report_type='products'))
+
+@inventory_bp.route('/batch-operation', methods=['POST'])
+def batch_product_operation():
+    """Perform batch operations on multiple products"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
+    data = request.get_json()
+    if not data or 'operation' not in data or 'product_ids' not in data:
+        return jsonify({'success': False, 'message': 'Opération et IDs produits requis'}), 400
+    
+    operation = data['operation']
+    product_ids = data['product_ids']
+    
+    if not isinstance(product_ids, list) or len(product_ids) == 0:
+        return jsonify({'success': False, 'message': 'Liste de produits invalide'}), 400
+    
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        # Define operations
+        operations = {
+            'deactivate': {
+                'query': 'UPDATE products SET is_active = 0 WHERE id = ?',
+                'admin_only': True,
+                'log_action': 'deactivate_products',
+                'success_msg': 'Produits désactivés avec succès'
+            },
+            'activate': {
+                'query': 'UPDATE products SET is_active = 1 WHERE id = ?',
+                'admin_only': True,
+                'log_action': 'activate_products',
+                'success_msg': 'Produits activés avec succès'
+            },
+            'update_category': {
+                'query': 'UPDATE products SET category = ? WHERE id = ?',
+                'admin_only': False,
+                'log_action': 'update_products_category',
+                'success_msg': 'Catégorie mise à jour avec succès',
+                'extra_param': data.get('category', '')
+            },
+            'update_supplier': {
+                'query': 'UPDATE products SET supplier = ? WHERE id = ?',
+                'admin_only': False,
+                'log_action': 'update_products_supplier',
+                'success_msg': 'Fournisseur mis à jour avec succès',
+                'extra_param': data.get('supplier', '')
+            }
+        }
+        
+        if operation not in operations:
+            return jsonify({'success': False, 'message': 'Opération non supportée'}), 400
+        
+        op_info = operations[operation]
+        
+        # Check admin permission if required
+        if op_info['admin_only'] and session.get('user_role') != 'admin':
+            return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
+        
+        # Execute operation for each product
+        updated_count = 0
+        for product_id in product_ids:
+            try:
+                if 'extra_param' in op_info:
+                    cursor.execute(op_info['query'], (op_info['extra_param'], product_id))
+                else:
+                    cursor.execute(op_info['query'], (product_id,))
+                updated_count += cursor.rowcount
+            except Exception as e:
+                logger.error(f"Error in batch operation for product {product_id}: {e}")
+        
+        conn.commit()
+        
+        # Log the action
+        db_manager.log_user_action(
+            session['user_id'],
+            op_info['log_action'],
+            f"Opération par lot ({operation}) sur {updated_count} produits",
+            'products'
+        )
+        
+        return jsonify({
+            'success': True, 
+            'updated_count': updated_count,
+            'message': op_info['success_msg']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in batch product operation: {e}")
+        return jsonify({'success': False, 'message': f'Erreur: {str(e)}'}), 500
+    finally:
+        conn.close()
+
+@inventory_bp.route('/barcode/<barcode>', methods=['GET'])
+def lookup_by_barcode(barcode):
+    """Look up product by barcode"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT p.*, (p.purchase_price * p.current_stock) as stock_value
+            FROM products p
+            WHERE p.barcode = ? AND p.is_active = 1
+        ''', (barcode,))
+        
+        product = cursor.fetchone()
+        conn.close()
+        
+        if not product:
+            return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
+            
+        return jsonify({'success': True, 'product': dict(product)})
+        
+    except Exception as e:
+        logger.error(f"Error looking up product by barcode: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la recherche par code-barres'}), 500
+
+@inventory_bp.route('/inventory-count', methods=['POST'])
+def record_inventory_count():
+    """Record physical inventory count/audit"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    
+    data = request.get_json()
+    if not data or 'counts' not in data:
+        return jsonify({'success': False, 'message': 'Données de comptage requises'}), 400
+    
+    counts = data['counts']
+    count_reference = data.get('reference', f'COUNT-{datetime.now().strftime("%Y%m%d%H%M")}')

@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "date": "2025-08-07T23:03:37.950093",
+    "type": "backup"
+  },
+  "app_settings": {
+    "id": 1,
+    "store_name": "Quincaillerie",
+    "store_address": "",
+    "store_phone": "",
+    "tax_rate": 20.0,
+    "currency": "EUR",
+    "language": "fr",
+    "low_stock_threshold": 5,
+    "ai_features_enabled": 1,
+    "updated_at": "2025-08-07 22:50:29",
+    "backup_frequency": "daily"
+  },
+  "users": [
+    {
+      "id": 1,
+      "username": "Dah",
+      "role": "admin",
+      "language": "fr",
+      "created_at": "2025-07-24 16:31:25",
+      "last_login": "2025-08-07 22:47:51",
+      "is_active": 1,
+      "created_at_formatted": "24/07/2025 16:31",
+      "last_login_formatted": "07/08/2025 22:47"
+    },
+    {
+      "id": 2,
+      "username": "Isselmou",
+      "role": "employee",
+      "language": "fr",
+      "created_at": "2025-07-29 15:22:57",
+      "last_login": null,
+      "is_active": 1,
+      "created_at_formatted": "29/07/2025 15:22"
+    }
+  ]
+}

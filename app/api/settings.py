@@ -543,5 +543,83 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 'error': 'Cette fonctionnalité n\'est pas disponible en mode minimal'
             })
     
+    @settings_bp.route('/api/settings/preferences', methods=['GET'])
+    def get_preferences():
+        """Get user preferences"""
+        if MODULES_AVAILABLE and db_manager is not None:
+            try:
+                user_id = session.get('user_id')
+                if not user_id:
+                    return jsonify({'success': False, 'error': 'Utilisateur non authentifié'})
+                
+                # Get user settings from database
+                settings = db_manager.get_app_settings()
+                
+                # Default preferences
+                preferences = {
+                    'language': settings.get('language', 'fr'),
+                    'currency': settings.get('currency', 'MRU'),
+                    'decimal_places': settings.get('decimal_places', 2),
+                    'theme': settings.get('theme', 'light'),
+                    'auto_save': True,
+                    'show_tooltips': True,
+                    'compact_view': False
+                }
+                
+                return jsonify({
+                    'success': True,
+                    'preferences': preferences
+                })
+                
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Erreur lors de la récupération des préférences: {str(e)}'
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Cette fonctionnalité n\'est pas disponible en mode minimal'
+            })
+    
+    @settings_bp.route('/api/settings/notifications', methods=['GET'])
+    def get_notifications():
+        """Get notification settings"""
+        if MODULES_AVAILABLE and db_manager is not None:
+            try:
+                user_id = session.get('user_id')
+                if not user_id:
+                    return jsonify({'success': False, 'error': 'Utilisateur non authentifié'})
+                
+                # Get notification settings from database
+                settings = db_manager.get_app_settings()
+                
+                # Default notification settings
+                notifications = {
+                    'email_notifications': settings.get('email_notifications', True),
+                    'low_stock_alerts': True,
+                    'sales_reports': True,
+                    'system_alerts': True,
+                    'backup_notifications': settings.get('auto_backup', True),
+                    'daily_summary': False,
+                    'weekly_reports': False
+                }
+                
+                return jsonify({
+                    'success': True,
+                    'notifications': notifications
+                })
+                
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Erreur lors de la récupération des notifications: {str(e)}'
+                })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Cette fonctionnalité n\'est pas disponible en mode minimal'
+            })
+    
     # Register the blueprint with the app
     app.register_blueprint(settings_bp)

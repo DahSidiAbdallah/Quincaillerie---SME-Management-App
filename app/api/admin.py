@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 """Admin API blueprint for system settings and backups"""
 
-from flask import Blueprint, request, jsonify, session, send_file
+from flask import Blueprint, request, jsonify, session, send_file, make_response
 import os
 import json
 import logging
 import traceback
 import sys
+import platform
+import flask
 from datetime import datetime
 
 # Add parent directory to Python path for imports
@@ -707,4 +709,159 @@ def admin_debug():
         response = jsonify({'success': False, 'message': f'Error in debug endpoint: {error_msg}'})
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response
+
+@admin_bp.route('/logs', methods=['GET', 'OPTIONS'])
+def admin_logs():
+    """Get application logs"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
+        return response
+    
+    try:
+        # Check authentication
+        if not session.get('logged_in'):
+            response = jsonify({'success': False, 'message': 'Authentication required'})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 401
+        
+        # Get logs from the logs directory
+        logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
+        log_files = []
+        
+        if os.path.exists(logs_dir):
+            for file_name in os.listdir(logs_dir):
+                if file_name.endswith('.log'):
+                    file_path = os.path.join(logs_dir, file_name)
+                    try:
+                        stat = os.stat(file_path)
+                        log_files.append({
+                            'name': file_name,
+                            'size': stat.st_size,
+                            'modified': datetime.fromtimestamp(stat.st_mtime).isoformat(),
+                            'created': datetime.fromtimestamp(stat.st_ctime).isoformat()
+                        })
+                    except Exception as e:
+                        logger.warning(f"Error reading log file {file_name}: {e}")
+        
+        # Get recent log entries (last 100 lines from app.log if it exists)
+        recent_logs = []
+        app_log_path = os.path.join(logs_dir, 'app.log')
+        if os.path.exists(app_log_path):
+            try:
+                with open(app_log_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    recent_logs = [line.strip() for line in lines[-100:]]  # Last 100 lines
+            except Exception as e:
+                logger.warning(f"Error reading app.log: {e}")
+        
+        response = jsonify({
+            'success': True,
+            'logs': {
+                'files': log_files,
+                'recent': recent_logs,
+                'logs_dir': logs_dir
+            }
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Error fetching logs: {error_msg}")
+        response = jsonify({'success': False, 'message': f'Error fetching logs: {error_msg}'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+
+@admin_bp.route('/system-info', methods=['GET', 'OPTIONS'])
+def admin_system_info():
+    """Get system information"""
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,OPTIONS')
+        return response
+    
+    try:
+        # Check authentication
+        if not session.get('logged_in'):
+            response = jsonify({'success': False, 'message': 'Authentication required'})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 401
+        
+        import psutil
+        import platform
+        
+        # Get system information
+        system_info = {
+            'platform': {
+                'system': platform.system(),
+                'release': platform.release(),
+                'version': platform.version(),
+                'machine': platform.machine(),
+                'processor': platform.processor(),
+                'python_version': platform.python_version()
+            },
+            'cpu': {
+                'cores': psutil.cpu_count(),
+                'cores_logical': psutil.cpu_count(logical=True),
+                'usage_percent': psutil.cpu_percent(interval=1)
+            },
+            'memory': {
+                'total': psutil.virtual_memory().total,
+                'available': psutil.virtual_memory().available,
+                'used': psutil.virtual_memory().used,
+                'percent': psutil.virtual_memory().percent
+            },
+            'disk': {
+                'total': psutil.disk_usage('/').total if platform.system() != 'Windows' else psutil.disk_usage('C:').total,
+                'used': psutil.disk_usage('/').used if platform.system() != 'Windows' else psutil.disk_usage('C:').used,
+                'free': psutil.disk_usage('/').free if platform.system() != 'Windows' else psutil.disk_usage('C:').free,
+                'percent': psutil.disk_usage('/').percent if platform.system() != 'Windows' else psutil.disk_usage('C:').percent
+            },
+            'app': {
+                'working_directory': os.getcwd(),
+                'database_path': getattr(db_manager, 'db_path', 'Unknown'),
+                'python_executable': sys.executable,
+                'flask_version': getattr(flask, '__version__', 'Unknown')
+            }
+        }
+        
+        response = jsonify({
+            'success': True,
+            'system_info': system_info
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+        
+    except ImportError as e:
+        logger.warning(f"psutil not available for system info: {e}")
+        # Fallback system info without psutil
+        system_info = {
+            'platform': {
+                'system': platform.system(),
+                'python_version': platform.python_version()
+            },
+            'app': {
+                'working_directory': os.getcwd(),
+                'python_executable': sys.executable
+            },
+            'note': 'Limited system info available (psutil not installed)'
+        }
+        response = jsonify({
+            'success': True,
+            'system_info': system_info
+        })
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+        
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Error fetching system info: {error_msg}")
+        response = jsonify({'success': False, 'message': f'Error fetching system info: {error_msg}'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
 

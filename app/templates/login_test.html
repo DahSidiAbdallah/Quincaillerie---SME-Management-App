@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test de Connexion - Quincaillerie</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="min-h-screen flex items-center justify-center">
+        <div class="max-w-md w-full bg-white rounded-lg shadow-md p-8">
+            <h2 class="text-2xl font-bold text-center text-gray-900 mb-8">Test de Connexion</h2>
+            
+            <!-- Login Form -->
+            <form id="loginForm" class="space-y-6">
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700">Nom d'utilisateur</label>
+                    <input type="text" id="username" name="username" value="admin" required
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <div>
+                    <label for="pin" class="block text-sm font-medium text-gray-700">PIN</label>
+                    <input type="password" id="pin" name="pin" value="1234" required
+                           class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                
+                <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                    Se connecter
+                </button>
+            </form>
+            
+            <!-- Test Results -->
+            <div id="results" class="mt-8 space-y-4">
+                <h3 class="text-lg font-medium text-gray-900">Résultats des tests</h3>
+                <div id="testResults" class="space-y-2 text-sm">
+                    <!-- Test results will appear here -->
+                </div>
+            </div>
+            
+            <!-- Manual Tests -->
+            <div class="mt-8 space-y-4">
+                <h3 class="text-lg font-medium text-gray-900">Tests manuels</h3>
+                <div class="space-y-2">
+                    <button onclick="testInventoryAPI()" class="w-full bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded">
+                        Tester API Inventaire
+                    </button>
+                    <button onclick="testAuthStatus()" class="w-full bg-purple-600 hover:bg-purple-700 text-white py-2 px-4 rounded">
+                        Vérifier statut connexion
+                    </button>
+                    <button onclick="goToInventory()" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">
+                        Aller à l'inventaire
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Login form handler
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const pin = document.getElementById('pin').value;
+            
+            addResult('Tentative de connexion...', 'info');
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ username, pin })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addResult('✅ Connexion réussie!', 'success');
+                    addResult(`Utilisateur: ${data.user.username} (${data.user.role})`, 'info');
+                    
+                    // Auto-test inventory API after successful login
+                    setTimeout(testInventoryAPI, 1000);
+                } else {
+                    addResult('❌ Connexion échouée: ' + data.message, 'error');
+                }
+            } catch (error) {
+                addResult('❌ Erreur de connexion: ' + error.message, 'error');
+            }
+        });
+        
+        // Test inventory API
+        async function testInventoryAPI() {
+            addResult('Test de l\'API inventaire...', 'info');
+            
+            try {
+                const response = await fetch('/api/inventory/products', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'same-origin'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        addResult(`✅ API inventaire OK - ${data.products.length} produits trouvés`, 'success');
+                        if (data.stats) {
+                            addResult(`📊 Stats: ${data.stats.total} total, ${data.stats.low_stock} stock faible`, 'info');
+                        }
+                    } else {
+                        addResult('❌ API inventaire erreur: ' + data.message, 'error');
+                    }
+                } else {
+                    addResult(`❌ API inventaire échec: ${response.status} ${response.statusText}`, 'error');
+                }
+            } catch (error) {
+                addResult('❌ Erreur API inventaire: ' + error.message, 'error');
+            }
+        }
+        
+        // Test auth status
+        async function testAuthStatus() {
+            addResult('Vérification du statut de connexion...', 'info');
+            
+            try {
+                const response = await fetch('/api/auth/status', {
+                    credentials: 'same-origin'
+                });
+                
+                const data = await response.json();
+                
+                if (data.authenticated) {
+                    addResult(`✅ Connecté en tant que: ${data.user.username} (${data.user.role})`, 'success');
+                } else {
+                    addResult('❌ Non connecté', 'error');
+                }
+            } catch (error) {
+                addResult('❌ Erreur vérification: ' + error.message, 'error');
+            }
+        }
+        
+        // Go to inventory page
+        function goToInventory() {
+            window.location.href = '/inventory';
+        }
+        
+        // Add result to display
+        function addResult(message, type) {
+            const resultDiv = document.getElementById('testResults');
+            const p = document.createElement('p');
+            
+            const colors = {
+                'success': 'text-green-600',
+                'error': 'text-red-600',
+                'info': 'text-blue-600',
+                'warning': 'text-yellow-600'
+            };
+            
+            p.className = colors[type] || 'text-gray-600';
+            p.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            
+            resultDiv.appendChild(p);
+            resultDiv.scrollTop = resultDiv.scrollHeight;
+        }
+        
+        // Auto-check auth status on load
+        document.addEventListener('DOMContentLoaded', function() {
+            testAuthStatus();
+        });
+    </script>
+</body>
+</html>

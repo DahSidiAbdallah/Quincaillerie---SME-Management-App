@@ -1,0 +1,131 @@
+{
+  "summary": {
+    "total_tests": 20,
+    "passed": 20,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "tests": [
+    {
+      "test": "File exists: app/templates/admin.html",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/templates/admin.html",
+      "timestamp": "2025-08-07T22:50:29.645033"
+    },
+    {
+      "test": "File exists: app/templates/settings.html",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/templates/settings.html",
+      "timestamp": "2025-08-07T22:50:29.645276"
+    },
+    {
+      "test": "File exists: app/api/admin.py",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/api/admin.py",
+      "timestamp": "2025-08-07T22:50:29.645444"
+    },
+    {
+      "test": "File exists: app/api/settings.py",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/api/settings.py",
+      "timestamp": "2025-08-07T22:50:29.645648"
+    },
+    {
+      "test": "File exists: app/data/database.py",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/data/database.py",
+      "timestamp": "2025-08-07T22:50:29.646058"
+    },
+    {
+      "test": "File exists: app/static/js/admin-diagnostics.js",
+      "success": true,
+      "message": "Path: C:\\Users\\DAH\\Downloads\\Quincaillerie & SME Management App\\app/static/js/admin-diagnostics.js",
+      "timestamp": "2025-08-07T22:50:29.646510"
+    },
+    {
+      "test": "Template syntax: app/templates/admin.html",
+      "success": true,
+      "message": "All required elements found",
+      "timestamp": "2025-08-07T22:50:29.647632"
+    },
+    {
+      "test": "Template syntax: app/templates/settings.html",
+      "success": true,
+      "message": "All required elements found",
+      "timestamp": "2025-08-07T22:50:29.648145"
+    },
+    {
+      "test": "get_users()",
+      "success": true,
+      "message": "Found 2 users",
+      "timestamp": "2025-08-07T22:50:29.649728"
+    },
+    {
+      "test": "get_app_settings()",
+      "success": true,
+      "message": "Found 11 settings",
+      "timestamp": "2025-08-07T22:50:29.650685"
+    },
+    {
+      "test": "set_app_settings()",
+      "success": true,
+      "message": "Settings updated",
+      "timestamp": "2025-08-07T22:50:29.653908"
+    },
+    {
+      "test": "create_user() validation",
+      "success": true,
+      "message": "Correctly rejects empty data",
+      "timestamp": "2025-08-07T22:50:29.655401"
+    },
+    {
+      "test": "GET /api/admin/settings",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:50:31.717652"
+    },
+    {
+      "test": "GET /api/admin/users",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:50:33.783656"
+    },
+    {
+      "test": "GET /api/admin/backups",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:50:35.824834"
+    },
+    {
+      "test": "GET /api/admin/logs",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:50:37.840436"
+    },
+    {
+      "test": "GET /api/admin/system-info",
+      "success": true,
+      "message": "Status: 401",
+      "timestamp": "2025-08-07T22:50:39.902037"
+    },
+    {
+      "test": "GET /api/settings/user-info",
+      "success": true,
+      "message": "Status: 200",
+      "timestamp": "2025-08-07T22:50:41.982991"
+    },
+    {
+      "test": "GET /api/settings/preferences",
+      "success": true,
+      "message": "Status: 200",
+      "timestamp": "2025-08-07T22:50:43.998496"
+    },
+    {
+      "test": "GET /api/settings/notifications",
+      "success": true,
+      "message": "Status: 200",
+      "timestamp": "2025-08-07T22:50:46.048870"
+    }
+  ],
+  "timestamp": "2025-08-07T22:50:46.049750"
+}

@@ -452,6 +452,10 @@ def debug_inventory():
     """Debug page for inventory API"""
     return render_template('debug_inventory.html')
 
+@app.route('/login-test')
+def login_test():
+    """Test login and inventory API functionality"""
+    return render_template('login_test.html')
 
 @app.route('/test-api')
 def test_api():
