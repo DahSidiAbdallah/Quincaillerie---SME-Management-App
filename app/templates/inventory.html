@@ -40,19 +40,6 @@
         background-color: #f9fafb;
     }
     
-    .barcode-scanner {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.8);
-        z-index: 1000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    
     /* Notification styles */
     .notification {
         padding: 12px 16px;
@@ -128,15 +115,6 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
                 </svg>
                 Ajouter Produit
-            </button>
-            
-            <!-- Barcode Scanner -->
-            <button onclick="openBarcodeScanner()" 
-                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
-                </svg>
-                Scanner
             </button>
             
             <!-- Import/Export -->
@@ -260,7 +238,7 @@
                 </div>
                 <div class="ml-4">
                     <p class="text-sm font-medium text-gray-500">Valeur Stock</p>
-                    <p class="text-2xl font-semibold text-gray-900" id="stockValue">{{ stock_value or '0,00' }} MRU</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="stockValue">{{ format_currency(stock_value or 0) }}</p>
                 </div>
             </div>
         </div>
@@ -450,13 +428,13 @@
             
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                    <label for="purchasePrice" class="block text-sm font-medium text-gray-700">Prix d'Achat (MRU)</label>
+                    <label for="purchasePrice" class="block text-sm font-medium text-gray-700">Prix d'Achat ({{ current_currency }})</label>
                     <input type="number" id="purchasePrice" name="purchase_price" step="0.01" min="0" 
                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
                 
                 <div>
-                    <label for="salePrice" class="block text-sm font-medium text-gray-700">Prix de Vente (MRU) *</label>
+                    <label for="salePrice" class="block text-sm font-medium text-gray-700">Prix de Vente ({{ current_currency }}) *</label>
                     <input type="number" id="salePrice" name="sale_price" step="0.01" min="0" required
                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
@@ -674,7 +652,7 @@
             <input type="hidden" id="imageProductId" value="">
             
             <div id="currentProductImage" class="mb-4">
-                <img id="productImagePreview" src="/static/images/product-placeholder.png" 
+                <img id="productImagePreview" src="/static/images/product-placeholder.svg" 
                      alt="Image produit" class="mx-auto h-48 object-contain">
             </div>
             
@@ -717,115 +695,212 @@
     </div>
 </div>
 
-<!-- Enhanced Barcode Scanner Modal (replace existing one) -->
-<div id="barcodeScannerModal" class="barcode-scanner hidden">
-    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <div class="text-center">
-            <div class="flex justify-between items-start mb-4">
-                <div class="text-lg font-medium text-gray-900">Scanner Code-barres</div>
-                <button onclick="closeBarcodeScanner()" class="text-gray-400 hover:text-gray-600">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            
-            <div class="bg-gray-100 rounded-lg p-4 mb-4 relative">
-                <div id="scanner-container" class="aspect-video border-2 border-dashed border-gray-400 rounded-lg relative">
-                    <video id="barcode-scanner-video" class="w-full h-full object-cover rounded-lg"></video>
-                    <div class="absolute inset-0 flex items-center justify-center" id="scanner-placeholder">
-                        <svg class="h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"></path>
-                        </svg>
-                    </div>
-                    
-                    <div id="scanner-laser" class="hidden absolute left-0 top-50 w-full h-0.5 bg-red-500 opacity-50"></div>
-                </div>
-                <div id="scan-result" class="mt-2 text-sm font-medium h-6"></div>
-            </div>
-            
-            <div class="flex items-center space-x-2 mb-4">
-                <button id="toggleScannerBtn" onclick="toggleScanner()" 
-                        class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md text-sm">
-                    Activer Caméra
-                </button>
-                <button id="scanFromImageBtn" onclick="scanFromImage()" 
-                        class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-md text-sm">
-                    Depuis Image
-                </button>
-            </div>
-            
-            <div class="space-y-3">
-                <div class="relative">
-                    <input type="text" id="manualBarcode" placeholder="Ou saisir manuellement le code" 
-                           class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                    <div class="absolute inset-y-0 right-0 flex items-center pr-3">
-                        <button id="pasteFromClipboardBtn" class="text-gray-400 hover:text-gray-600" title="Coller depuis presse-papiers">
-                            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v2M4 6h16"></path>
-                            </svg>
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="flex space-x-3">
-                    <button onclick="searchByBarcode()" 
-                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-md">
-                        Rechercher
-                    </button>
-                    <button onclick="closeBarcodeScanner()" 
-                            class="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-md">
-                        Fermer
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
-{% block extra_js %}
+{% block extra_scripts %}
 <script src="{{ url_for('static', filename='js/inventory-diagnostics.js') }}"></script>
 <script>
     let currentView = 'grid';
     let currentProducts = [];
     let isLoading = false;
     
-    // Initialize
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log('🚀 DOM content loaded, setting up event listeners...');
-        console.log('📋 Checking critical elements exist...');
-        
-        // Check if critical elements exist
-        const criticalElements = [
-            'totalProducts', 'inStockProducts', 'lowStockProducts', 'stockValue',
-            'searchInput', 'categoryFilter', 'stockFilter', 'gridView'
-        ];
-        
-        criticalElements.forEach(id => {
-            const element = document.getElementById(id);
-            console.log(`Element ${id}:`, element ? '✅ Found' : '❌ Missing');
-        });
-        
-        // Continue with normal setup
-        setupEventListeners();
-        calculateMargin(); // Initialize margin calculation
-        
-        // Show loading initially
-        showLoading();
-        console.log('🔄 Initial setup complete, showing loading state');
-        
-        // Add a safety timeout to prevent infinite loading
-        setTimeout(() => {
-            console.log('⏰ Safety timeout reached - checking if still loading...');
-            const loadingElement = document.getElementById('loadingState');
-            if (loadingElement && !loadingElement.classList.contains('hidden')) {
-                console.warn('⚠️ Still loading after 30 seconds, forcing hide loading state');
-                hideLoading();
-                // Show a helpful message
-                showNotification('Produits chargés avec données initiales', 'info');
+    // Simple debounce helper (local, in case global isn't available)
+    function debounce(fn, wait) {
+        let t;
+        return function(...args) {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), wait);
+        };
+    }
+    
+    // Local UI helpers for this page (do not override global window.showLoading)
+    function showLoading() {
+        try {
+            const loading = document.getElementById('loadingState');
+            const container = document.getElementById('productsContainer');
+            const empty = document.getElementById('emptyState');
+            if (container) container.classList.add('hidden');
+            if (empty) empty.classList.add('hidden');
+            if (loading) loading.classList.remove('hidden');
+        } finally {
+            if (typeof window.showLoading === 'function') {
+                window.showLoading(true);
             }
-        }, 30000); // 30 seconds timeout
+        }
+    }
+
+    function hideLoading() {
+        try {
+            const loading = document.getElementById('loadingState');
+            const container = document.getElementById('productsContainer');
+            if (loading) loading.classList.add('hidden');
+            if (container) container.classList.remove('hidden');
+        } finally {
+            if (typeof window.showLoading === 'function') {
+                // Ensure the global overlay is hidden too
+                window.showLoading(false);
+            }
+        }
+    }
+    
+    function showEmptyState() {
+        const empty = document.getElementById('emptyState');
+        const loading = document.getElementById('loadingState');
+        const container = document.getElementById('productsContainer');
+        if (loading) loading.classList.add('hidden');
+        if (container) container.classList.add('hidden');
+        if (empty) empty.classList.remove('hidden');
+    }
+    
+    function hideEmptyState() {
+        const empty = document.getElementById('emptyState');
+        if (empty) empty.classList.add('hidden');
+        const container = document.getElementById('productsContainer');
+        if (container) container.classList.remove('hidden');
+    }
+
+    // Safety fallback: if grid doesn't render soon, fetch and render directly
+    async function forceRenderIfEmpty(reason = 'unknown') {
+        try {
+            const grid = document.getElementById('gridView');
+            const cards = grid ? grid.querySelectorAll('.product-card').length : 0;
+            if (cards > 0) return; // Already rendered
+
+            // Try to use diagnostics helper if available
+            const hasDiag = typeof window.inventoryDiagnostics === 'object' && typeof window.inventoryDiagnostics.testInventoryAPI === 'function';
+            if (!hasDiag) return;
+
+            console.warn(`⚠️ Forcing render via diagnostics path (reason: ${reason})`);
+            const res = await window.inventoryDiagnostics.testInventoryAPI();
+            if (res && res.success && res.data && Array.isArray(res.data.products) && res.data.products.length) {
+                currentProducts = res.data.products;
+                hideLoading();
+                try {
+                    displayGridView();
+                } catch (e) {
+                    // Manual minimal render as last resort
+                    if (grid) {
+                        grid.innerHTML = '';
+                        currentProducts.forEach(p => {
+                            const card = document.createElement('div');
+                            card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
+                            card.innerHTML = `
+                                <h3 class="font-bold text-lg">${p.name || 'Produit'}</h3>
+                                <p class="text-gray-600 text-sm">${p.category || ''}</p>
+                                <div class="flex justify-between items-center mt-2">
+                                    <span class="font-semibold">${window.formatCurrency ? window.formatCurrency(p.sale_price || p.selling_price || 0) : ((p.sale_price || p.selling_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
+                                    <span>Stock: ${p.current_stock || 0}</span>
+                                </div>`;
+                            grid.appendChild(card);
+                        });
+                    }
+                }
+                if (res.data.stats) {
+                    try { updateStats(res.data.stats); } catch (_) {}
+                }
+                console.log('✅ Safety render completed');
+            }
+        } catch (e) {
+            console.error('Safety render failed:', e);
+        }
+    }
+
+    // Update top KPI stats safely
+    function updateStats(stats) {
+        try {
+            if (!stats || typeof stats !== 'object') return;
+
+            const total = Number(stats.total ?? stats.total_products ?? 0) || 0;
+            const outOfStock = Number(stats.out_of_stock ?? 0) || 0;
+            const lowStock = Number(stats.low_stock ?? stats.low_stock_count ?? 0) || 0;
+            const inventoryValue = Number(stats.inventory_value ?? 0) || 0;
+
+            const totalEl = document.getElementById('totalProducts');
+            const inStockEl = document.getElementById('inStockProducts');
+            const lowStockEl = document.getElementById('lowStockProducts');
+            const stockValueEl = document.getElementById('stockValue');
+
+            if (totalEl) totalEl.textContent = String(total);
+            if (inStockEl) inStockEl.textContent = String(total - outOfStock);
+            if (lowStockEl) lowStockEl.textContent = String(lowStock);
+            if (stockValueEl) {
+                // Prefer a global formatter if available
+                if (typeof window.formatCurrency === 'function') {
+                    stockValueEl.textContent = window.formatCurrency(inventoryValue);
+                } else {
+                    const formatted = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(inventoryValue);
+                    const currency = (window.AppConfig && window.AppConfig.currentCurrency) ? window.AppConfig.currentCurrency : 'MRU';
+                    stockValueEl.textContent = `${formatted} ${currency}`;
+                }
+            }
+        } catch (e) {
+            console.error('updateStats error:', e);
+        }
+    }
+    
+    // Initialize (robust): run immediately if DOM is already ready, else on DOMContentLoaded
+    function initInventoryPage(fromBFCache = false) {
+        try {
+            console.log(`🚀 Init inventory page${fromBFCache ? ' (from BFCache)' : ''}...`);
+            console.log('📋 Checking critical elements exist...');
+
+            // Check if critical elements exist
+            const criticalElements = [
+                'totalProducts', 'inStockProducts', 'lowStockProducts', 'stockValue',
+                'searchInput', 'categoryFilter', 'stockFilter', 'gridView'
+            ];
+
+            criticalElements.forEach(id => {
+                const element = document.getElementById(id);
+                console.log(`Element ${id}:`, element ? '✅ Found' : '❌ Missing');
+            });
+
+            // Avoid double-binding if already initialized
+            if (window.__inventoryPageInitialized && !fromBFCache) {
+                console.log('ℹ️ Inventory page already initialized, skipping re-init');
+            } else {
+                setupEventListeners();
+                calculateMargin(); // Initialize margin calculation
+                window.__inventoryPageInitialized = true;
+            }
+
+            // Show loading initially
+            showLoading();
+            console.log('🔄 Initial setup complete, showing loading state');
+
+            // Add early safety checks to prevent infinite loading
+            setTimeout(() => forceRenderIfEmpty('early-check-2s'), 2000);
+            setTimeout(() => forceRenderIfEmpty('early-check-5s'), 5000);
+
+            // Add a longer safety timeout as a last resort
+            setTimeout(() => {
+                console.log('⏰ Safety timeout reached - checking if still loading...');
+                const loadingElement = document.getElementById('loadingState');
+                if (loadingElement && !loadingElement.classList.contains('hidden')) {
+                    console.warn('⚠️ Still loading after 30 seconds, forcing hide loading state');
+                    hideLoading();
+                    // Show a helpful message
+                    showNotification('Produits chargés avec données initiales', 'info');
+                    // Also attempt a forced render if needed
+                    forceRenderIfEmpty('late-check-30s');
+                }
+            }, 30000); // 30 seconds timeout
+        } catch (e) {
+            console.error('Init error:', e);
+            // Ensure the page is usable even if init fails
+            hideLoading();
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => initInventoryPage(false));
+    } else {
+        // DOM already parsed
+        initInventoryPage(false);
+    }
+    // Handle bfcache back/forward navigations
+    window.addEventListener('pageshow', (e) => {
+        if (e.persisted) initInventoryPage(true);
     });
     
     function setupEventListeners() {
@@ -1048,8 +1123,8 @@
                                     minimumFractionDigits: 0,
                                     maximumFractionDigits: 0
                                 }).format(inventoryValue);
-                                stockValueEl.textContent = formattedValue + ' MRU';
-                                console.log('🔧 Fallback set stockValue to:', formattedValue + ' MRU');
+                                stockValueEl.textContent = window.formatCurrency ? window.formatCurrency(inventoryValue) : (formattedValue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
+                                console.log('🔧 Fallback set stockValue to:', formattedValue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
                             }
                         }, 100);
                         
@@ -1165,7 +1240,7 @@
                             </div>
                         </div>
                         <div class="flex justify-between items-center">
-                            <span class="font-bold text-lg">${price} MRU</span>
+                            <span class="font-bold text-lg">${window.formatCurrency ? window.formatCurrency(price) : (Number(price||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
                             <span class="${stockClass} text-sm px-2 py-1 rounded-full">
                                 Stock: ${currentStock}
                             </span>
@@ -1173,7 +1248,7 @@
                     `;
                     
                     // Add click handler
-                    card.addEventListener('click', () => openEditModal(product));
+                    card.addEventListener('click', () => editProduct(product.id));
                     
                     container.appendChild(card);
                 } catch (cardError) {
@@ -1202,7 +1277,7 @@
                             <h3 class="font-bold text-lg">${product.name || 'Unnamed Product'}</h3>
                             <p class="text-gray-600 text-sm">${product.category || 'No Category'}</p>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="font-semibold">${product.sale_price || 0} MRU</span>
+                                <span class="font-semibold">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
                                 <span>Stock: ${product.current_stock || 0}</span>
                             </div>
                         `;
@@ -1268,7 +1343,7 @@
                 
                 <div class="flex items-center justify-between">
                     <span class="text-sm text-gray-600">Prix:</span>
-                    <span class="text-lg font-bold text-gray-900">${product.sale_price} MRU</span>
+                    <span class="text-lg font-bold text-gray-900">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
                 </div>
                 
                 ${product.description ? `
@@ -1342,7 +1417,7 @@
                 </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${product.sale_price} MRU
+                ${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                 <div class="flex space-x-2">
@@ -1707,11 +1782,11 @@
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Prix d'achat</dt>
-                                                    <dd class="text-sm text-gray-900">${product.purchase_price || 0} MRU</dd>
+                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency(product.purchase_price || 0) : ((product.purchase_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Prix de vente</dt>
-                                                    <dd class="text-sm text-gray-900">${product.selling_price || 0} MRU</dd>
+                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency(product.selling_price || 0) : ((product.selling_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Marge</dt>
@@ -1737,7 +1812,7 @@
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Valeur de stock</dt>
-                                                    <dd class="text-sm text-gray-900">${(product.current_stock * product.purchase_price).toFixed(2)} MRU</dd>
+                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency((product.current_stock || 0) * (product.purchase_price || 0)) : (((product.current_stock || 0) * (product.purchase_price || 0)).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
                                                 </div>
                                             </dl>
                                         </div>
@@ -1827,7 +1902,7 @@
                                                             ${s.quantity}
                                                         </td>
                                                         <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${s.total_price} MRU
+                                                            ${window.formatCurrency ? window.formatCurrency(s.total_price || 0) : ((s.total_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
                                                         </td>
                                                     </tr>
                                                     `).join('') : 
@@ -1871,15 +1946,7 @@
         if (modal) modal.remove();
     }
     
-    // Barcode scanner
-    function openBarcodeScanner() {
-        document.getElementById('barcodeScannerModal').classList.remove('hidden');
-    }
-    
-    function closeBarcodeScanner() {
-        document.getElementById('barcodeScannerModal').classList.add('hidden');
-        document.getElementById('manualBarcode').value = '';
-    }
+    // Barcode scanner removed
     
     // Import/Export functions
     function exportInventory() {
@@ -2421,7 +2488,7 @@
         }
         
         // Reset image
-        document.getElementById('productImagePreview').src = '/static/images/product-placeholder.png';
+    document.getElementById('productImagePreview').src = '/static/images/product-placeholder.svg';
         document.getElementById('deleteImageBtn').classList.add('opacity-50', 'cursor-not-allowed');
         document.getElementById('deleteImageBtn').disabled = true;
         
@@ -2536,247 +2603,6 @@
         }
     }
     
-    // Enhanced barcode scanner
-    let scanner = null;
-    let scannerActive = false;
-    
-    function toggleScanner() {
-        if (scannerActive) {
-            stopScanner();
-            document.getElementById('toggleScannerBtn').textContent = 'Activer Caméra';
-        } else {
-            startScanner();
-            document.getElementById('toggleScannerBtn').textContent = 'Désactiver Caméra';
-        }
-    }
-    
-    async function startScanner() {
-        try {
-            // Check if we have the Quagga library or load it
-            if (!window.Quagga) {
-                await loadQuaggaLibrary();
-            }
-            
-            const scannerContainer = document.getElementById('scanner-container');
-            const placeholder = document.getElementById('scanner-placeholder');
-            
-            if (placeholder) placeholder.style.display = 'none';
-            
-            Quagga.init({
-                inputStream: {
-                    name: "Live",
-                    type: "LiveStream",
-                    target: document.getElementById('barcode-scanner-video'),
-                    constraints: {
-                        width: 480,
-                        height: 320,
-                        facingMode: "environment" // Use back camera on mobile
-                    },
-                },
-                decoder: {
-                    readers: [
-                        "code_128_reader",
-                        "ean_reader",
-                        "ean_8_reader",
-                        "code_39_reader",
-                        "code_39_vin_reader",
-                        "upc_reader",
-                        "upc_e_reader",
-                        "codabar_reader",
-                    ]
-                },
-            }, function(err) {
-                if (err) {
-                    console.error("Error starting Quagga:", err);
-                    showNotification("Erreur lors de l'initialisation de la caméra", "error");
-                    return;
-                }
-                
-                scannerActive = true;
-                Quagga.start();
-                
-                // Show laser animation
-                const laser = document.getElementById('scanner-laser');
-                laser.classList.remove('hidden');
-                animateLaser();
-            });
-            
-            Quagga.onDetected(function(result) {
-                if (result && result.codeResult) {
-                    const code = result.codeResult.code;
-                    document.getElementById('scan-result').textContent = "Code détecté: " + code;
-                    document.getElementById('manualBarcode').value = code;
-                    
-                    // Optional: Stop scanning after detection
-                    // stopScanner();
-                    
-                    // Provide feedback
-                    document.getElementById('barcode-scanner-video').classList.add('border-green-500', 'border-4');
-                    setTimeout(() => {
-                        document.getElementById('barcode-scanner-video').classList.remove('border-green-500', 'border-4');
-                    }, 500);
-                }
-            });
-            
-        } catch (error) {
-            console.error("Scanner error:", error);
-            showNotification("Erreur: " + error.message, "error");
-        }
-    }
-    
-    function stopScanner() {
-        if (Quagga) {
-            Quagga.stop();
-            scannerActive = false;
-            
-            const placeholder = document.getElementById('scanner-placeholder');
-            if (placeholder) placeholder.style.display = 'flex';
-            
-            // Hide laser
-            const laser = document.getElementById('scanner-laser');
-            laser.classList.add('hidden');
-        }
-    }
-    
-    function animateLaser() {
-        const laser = document.getElementById('scanner-laser');
-        if (!laser || laser.classList.contains('hidden')) return;
-        
-        let position = 0;
-        let direction = 1;
-        const height = document.getElementById('barcode-scanner-video').offsetHeight;
-        
-        const animate = () => {
-            if (!scannerActive || laser.classList.contains('hidden')) return;
-            
-            position += direction * 2;
-            if (position >= height - 5) {
-                direction = -1;
-            } else if (position <= 5) {
-                direction = 1;
-            }
-            
-            laser.style.top = `${position}px`;
-            requestAnimationFrame(animate);
-        };
-        
-        animate();
-    }
-    
-    function loadQuaggaLibrary() {
-        return new Promise((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js';
-            script.onload = resolve;
-            script.onerror = () => reject(new Error('Failed to load barcode scanner library'));
-            document.head.appendChild(script);
-        });
-    }
-    
-    function scanFromImage() {
-        // Create a file input
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-        
-        input.onchange = async e => {
-            if (!e.target.files.length) return;
-            
-            const file = e.target.files[0];
-            const imgUrl = URL.createObjectURL(file);
-            
-            try {
-                // Load Quagga if needed
-                if (!window.Quagga) {
-                    await loadQuaggaLibrary();
-                }
-                
-                // Process the image
-                Quagga.decodeSingle({
-                    src: imgUrl,
-                    numOfWorkers: 0,  // Use main thread
-                    decoder: {
-                        readers: [
-                            "code_128_reader",
-                            "ean_reader",
-                            "ean_8_reader", 
-                            "code_39_reader",
-                            "code_39_vin_reader",
-                            "upc_reader",
-                            "upc_e_reader",
-                            "codabar_reader"
-                        ]
-                    },
-                }, function(result) {
-                    if (result && result.codeResult) {
-                        const code = result.codeResult.code;
-                        document.getElementById('scan-result').textContent = "Code détecté: " + code;
-                        document.getElementById('manualBarcode').value = code;
-                    } else {
-                        document.getElementById('scan-result').textContent = "Aucun code détecté";
-                    }
-                });
-            } catch (error) {
-                console.error("Image scan error:", error);
-                showNotification("Erreur: " + error.message, "error");
-            }
-        };
-        
-        input.click();
-    }
-    
-    // Add event listener for paste from clipboard
-    document.getElementById('pasteFromClipboardBtn').addEventListener('click', async function() {
-        try {
-            const text = await navigator.clipboard.readText();
-            document.getElementById('manualBarcode').value = text;
-        } catch (error) {
-            console.error("Clipboard error:", error);
-            showNotification("Impossible d'accéder au presse-papiers", "error");
-        }
-    });
-    
-    // Improved searchByBarcode function
-    async function searchByBarcode() {
-        const barcode = document.getElementById('manualBarcode').value.trim();
-        if (!barcode) return;
-        
-        try {
-            // Try direct barcode lookup first
-            const response = await fetch(`/api/inventory/barcode/${encodeURIComponent(barcode)}`, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            });
-            
-            const data = await response.json();
-            
-            if (data.success && data.product) {
-                // Product found, show it
-                closeBarcodeScanner();
-                showNotification(`Produit trouvé: ${data.product.name}`, 'success');
-                
-                // Option 1: Open product details directly
-                viewDetails(data.product.id);
-                
-                // Option 2: Set search and filter to show only this product
-                // document.getElementById('searchInput').value = barcode;
-                // loadProducts();
-            } else {
-                // Fall back to regular search
-                document.getElementById('searchInput').value = barcode;
-                closeBarcodeScanner();
-                loadProducts();
-                showNotification('Recherche par code', 'info');
-            }
-        } catch (error) {
-            console.error('Error looking up barcode:', error);
-            
-            // Fall back to regular search
-            document.getElementById('searchInput').value = barcode;
-            closeBarcodeScanner();
-            loadProducts();
-        }
-    }
-    
     function viewInventoryHistory() {
         // This could open a new page or modal showing inventory count history
         window.open('/inventory/history', '_blank');
@@ -2784,9 +2610,11 @@
 
     // Make sure we properly close resources when leaving the page
     window.addEventListener('beforeunload', function() {
-        if (scannerActive) {
-            stopScanner();
-        }
+        try {
+            if (typeof scannerActive !== 'undefined' && scannerActive && typeof stopScanner === 'function') {
+                stopScanner();
+            }
+        } catch (_) { /* no-op */ }
     });
     
     // Override createProductCard function to add selection checkbox

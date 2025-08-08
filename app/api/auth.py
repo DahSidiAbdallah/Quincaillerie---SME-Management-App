@@ -6,6 +6,8 @@ Handles user authentication, session management, and user operations
 """
 
 from flask import Blueprint, request, jsonify, session
+from datetime import timedelta
+from flask import current_app
 from werkzeug.security import generate_password_hash
 from db.database import DatabaseManager
 import logging
@@ -26,12 +28,38 @@ def api_login():
     username = data['username']
     pin = data['pin']
     
+    # Read security settings
+    settings = {}
+    try:
+        settings = db_manager.get_app_settings() or {}
+    except Exception:
+        settings = {}
+    max_attempts = int(settings.get('max_login_attempts', 5))
+    timeout_minutes = int(settings.get('session_timeout_minutes', 60))
+
+    # Check rate limiting by session
+    attempts = session.get('failed_login_attempts', {})
+    user_attempts = attempts.get(username, 0)
+    if user_attempts >= max_attempts:
+        return jsonify({'success': False, 'message': 'Nombre maximal de tentatives atteint. Réessayez plus tard.'}), 429
+
     user = db_manager.authenticate_user(username, pin)
     if user:
+        # Reset attempts on success
+        attempts[username] = 0
+        session['failed_login_attempts'] = attempts
+
         session['user_id'] = user['id']
         session['username'] = user['username']
         session['user_role'] = user['role']
         session['language'] = user.get('language', 'fr')
+        # Configure session lifetime
+        try:
+            if current_app is not None:
+                current_app.permanent_session_lifetime = timedelta(minutes=timeout_minutes)
+            session.permanent = True
+        except Exception:
+            pass
         
         # Log successful login
         db_manager.log_user_action(user['id'], 'login', f'Connexion API réussie pour {username}')
@@ -46,6 +74,9 @@ def api_login():
             }
         })
     else:
+        # Increment failed attempts
+        attempts[username] = user_attempts + 1
+        session['failed_login_attempts'] = attempts
         return jsonify({'success': False, 'message': 'Nom d\'utilisateur ou PIN incorrect'}), 401
 
 @auth_bp.route('/logout', methods=['POST'])
@@ -85,29 +116,30 @@ def create_user():
         return jsonify({'success': False, 'message': 'Champs requis manquants'}), 400
     
     try:
-        user_id = db_manager.create_user(
-            username=data['username'],
-            pin=data['pin'],
-            role=data.get('role', 'employee'),
-            language=data.get('language', 'fr')
-        )
-        
+        result = db_manager.create_user({
+            'username': data['username'],
+            'pin': data['pin'],
+            'role': data.get('role', 'employee'),
+            'language': data.get('language', 'fr')
+        })
+
+        if not result.get('success'):
+            return jsonify({'success': False, 'message': result.get('error', "Erreur lors de la création de l'utilisateur")}), 400
+
         # Log user creation
         db_manager.log_user_action(
             session['user_id'], 
             'create_user', 
-            f'Création utilisateur {data["username"]}',
-            'users',
-            user_id
+            f"Création utilisateur {data['username']}"
         )
-        
-        return jsonify({'success': True, 'user_id': user_id, 'message': 'Utilisateur créé avec succès'})
-        
+
+        return jsonify({'success': True, 'user_id': result.get('user_id'), 'message': 'Utilisateur créé avec succès'})
+
     except ValueError as e:
         return jsonify({'success': False, 'message': str(e)}), 400
     except Exception as e:
         logger.error(f"Error creating user: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la création de l\'utilisateur'}), 500
+        return jsonify({'success': False, 'message': "Erreur lors de la création de l'utilisateur"}), 500
 
 @auth_bp.route('/change-pin', methods=['POST'])
 def change_pin():
@@ -220,11 +252,7 @@ def update_user(user_id):
             db_manager.log_user_action(
                 session['user_id'],
                 'update_user',
-                f'Mise à jour utilisateur ID {user_id}',
-                'users',
-                user_id,
-                old_user,
-                data
+                f'Mise à jour utilisateur ID {user_id}'
             )
         
         conn.close()
@@ -256,9 +284,7 @@ def delete_user(user_id):
         db_manager.log_user_action(
             session['user_id'],
             'deactivate_user',
-            f'Désactivation utilisateur ID {user_id}',
-            'users',
-            user_id
+            f'Désactivation utilisateur ID {user_id}'
         )
         
         return jsonify({'success': True, 'message': 'Utilisateur désactivé avec succès'})

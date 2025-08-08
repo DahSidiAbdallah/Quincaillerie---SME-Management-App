@@ -5,10 +5,11 @@ Inventory Management API Blueprint
 Handles product management, stock movements, and inventory operations
 """
 
-from flask import Blueprint, request, jsonify, session, redirect, url_for
+from flask import Blueprint, request, jsonify, session, redirect, url_for, current_app
 from db.database import DatabaseManager
 import logging
 from datetime import datetime
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -62,15 +63,25 @@ def get_products():
         category = request.args.get('category')
         search = request.args.get('search')
         low_stock = request.args.get('low_stock', 'false').lower() == 'true'
+        out_of_stock = request.args.get('out_of_stock', 'false').lower() == 'true'
         
+        # Detect optional columns for robust filtering
+        cursor.execute("PRAGMA table_info(products)")
+        product_cols = {row[1] for row in cursor.fetchall()}
+
         # Base query
         query = '''
-            SELECT p.*, u.username as created_by_name,
-                   (p.purchase_price * p.current_stock) as stock_value
+            SELECT 
+                p.*, 
+                u.username as created_by_name,
+                (p.purchase_price * p.current_stock) as stock_value
             FROM products p
             LEFT JOIN users u ON p.created_by = u.id
-            WHERE p.is_active = 1
+            WHERE 1=1
         '''
+        # Apply active filter only if column exists
+        if 'is_active' in product_cols:
+            query += ' AND p.is_active = 1'
         params = []
         
         # Add filters
@@ -79,16 +90,48 @@ def get_products():
             params.append(category)
         
         if search:
-            query += ' AND (p.name LIKE ? OR p.description LIKE ?)'
-            params.extend([f'%{search}%', f'%{search}%'])
+            query += ' AND (p.name LIKE ? OR p.description LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)'
+            like = f'%{search}%'
+            params.extend([like, like, like, like])
         
         if low_stock:
-            query += ' AND p.current_stock <= p.min_stock_alert'
+            if 'reorder_level' in product_cols:
+                query += ' AND p.current_stock <= p.reorder_level'
+            else:
+                # Fallback to app low stock threshold
+                try:
+                    threshold = int(db_manager.get_app_settings().get('low_stock_threshold', 5))
+                except Exception:
+                    threshold = 5
+                query += ' AND p.current_stock <= ?'
+                params.append(threshold)
+
+        if out_of_stock:
+            query += ' AND p.current_stock <= 0'
         
         query += ' ORDER BY p.name ASC'
         
         cursor.execute(query, params)
-        products = [dict(row) for row in cursor.fetchall()]
+        raw_rows = cursor.fetchall()
+        products = []
+        for row in raw_rows:
+            item = dict(row)
+            # Provide frontend-friendly aliases and defaults
+            item.setdefault('sale_price', float(item.get('sale_price') or item.get('selling_price') or 0))
+            item.setdefault('selling_price', float(item.get('selling_price') or item.get('sale_price') or 0))
+            item.setdefault('min_stock_alert', int(item.get('min_stock_alert') or item.get('reorder_level') or 0))
+            item.setdefault('reorder_level', int(item.get('reorder_level') or item.get('min_stock_alert') or 0))
+            # Code/SKU alias
+            item['code'] = item.get('sku') or ''
+            # Unit/location not in schema; provide safe defaults
+            item.setdefault('unit', 'pièce')
+            item.setdefault('location', '')
+            # Image path
+            if item.get('image_url'):
+                item['image_path'] = item['image_url']
+            else:
+                item['image_path'] = None
+            products.append(item)
 
         # Fetch inventory stats for the page
         stats = db_manager.get_inventory_stats()
@@ -99,7 +142,7 @@ def get_products():
         
     except Exception as e:
         logger.error(f"Error fetching products: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits'}), 500
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits', 'details': str(e)}), 500
 
 @inventory_bp.route('/products', methods=['POST'])
 def create_product():
@@ -118,22 +161,24 @@ def create_product():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
+        # Map incoming fields to schema
+        name = data['name']
+        description = data.get('description', '')
+        purchase_price = float(data.get('purchase_price') or 0)
+        selling_price = float(data.get('sale_price') or data.get('selling_price') or 0)
+        current_stock = int(data.get('current_stock') or 0)
+        reorder_level = int(data.get('min_stock') or data.get('min_stock_alert') or data.get('reorder_level') or 5)
+        category = data.get('category', '')
+        supplier = data.get('supplier', '')
+        sku = data.get('sku') or data.get('code') or None
+        barcode = data.get('barcode') or None
+
         cursor.execute('''
             INSERT INTO products 
-            (name, description, purchase_price, sale_price, current_stock, 
-             min_stock_alert, category, supplier, barcode, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (name, description, purchase_price, selling_price, sku, barcode, category, supplier, current_stock, reorder_level, min_order_quantity, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
         ''', (
-            data['name'],
-            data.get('description', ''),
-            float(data['purchase_price']),
-            float(data['sale_price']),
-            int(data.get('current_stock', 0)),
-            int(data.get('min_stock_alert', 5)),
-            data.get('category', ''),
-            data.get('supplier', ''),
-            data.get('barcode', ''),
-            session['user_id']
+            name, description, purchase_price, selling_price, sku, barcode, category, supplier, current_stock, reorder_level, session['user_id']
         ))
         
         product_id = cursor.lastrowid
@@ -144,15 +189,21 @@ def create_product():
         db_manager.log_user_action(
             session['user_id'],
             'create_product',
-            f'Création produit: {data["name"]}',
-            'products',
-            product_id,
-            None,
-            data
+            f'Création produit: {name}'
         )
         
-        # Add to sync queue
-        db_manager.add_to_sync_queue('products', product_id, 'insert', data)
+        # Add to sync queue (store sanitized data)
+        db_manager.add_to_sync_queue('products', product_id, 'insert', {
+            'name': name,
+            'purchase_price': purchase_price,
+            'selling_price': selling_price,
+            'current_stock': current_stock,
+            'reorder_level': reorder_level,
+            'category': category,
+            'supplier': supplier,
+            'sku': sku,
+            'barcode': barcode
+        })
         
         return jsonify({'success': True, 'product_id': product_id, 'message': 'Produit créé avec succès'})
         
@@ -171,12 +222,20 @@ def get_product(product_id):
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
-            SELECT p.*, u.username as created_by_name,
-                   (p.purchase_price * p.current_stock) as stock_value
+        # Handle optional is_active column
+        cursor.execute("PRAGMA table_info(products)")
+        product_cols = {row[1] for row in cursor.fetchall()}
+        active_clause = " AND p.is_active = 1" if 'is_active' in product_cols else ""
+        cursor.execute(f'''
+            SELECT 
+                p.*, 
+                p.selling_price AS sale_price,
+                p.reorder_level AS min_stock_alert,
+                u.username as created_by_name,
+                (p.purchase_price * p.current_stock) as stock_value
             FROM products p
             LEFT JOIN users u ON p.created_by = u.id
-            WHERE p.id = ? AND p.is_active = 1
+            WHERE p.id = ?{active_clause}
         ''', (product_id,))
         
         product = cursor.fetchone()
@@ -184,18 +243,31 @@ def get_product(product_id):
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
         
         # Get recent stock movements
-        cursor.execute('''
+        # Order by available date column
+        cursor.execute('PRAGMA table_info(stock_movements)')
+        sm_cols = {row[1] for row in cursor.fetchall()}
+        date_col = 'movement_date' if 'movement_date' in sm_cols else ('created_at' if 'created_at' in sm_cols else 'ROWID')
+        cursor.execute(f'''
             SELECT sm.*, u.username as created_by_name
             FROM stock_movements sm
             LEFT JOIN users u ON sm.created_by = u.id
             WHERE sm.product_id = ?
-            ORDER BY sm.created_at DESC LIMIT 10
+            ORDER BY sm.{date_col} DESC LIMIT 10
         ''', (product_id,))
         
         movements = [dict(row) for row in cursor.fetchall()]
         conn.close()
         
         result = dict(product)
+        # Aliases and defaults for frontend compatibility
+        result['code'] = result.get('sku') or ''
+        result['unit'] = result.get('unit') or 'pièce'
+        result['location'] = result.get('location') or ''
+        if result.get('image_url'):
+            result['image_path'] = result['image_url']
+        result['sale_price'] = float(result.get('sale_price') or result.get('selling_price') or 0)
+        result['selling_price'] = float(result.get('selling_price') or result.get('sale_price') or 0)
+        result['min_stock_alert'] = int(result.get('min_stock_alert') or result.get('reorder_level') or 0)
         result['recent_movements'] = movements
         
         return jsonify({'success': True, 'product': result})
@@ -219,8 +291,13 @@ def update_product(product_id):
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        # Get current product data for logging
-        cursor.execute('SELECT * FROM products WHERE id = ? AND is_active = 1', (product_id,))
+        # Get current product data for logging (handle optional is_active)
+        cursor.execute('PRAGMA table_info(products)')
+        _pcols = {row[1] for row in cursor.fetchall()}
+        if 'is_active' in _pcols:
+            cursor.execute('SELECT * FROM products WHERE id = ? AND is_active = 1', (product_id,))
+        else:
+            cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
         old_product = cursor.fetchone()
         if not old_product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
@@ -231,18 +308,31 @@ def update_product(product_id):
         update_fields = []
         values = []
         
-        updatable_fields = ['name', 'description', 'purchase_price', 'sale_price', 
-                           'min_stock_alert', 'category', 'supplier', 'barcode']
+        # Map known synonyms to schema keys
+        mapping = {
+            'sale_price': 'selling_price',
+            'selling_price': 'selling_price',
+            'min_stock': 'reorder_level',
+            'min_stock_alert': 'reorder_level',
+            'reorder_level': 'reorder_level',
+            'code': 'sku',
+            'sku': 'sku'
+        }
+        # Allowed direct fields
+        allowed = {'name', 'description', 'purchase_price', 'category', 'supplier', 'barcode'}
+        updatable_fields = set(allowed) | set(mapping.values()) | set(mapping.keys())
         
-        for field in updatable_fields:
-            if field in data:
-                update_fields.append(f'{field} = ?')
-                if field in ['purchase_price', 'sale_price']:
-                    values.append(float(data[field]))
-                elif field == 'min_stock_alert':
-                    values.append(int(data[field]))
-                else:
-                    values.append(data[field])
+        for field in data.keys():
+            if field not in updatable_fields:
+                continue
+            target = mapping.get(field, field)
+            update_fields.append(f'{target} = ?')
+            if target in ['purchase_price', 'selling_price']:
+                values.append(float(data[field]))
+            elif target == 'reorder_level':
+                values.append(int(data[field]))
+            else:
+                values.append(data[field])
         
         if update_fields:
             update_fields.append('updated_at = CURRENT_TIMESTAMP')
@@ -255,11 +345,7 @@ def update_product(product_id):
             db_manager.log_user_action(
                 session['user_id'],
                 'update_product',
-                f'Mise à jour produit: {old_product["name"]}',
-                'products',
-                product_id,
-                old_product,
-                data
+                f"Mise à jour produit: {old_product['name']}"
             )
             
             # Add to sync queue
@@ -287,8 +373,13 @@ def delete_product(product_id):
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        # Check if product exists and has no pending operations
-        cursor.execute('SELECT name FROM products WHERE id = ? AND is_active = 1', (product_id,))
+        # Check if product exists and has no pending operations (handle optional is_active)
+        cursor.execute('PRAGMA table_info(products)')
+        _pcols = {row[1] for row in cursor.fetchall()}
+        if 'is_active' in _pcols:
+            cursor.execute('SELECT name FROM products WHERE id = ? AND is_active = 1', (product_id,))
+        else:
+            cursor.execute('SELECT name FROM products WHERE id = ?', (product_id,))
         product = cursor.fetchone()
         if not product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
@@ -302,9 +393,7 @@ def delete_product(product_id):
         db_manager.log_user_action(
             session['user_id'],
             'delete_product',
-            f'Suppression produit: {product[0]}',
-            'products',
-            product_id
+            f'Suppression produit: {product[0]}'
         )
         
         # Add to sync queue
@@ -336,9 +425,13 @@ def add_stock_movement():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        # Check if product exists
-        cursor.execute('SELECT current_stock, name FROM products WHERE id = ? AND is_active = 1', 
-                      (data['product_id'],))
+        # Check if product exists (handle optional is_active)
+        cursor.execute('PRAGMA table_info(products)')
+        _pcols = {row[1] for row in cursor.fetchall()}
+        if 'is_active' in _pcols:
+            cursor.execute('SELECT current_stock, name FROM products WHERE id = ? AND is_active = 1', (data['product_id'],))
+        else:
+            cursor.execute('SELECT current_stock, name FROM products WHERE id = ?', (data['product_id'],))
         product = cursor.fetchone()
         if not product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
@@ -357,45 +450,67 @@ def add_stock_movement():
         else:  # adjustment
             new_stock = quantity
         
-        # Add stock movement record
-        cursor.execute('''
-            INSERT INTO stock_movements 
-            (product_id, movement_type, quantity, unit_price, total_amount, reference, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            data['product_id'],
-            data['movement_type'],
-            quantity,
-            data.get('unit_price'),
-            data.get('total_amount'),
-            data.get('reference', ''),
-            data.get('notes', ''),
-            session['user_id']
-        ))
-        
+    # Prepare notes; schema may lack reference_id/reference_type
+        extra_notes = data.get('notes', '') or ''
+        unit_price = data.get('unit_price')
+        total_amount = data.get('total_amount')
+        if unit_price is not None or total_amount is not None:
+            try:
+                details = []
+                if unit_price is not None:
+                    details.append(f"unit_price={unit_price}")
+                if total_amount is not None:
+                    details.append(f"total_amount={total_amount}")
+                suffix = f" ({', '.join(details)})"
+                extra_notes = (extra_notes + suffix).strip()
+            except Exception:
+                pass
+        # Insert movement adapting to schema
+        cursor.execute('PRAGMA table_info(stock_movements)')
+        _smcols = {row[1] for row in cursor.fetchall()}
+        if 'reference_type' in _smcols:
+            cursor.execute('''
+                INSERT INTO stock_movements 
+                (product_id, movement_type, quantity, reference_id, reference_type, notes, created_by)
+                VALUES (?, ?, ?, NULL, ?, ?, ?)
+            ''', (
+                data['product_id'],
+                data['movement_type'],
+                quantity,
+                data.get('reference', ''),
+                extra_notes,
+                session['user_id']
+            ))
+        else:
+            cursor.execute('''
+                INSERT INTO stock_movements 
+                (product_id, movement_type, quantity, notes, created_by)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                data['product_id'],
+                data['movement_type'],
+                quantity,
+                extra_notes,
+                session['user_id']
+            ))
         movement_id = cursor.lastrowid
         
         # Update product stock
         cursor.execute('UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-                      (new_stock, data['product_id']))
+                       (new_stock, data['product_id']))
         
         conn.commit()
-        conn.close()
-        
+
         # Log the movement
         db_manager.log_user_action(
             session['user_id'],
             'stock_movement',
-            f'Mouvement stock {data["movement_type"]}: {product_name} ({quantity})',
-            'stock_movements',
-            movement_id,
-            {'old_stock': current_stock},
-            {'new_stock': new_stock, 'movement_data': data}
+            f"Mouvement stock {data['movement_type']}: {product_name} ({quantity})"
         )
-        
         # Add to sync queue
         db_manager.add_to_sync_queue('stock_movements', movement_id, 'insert', data)
-        
+
+        conn.close()
         return jsonify({
             'success': True, 
             'movement_id': movement_id,
@@ -425,6 +540,11 @@ def get_stock_movements():
         end_date = request.args.get('end_date')
         limit = int(request.args.get('limit', 50))
         
+        # Determine available date column
+        cursor.execute('PRAGMA table_info(stock_movements)')
+        _smcols = {row[1] for row in cursor.fetchall()}
+        date_col = 'movement_date' if 'movement_date' in _smcols else ('created_at' if 'created_at' in _smcols else None)
+
         # Base query
         query = '''
             SELECT sm.*, p.name as product_name, u.username as created_by_name
@@ -444,15 +564,16 @@ def get_stock_movements():
             query += ' AND sm.movement_type = ?'
             params.append(movement_type)
         
-        if start_date:
-            query += ' AND DATE(sm.created_at) >= ?'
-            params.append(start_date)
-        
-        if end_date:
-            query += ' AND DATE(sm.created_at) <= ?'
-            params.append(end_date)
-        
-        query += ' ORDER BY sm.created_at DESC LIMIT ?'
+        if date_col:
+            if start_date:
+                query += f' AND DATE(sm.{date_col}) >= ?'
+                params.append(start_date)
+            if end_date:
+                query += f' AND DATE(sm.{date_col}) <= ?'
+                params.append(end_date)
+            query += f' ORDER BY sm.{date_col} DESC LIMIT ?'
+        else:
+            query += ' ORDER BY sm.id DESC LIMIT ?'
         params.append(limit)
         
         cursor.execute(query, params)
@@ -476,10 +597,14 @@ def get_categories():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
+        # Handle optional is_active column
+        cursor.execute('PRAGMA table_info(products)')
+        _pcols = {row[1] for row in cursor.fetchall()}
+        where_active = 'is_active = 1 AND ' if 'is_active' in _pcols else ''
+        cursor.execute(f'''
             SELECT DISTINCT category, COUNT(*) as product_count
             FROM products 
-            WHERE is_active = 1 AND category IS NOT NULL AND category != ''
+            WHERE {where_active} category IS NOT NULL AND category != ''
             GROUP BY category
             ORDER BY category ASC
         ''')
@@ -504,10 +629,14 @@ def get_suppliers():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
+        # Handle optional is_active column
+        cursor.execute('PRAGMA table_info(products)')
+        _pcols = {row[1] for row in cursor.fetchall()}
+        where_active = 'is_active = 1 AND ' if 'is_active' in _pcols else ''
+        cursor.execute(f'''
             SELECT DISTINCT supplier, COUNT(*) as product_count
             FROM products 
-            WHERE is_active = 1 AND supplier IS NOT NULL AND supplier != ''
+            WHERE {where_active} supplier IS NOT NULL AND supplier != ''
             GROUP BY supplier
             ORDER BY supplier ASC
         ''')
@@ -532,21 +661,53 @@ def get_low_stock_items():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
-            SELECT p.*, (p.purchase_price * p.current_stock) as stock_value
+        # Detect optional is_active
+        cursor.execute("PRAGMA table_info(products)")
+        product_cols = {row[1] for row in cursor.fetchall()}
+        base = '''
+            SELECT 
+                p.*, 
+                p.selling_price AS sale_price,
+                p.reorder_level AS min_stock_alert,
+                (p.purchase_price * p.current_stock) as stock_value
             FROM products p
-            WHERE p.is_active = 1 AND p.current_stock <= p.min_stock_alert
+            WHERE {active_filter} p.current_stock <= p.reorder_level
             ORDER BY p.current_stock ASC
-        ''')
+        '''
+        active_filter = 'p.is_active = 1 AND ' if 'is_active' in product_cols else ''
+        criteria = 'p.current_stock <= p.reorder_level' if 'reorder_level' in product_cols else 'p.current_stock <= ?'
+        params = []
+        if 'reorder_level' not in product_cols:
+            try:
+                threshold = int(db_manager.get_app_settings().get('low_stock_threshold', 5))
+            except Exception:
+                threshold = 5
+            params.append(threshold)
+        sql = f'''
+            SELECT 
+                p.*, 
+                (p.purchase_price * p.current_stock) as stock_value
+            FROM products p
+            WHERE {active_filter} {criteria}
+            ORDER BY p.current_stock ASC
+        '''
+        cursor.execute(sql.format(active_filter=active_filter, criteria=criteria), params)
         
-        products = [dict(row) for row in cursor.fetchall()]
+        rows = cursor.fetchall()
+        products = []
+        for r in rows:
+            d = dict(r)
+            d['code'] = d.get('sku') or ''
+            d['sale_price'] = float(d.get('sale_price') or d.get('selling_price') or 0)
+            d['min_stock_alert'] = int(d.get('min_stock_alert') or d.get('reorder_level') or 0)
+            products.append(d)
         conn.close()
 
         return jsonify({'success': True, 'products': products})
 
     except Exception as e:
         logger.error(f"Error fetching low stock items: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits en rupture'}), 500
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des produits en rupture', 'details': str(e)}), 500
 
 # filepath: c:\Users\DAH\Downloads\Quincaillerie & SME Management App\app\api\inventory.py
 
@@ -555,38 +716,49 @@ def get_low_stock_items():
 @inventory_bp.route('/products/<int:product_id>/details', methods=['GET'])
 def get_product_details(product_id):
     """Get detailed product info including stock movements and sales"""
-    if not require_auth():
-        return jsonify({'success': False, 'message': 'Authentication required'})
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
     
     conn = db_manager.get_connection()
     cursor = conn.cursor()
     
     try:
-        # Get product details
-        cursor.execute('''
-            SELECT * FROM products WHERE id = ? AND is_active = 1
-        ''', (product_id,))
+        # Determine product columns for robust filtering
+        cursor.execute("PRAGMA table_info(products)")
+        product_cols = {row[1] for row in cursor.fetchall()}
+        if 'is_active' in product_cols:
+            cursor.execute('SELECT * FROM products WHERE id = ? AND is_active = 1', (product_id,))
+        else:
+            cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
         
         product = cursor.fetchone()
         if not product:
             return jsonify({'success': False, 'message': 'Product not found'})
         
-        # Get stock movements
-        cursor.execute('''
-            SELECT 
-                id, movement_type, quantity, reference_id, reference_type, 
-                notes, movement_date
-            FROM stock_movements
-            WHERE product_id = ?
-            ORDER BY movement_date DESC
-            LIMIT 50
-        ''', (product_id,))
+        # Get stock movements (handle schema variants)
+        cursor.execute('PRAGMA table_info(stock_movements)')
+        sm_cols = {row[1] for row in cursor.fetchall()}
+        has_ref_id = 'reference_id' in sm_cols
+        has_ref_type = 'reference_type' in sm_cols
+        has_movement_date = 'movement_date' in sm_cols
+        has_created_at = 'created_at' in sm_cols
+        date_expr = 'movement_date' if has_movement_date else ('created_at' if has_created_at else 'ROWID')
+
+        select_cols = ['id', 'movement_type', 'quantity']
+        if has_ref_id:
+            select_cols.append('reference_id')
+        if has_ref_type:
+            select_cols.append('reference_type')
+        select_cols.extend(['notes', date_expr + ' as movement_time'])
+        sql = f"SELECT {', '.join(select_cols)} FROM stock_movements WHERE product_id = ? ORDER BY {date_expr} DESC LIMIT 50"
+        cursor.execute(sql, (product_id,))
         
         movements = []
         for row in cursor.fetchall():
             movements.append(dict(row))
         
-        # Get sales history
+    # Get sales history
         cursor.execute('''
             SELECT 
                 sd.quantity, sd.unit_price, sd.total_price,
@@ -618,8 +790,9 @@ def get_product_details(product_id):
 @inventory_bp.route('/adjust-stock', methods=['POST'])
 def adjust_stock():
     """Adjust product stock with proper tracking"""
-    if not require_auth():
-        return jsonify({'success': False, 'message': 'Authentication required'})
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
     
     data = request.json
     if not data:
@@ -684,20 +857,35 @@ def adjust_stock():
             WHERE id = ?
         ''', (new_stock, product_id))
         
-        # Record stock movement
-        cursor.execute('''
-            INSERT INTO stock_movements (
-                product_id, movement_type, quantity, reference_type, 
-                notes, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            product_id, 
-            movement_type, 
-            quantity, 
-            reason, 
-            notes, 
-            session.get('user_id', 0)
-        ))
+        # Record stock movement (schema-adaptive)
+        cursor.execute('PRAGMA table_info(stock_movements)')
+        _smcols2 = {row[1] for row in cursor.fetchall()}
+        if 'reference_type' in _smcols2:
+            cursor.execute('''
+                INSERT INTO stock_movements (
+                    product_id, movement_type, quantity, reference_id, reference_type, 
+                    notes, created_by
+                ) VALUES (?, ?, ?, NULL, ?, ?, ?)
+            ''', (
+                product_id, 
+                movement_type, 
+                quantity, 
+                reason, 
+                notes, 
+                session.get('user_id', 0)
+            ))
+        else:
+            cursor.execute('''
+                INSERT INTO stock_movements (
+                    product_id, movement_type, quantity, notes, created_by
+                ) VALUES (?, ?, ?, ?, ?)
+            ''', (
+                product_id, 
+                movement_type, 
+                quantity, 
+                notes, 
+                session.get('user_id', 0)
+            ))
         
         # Log user action
         db_manager.log_user_action(
@@ -755,8 +943,9 @@ def download_import_template():
 @inventory_bp.route('/import-products', methods=['POST'])
 def import_products():
     """Import products from CSV/Excel file"""
-    if not require_auth():
-        return jsonify({'success': False, 'message': 'Authentication required'})
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
     
     if 'file' not in request.files:
         return jsonify({'success': False, 'message': 'Aucun fichier trouvé'})
@@ -765,8 +954,8 @@ def import_products():
     if file.filename == '':
         return jsonify({'success': False, 'message': 'Aucun fichier sélectionné'})
     
-    # Process based on file extension
-    filename = file.filename.lower()
+    # Process based on file extension (guard filename)
+    filename = (file.filename or '').lower()
     
     try:
         imported_count = 0
@@ -952,6 +1141,7 @@ def batch_product_operation():
     if not isinstance(product_ids, list) or len(product_ids) == 0:
         return jsonify({'success': False, 'message': 'Liste de produits invalide'}), 400
     
+    conn = None
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -1013,8 +1203,7 @@ def batch_product_operation():
         db_manager.log_user_action(
             session['user_id'],
             op_info['log_action'],
-            f"Opération par lot ({operation}) sur {updated_count} produits",
-            'products'
+            f"Opération par lot ({operation}) sur {updated_count} produits"
         )
         
         return jsonify({
@@ -1027,7 +1216,11 @@ def batch_product_operation():
         logger.error(f"Error in batch product operation: {e}")
         return jsonify({'success': False, 'message': f'Erreur: {str(e)}'}), 500
     finally:
-        conn.close()
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 @inventory_bp.route('/barcode/<barcode>', methods=['GET'])
 def lookup_by_barcode(barcode):
@@ -1040,10 +1233,14 @@ def lookup_by_barcode(barcode):
         conn = db_manager.get_connection()
         cursor = conn.cursor()
         
-        cursor.execute('''
+        # Handle optional is_active
+        cursor.execute('PRAGMA table_info(products)')
+        _pcols = {row[1] for row in cursor.fetchall()}
+        active_clause = ' AND p.is_active = 1' if 'is_active' in _pcols else ''
+        cursor.execute(f'''
             SELECT p.*, (p.purchase_price * p.current_stock) as stock_value
             FROM products p
-            WHERE p.barcode = ? AND p.is_active = 1
+            WHERE p.barcode = ?{active_clause}
         ''', (barcode,))
         
         product = cursor.fetchone()
@@ -1060,14 +1257,135 @@ def lookup_by_barcode(barcode):
 
 @inventory_bp.route('/inventory-count', methods=['POST'])
 def record_inventory_count():
-    """Record physical inventory count/audit"""
+    """Record physical inventory count/audit and optionally adjust stock"""
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
-    data = request.get_json()
-    if not data or 'counts' not in data:
+
+    data = request.get_json() or {}
+    counts = data.get('counts') or []
+    if not counts:
         return jsonify({'success': False, 'message': 'Données de comptage requises'}), 400
-    
-    counts = data['counts']
+
     count_reference = data.get('reference', f'COUNT-{datetime.now().strftime("%Y%m%d%H%M")}')
+    notes = data.get('notes', '')
+    adjust_stock_flag = bool(data.get('adjust_stock', False))
+
+    conn = db_manager.get_connection()
+    cursor = conn.cursor()
+    adjusted = 0
+    try:
+        # Detect stock_movements optional columns
+        cursor.execute('PRAGMA table_info(stock_movements)')
+        sm_cols = {row[1] for row in cursor.fetchall()}
+        has_ref_id = 'reference_id' in sm_cols
+        has_ref_type = 'reference_type' in sm_cols
+        for item in counts:
+            product_id = int(item.get('product_id'))
+            counted_qty = int(item.get('counted_qty'))
+            # Get current stock (handle optional is_active)
+            cursor.execute('PRAGMA table_info(products)')
+            _pcols2 = {row[1] for row in cursor.fetchall()}
+            if 'is_active' in _pcols2:
+                cursor.execute('SELECT current_stock FROM products WHERE id = ? AND is_active = 1', (product_id,))
+            else:
+                cursor.execute('SELECT current_stock FROM products WHERE id = ?', (product_id,))
+            row = cursor.fetchone()
+            if not row:
+                continue
+            current_stock = int(row['current_stock'])
+            diff = counted_qty - current_stock
+            # Record movement regardless of adjust flag (as audit trail)
+            movement_type = 'in' if diff > 0 else ('out' if diff < 0 else 'adjustment')
+            qty_for_record = abs(diff) if diff != 0 else 0
+            if has_ref_id or has_ref_type:
+                cursor.execute(
+                    'INSERT INTO stock_movements (product_id, movement_type, quantity, reference_id, reference_type, notes, created_by) VALUES (?, ?, ?, NULL, ?, ?, ?)',
+                    (product_id, movement_type, qty_for_record, 'inventory_count', f'{count_reference} - {notes}', session.get('user_id', 0))
+                )
+            else:
+                cursor.execute(
+                    'INSERT INTO stock_movements (product_id, movement_type, quantity, notes, created_by) VALUES (?, ?, ?, ?, ?)',
+                    (product_id, movement_type, qty_for_record, f'{count_reference} - {notes}', session.get('user_id', 0))
+                )
+            # Apply stock if requested
+            if adjust_stock_flag and diff != 0:
+                cursor.execute('UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (counted_qty, product_id))
+                adjusted += 1
+        conn.commit()
+        db_manager.log_user_action(session.get('user_id', 0), 'inventory_count', f"Comptage d'inventaire {count_reference} – ajustés: {adjusted}")
+        return jsonify({'success': True, 'adjusted_products': adjusted, 'reference': count_reference})
+    except Exception as e:
+        conn.rollback()
+        logger.error(f"Error recording inventory count: {e}")
+        return jsonify({'success': False, 'message': f"Erreur: {str(e)}"}), 500
+    finally:
+        conn.close()
+
+# Product image upload/delete endpoints
+@inventory_bp.route('/product-image/<int:product_id>', methods=['POST'])
+def upload_product_image(product_id: int):
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    if 'image' not in request.files:
+        return jsonify({'success': False, 'message': 'Aucune image fournie'}), 400
+    file = request.files['image']
+    if not file.filename:
+        return jsonify({'success': False, 'message': 'Nom de fichier manquant'}), 400
+
+    try:
+        # Save file to uploads
+        upload_dir = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+        os.makedirs(upload_dir, exist_ok=True)
+        # Secure-ish filename
+        ts = datetime.now().strftime('%Y%m%d%H%M%S')
+        ext = os.path.splitext(file.filename)[1].lower()
+        filename = f'product_{product_id}_{ts}{ext}'
+        file_path = os.path.join(upload_dir, filename)
+        file.save(file_path)
+
+        # Store relative URL
+        rel_url = f"/static/uploads/{filename}" if upload_dir.replace('\\', '/').endswith('static/uploads') else f"/{file_path.replace('\\', '/')}"
+
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE products SET image_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (rel_url, product_id))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'image_url': rel_url})
+    except Exception as e:
+        logger.error(f"Error uploading product image: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@inventory_bp.route('/product-image/<int:product_id>', methods=['DELETE'])
+def delete_product_image(product_id: int):
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT image_url FROM products WHERE id = ?', (product_id,))
+        row = cursor.fetchone()
+        image_url = row['image_url'] if row else None
+        if image_url:
+            # Attempt to remove file if inside static/uploads
+            try:
+                if image_url.startswith('/static/uploads/'):
+                    upload_dir = current_app.config.get('UPLOAD_FOLDER', 'static/uploads')
+                    full_path = os.path.join(upload_dir, os.path.basename(image_url))
+                    if os.path.exists(full_path):
+                        os.remove(full_path)
+            except Exception:
+                pass
+        cursor.execute('UPDATE products SET image_url = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (product_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        logger.error(f"Error deleting product image: {e}")
+        return jsonify({'success': False, 'message': str(e)}), 500

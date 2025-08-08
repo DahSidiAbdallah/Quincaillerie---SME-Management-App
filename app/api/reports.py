@@ -551,13 +551,11 @@ def export_report(report_type):
         
         filename = f'{report_type}_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
         
-        # Log the export
+        # Log the export (match DatabaseManager.log_user_action signature)
         db_manager.log_user_action(
             session['user_id'],
             'export_report',
-            f'Export rapport {report_type}',
-            None,
-            None
+            f'Export rapport {report_type}'
         )
         
         return send_file(

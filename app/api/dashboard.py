@@ -16,60 +16,56 @@ db_manager = DatabaseManager()
 
 @dashboard_bp.route('/stats')
 def get_dashboard_stats():
-    """Get all dashboard statistics in a single API call"""
+    """Get all dashboard statistics in a single API call (numeric values)."""
     try:
         # Get basic stats
         total_products = db_manager.get_total_products()
-        
+
         # Get low stock items
         low_stock_items = db_manager.get_low_stock_items()
-        
+
         # Get today's sales
         today_sales = db_manager.get_today_sales()
         today_sales_count = today_sales.get('count', 0)
-        today_sales_amount = today_sales.get('total', 0)
-        
+        today_sales_amount = today_sales.get('total', 0) or 0
+
         # Get pending debts
         pending_debts = db_manager.get_pending_debts()
         pending_debts_count = pending_debts.get('count', 0)
-        pending_debts_amount = pending_debts.get('total', 0)
-        
+        pending_debts_amount = pending_debts.get('total', 0) or 0
+
         # Get total revenue
-        total_revenue = db_manager.get_total_revenue()
-        
+        total_revenue = db_manager.get_total_revenue() or 0
+
         # Get cash balance
-        cash_balance = db_manager.get_cash_balance()
-        
-        # Format monetary values with commas
-        def format_money(value):
-            if isinstance(value, (int, float)):
-                return f"{value:,.2f}".replace(',', ' ').replace('.', ',')
-            return "0,00"
-        
-        # Calculate yesterday's sales for comparison
-        # This would require a new method in DatabaseManager
-        yesterday = (datetime.now() - timedelta(days=1)).date()
-        yesterday_sales = 0  # This would need implementation in DatabaseManager
-        
+        cash_balance = db_manager.get_cash_balance() or 0
+
+        # Calculate yesterday's sales for comparison (optional; 0 if unavailable)
+        # Placeholder until DatabaseManager implements a proper method
+        yesterday_sales = 0
+
         # Calculate sales change percentage
-        sales_change = 0
-        if yesterday_sales > 0:
-            sales_change = ((today_sales_amount - yesterday_sales) / yesterday_sales) * 100
-        
-        # Return formatted stats
+        sales_change = 0.0
+        if yesterday_sales and yesterday_sales > 0:
+            try:
+                sales_change = ((float(today_sales_amount) - float(yesterday_sales)) / float(yesterday_sales)) * 100.0
+            except Exception:
+                sales_change = 0.0
+
+        # Return numeric stats (frontend formats currency)
         return jsonify({
             'success': True,
             'stats': {
-                'total_products': total_products,
-                'low_stock_count': len(low_stock_items),
+                'total_products': int(total_products or 0),
+                'low_stock_count': len(low_stock_items) if isinstance(low_stock_items, list) else int(low_stock_items or 0),
                 'low_stock_items': low_stock_items,
-                'today_sales_count': today_sales_count,
-                'today_sales': format_money(today_sales_amount),
-                'total_revenue': format_money(total_revenue),
-                'pending_debts_count': pending_debts_count,
-                'pending_debts': format_money(pending_debts_amount),
-                'cash_balance': format_money(cash_balance),
-                'sales_change': round(sales_change, 1)
+                'today_sales_count': int(today_sales_count or 0),
+                'today_sales': float(today_sales_amount or 0),
+                'total_revenue': float(total_revenue or 0),
+                'pending_debts_count': int(pending_debts_count or 0),
+                'pending_debts': float(pending_debts_amount or 0),
+                'cash_balance': float(cash_balance or 0),
+                'sales_change': round(float(sales_change), 1)
             }
         })
     except Exception as e:
@@ -107,11 +103,16 @@ def get_top_products():
     try:
         # Get top selling products
         products = db_manager.get_top_selling_products(days=30, limit=5)
-        
-        # Format monetary values
+        # Ensure numeric monetary values are returned (frontend applies formatting)
         for product in products:
-            if 'total_sales' in product and product['total_sales']:
-                product['total_sales'] = f"{product['total_sales']:,.2f}".replace(',', ' ').replace('.', ',')
+            try:
+                if 'total_sales' in product and product['total_sales'] is not None:
+                    product['total_sales'] = float(product['total_sales'])
+                if 'quantity_sold' in product and product['quantity_sold'] is not None:
+                    product['quantity_sold'] = int(product['quantity_sold'])
+            except Exception:
+                # If casting fails, leave as-is
+                pass
         
         return jsonify({'success': True, 'products': products})
     except Exception as e:

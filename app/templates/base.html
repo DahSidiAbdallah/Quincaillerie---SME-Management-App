@@ -31,6 +31,7 @@
     
     <!-- JS resources -->
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/enhanced-api-fetch.js') }}"></script>
     <script src="{{ url_for('static', filename='js/offline-handler.js') }}"></script>
     <script src="{{ url_for('static', filename='js/pwa-installer.js') }}" defer></script>
     
@@ -40,6 +41,18 @@
         [dir="rtl"] {
             text-align: right;
         }
+        
+        /* Dark mode (applied when <html data-theme="dark"> or .dark is present) */
+        [data-theme="dark"] body {
+            background-color: #0f172a; /* slate-900 */
+            color: #e5e7eb; /* gray-200 */
+        }
+        [data-theme="dark"] .bg-white { background-color: #111827 !important; color: #e5e7eb !important; }
+        [data-theme="dark"] .text-gray-900 { color: #e5e7eb !important; }
+        [data-theme="dark"] .text-gray-700 { color: #cbd5e1 !important; }
+        [data-theme="dark"] .text-gray-600 { color: #94a3b8 !important; }
+        [data-theme="dark"] .bg-gray-50 { background-color: #0f172a !important; }
+        [data-theme="dark"] nav.bg-gray-800 { background-color: #0b1220 !important; }
         
         /* Offline indicator */
         .offline-indicator {
@@ -119,6 +132,19 @@
     </style>
     
     {% block extra_head %}{% endblock %}
+    
+    <script>
+        // Apply saved theme ASAP to avoid flash
+        (function() {
+            try {
+                const saved = localStorage.getItem('theme');
+                if (saved === 'dark') {
+                    document.documentElement.setAttribute('data-theme', 'dark');
+                    document.documentElement.classList.add('dark');
+                }
+            } catch (e) { /* no-op */ }
+        })();
+    </script>
 </head>
 <body class="bg-gray-50 min-h-screen" dir="{{ 'rtl' if current_language == 'ar' else 'ltr' }}">
     <!-- Offline Indicator -->
@@ -348,7 +374,8 @@
             language: '{{ current_language }}',
             userRole: '{{ user_role }}',
             apiBase: '/api',
-            isOffline: false
+            isOffline: false,
+            currentCurrency: "{{ current_currency|default('MRU') }}"
         };
         
         // Service Worker Registration
@@ -397,28 +424,39 @@
         // Global fetch wrapper with offline handling
         window.apiFetch = async function(url, options = {}) {
             try {
-                const response = await fetch(url, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    },
-                    ...options
-                });
-                
+                const opts = { ...options };
+                const hdrs = { ...(options.headers || {}) };
+                const isForm = opts.body && typeof FormData !== 'undefined' && (opts.body instanceof FormData);
+
+                if (isForm) {
+                    // Let the browser set multipart/form-data with boundary
+                    delete hdrs['Content-Type'];
+                    delete hdrs['content-type'];
+                } else {
+                    // If body is a plain object and no explicit content-type, send JSON
+                    const hasCT = 'Content-Type' in hdrs || 'content-type' in hdrs;
+                    if (opts.body && typeof opts.body === 'object' && !(opts.body instanceof Blob) && !hasCT && typeof opts.body !== 'string') {
+                        hdrs['Content-Type'] = 'application/json';
+                        opts.body = JSON.stringify(opts.body);
+                    }
+                }
+
+                opts.headers = hdrs;
+                // Always send cookies for same-origin requests (session auth)
+                if (!opts.credentials) {
+                    opts.credentials = 'same-origin';
+                }
+
+                const response = await fetch(url, opts);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
                 return await response.json();
             } catch (error) {
                 console.error('API request failed:', error);
-                
-                // In offline mode, you might want to queue the request
                 if (!navigator.onLine) {
                     console.log('Offline: queueing request for later');
-                    // TODO: Implement offline request queueing
                 }
-                
                 throw error;
             }
         };
@@ -484,6 +522,20 @@
                     window.showNotification('Erreur lors de la déconnexion', 'error');
                 });
         };
+
+        // Currency helpers available globally
+        window.formatCurrency = function(amount) {
+            try {
+                const num = Number(amount || 0);
+                // French-style formatting
+                const parts = num.toFixed(2).split('.');
+                const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+                const fracPart = parts[1];
+                return `${intPart},${fracPart} ${window.AppConfig.currentCurrency || 'MRU'}`;
+            } catch (e) {
+                return `0,00 ${window.AppConfig.currentCurrency || 'MRU'}`;
+            }
+        }
     </script>
     
     <!-- PWA Install Button -->

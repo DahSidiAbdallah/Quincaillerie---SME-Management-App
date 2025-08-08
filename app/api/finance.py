@@ -62,11 +62,7 @@ def add_capital_entry():
         db_manager.log_user_action(
             session['user_id'],
             'add_capital',
-            f'Ajout capital: {data["amount"]} MRU de {data["source"]}',
-            'capital_entries',
-            capital_id,
-            None,
-            data
+            (lambda cur: f"Ajout capital: {data['amount']} {cur} de {data['source']}")((db_manager.get_app_settings().get('currency') or 'MRU')),
         )
         
         # Add to sync queue
@@ -156,7 +152,7 @@ def modify_capital_entry(entry_id):
         if request.method == 'DELETE':
             cursor.execute('DELETE FROM capital_entries WHERE id = ?', (entry_id,))
             conn.commit()
-            db_manager.log_user_action(session['user_id'], 'delete_capital', f'Suppression entrée capital #{entry_id}', 'capital_entries', entry_id)
+            db_manager.log_user_action(session['user_id'], 'delete_capital', f'Suppression entrée capital #{entry_id}')
             db_manager.add_to_sync_queue('capital_entries', entry_id, 'delete')
             conn.close()
             return jsonify({'success': True})
@@ -175,7 +171,7 @@ def modify_capital_entry(entry_id):
             query = f"UPDATE capital_entries SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             cursor.execute(query, values)
             conn.commit()
-            db_manager.log_user_action(session['user_id'], 'update_capital', f'Mise à jour entrée capital #{entry_id}', 'capital_entries', entry_id, None, data)
+            db_manager.log_user_action(session['user_id'], 'update_capital', f'Mise à jour entrée capital #{entry_id}')
             db_manager.add_to_sync_queue('capital_entries', entry_id, 'update', data)
 
         conn.close()
@@ -228,11 +224,7 @@ def add_expense():
         db_manager.log_user_action(
             session['user_id'],
             'add_expense',
-            f'Ajout dépense {data["category"]}: {data["amount"]} MRU - {data["description"]}',
-            'expenses',
-            expense_id,
-            None,
-            data
+            (lambda cur: f"Ajout dépense {data['category']}: {data['amount']} {cur} - {data['description']}")((db_manager.get_app_settings().get('currency') or 'MRU')),
         )
         
         # Add to sync queue
@@ -318,7 +310,7 @@ def modify_expense(expense_id):
         if request.method == 'DELETE':
             cursor.execute('DELETE FROM expenses WHERE id = ?', (expense_id,))
             conn.commit()
-            db_manager.log_user_action(session['user_id'], 'delete_expense', f'Suppression dépense #{expense_id}', 'expenses', expense_id)
+            db_manager.log_user_action(session['user_id'], 'delete_expense', f'Suppression dépense #{expense_id}')
             db_manager.add_to_sync_queue('expenses', expense_id, 'delete')
             conn.close()
             return jsonify({'success': True})
@@ -336,7 +328,7 @@ def modify_expense(expense_id):
             query = f"UPDATE expenses SET {', '.join(update_fields)}, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
             cursor.execute(query, values)
             conn.commit()
-            db_manager.log_user_action(session['user_id'], 'update_expense', f'Mise à jour dépense #{expense_id}', 'expenses', expense_id, None, data)
+            db_manager.log_user_action(session['user_id'], 'update_expense', f'Mise à jour dépense #{expense_id}')
             db_manager.add_to_sync_queue('expenses', expense_id, 'update', data)
 
         conn.close()
@@ -454,11 +446,7 @@ def create_cash_register():
         db_manager.log_user_action(
             session['user_id'],
             action,
-            f'Caisse {register_date}: solde {closing_balance} MRU',
-            'cash_register',
-            register_id,
-            None,
-            {'closing_balance': closing_balance, 'total_sales': total_sales}
+            (lambda cur: f"Caisse {register_date}: solde {closing_balance} {cur}")((db_manager.get_app_settings().get('currency') or 'MRU')),
         )
         
         # Add to sync queue
@@ -509,9 +497,7 @@ def close_cash_register():
         db_manager.log_user_action(
             session['user_id'],
             'close_cash_register',
-            f'Fermeture caisse {register_date}',
-            'cash_register',
-            None
+            f'Fermeture caisse {register_date}'
         )
         
         return jsonify({'success': True, 'message': 'Caisse fermée avec succès'})
@@ -604,11 +590,7 @@ def add_supplier_debt():
         db_manager.log_user_action(
             session['user_id'],
             'add_supplier_debt',
-            f'Ajout dette fournisseur: {data["total_amount"]} MRU à {data["supplier_name"]}',
-            'supplier_debts',
-            debt_id,
-            None,
-            data
+            (lambda cur: f"Ajout dette fournisseur: {data['total_amount']} {cur} à {data['supplier_name']}")((db_manager.get_app_settings().get('currency') or 'MRU')),
         )
         
         # Add to sync queue
@@ -713,11 +695,7 @@ def record_supplier_debt_payment(debt_id):
         db_manager.log_user_action(
             session['user_id'],
             'supplier_debt_payment',
-            f'Paiement dette fournisseur: {payment_amount} MRU à {debt["supplier_name"]}',
-            'supplier_debts',
-            debt_id,
-            {'old_paid_amount': debt['paid_amount']},
-            {'new_paid_amount': new_paid_amount, 'payment_amount': payment_amount}
+            (lambda cur: f"Paiement dette fournisseur: {payment_amount} {cur} à {debt['supplier_name']}")((db_manager.get_app_settings().get('currency') or 'MRU')),
         )
         
         # Add to sync queue
@@ -828,3 +806,47 @@ def get_financial_summary():
 def get_summary():
     """Alias for financial summary endpoint"""
     return get_financial_summary()
+
+@finance_bp.route('/client-debts', methods=['GET'])
+def get_client_debts():
+    """List client debts with optional filters (status, overdue)."""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        status = (request.args.get('status') or 'pending').lower()
+        overdue = (request.args.get('overdue', 'false').lower() == 'true')
+
+        # Base query with computed fields
+        query = (
+            "SELECT id, client_name, remaining_amount, total_amount, due_date, status, "
+            "       CAST(julianday('now') - julianday(due_date) AS INTEGER) AS days_overdue "
+            "FROM client_debts WHERE 1=1"
+        )
+        params = []
+
+        if status in ('pending', 'paid'):
+            query += ' AND status = ?'
+            params.append(status)
+
+        if overdue:
+            query += " AND due_date IS NOT NULL AND DATE(due_date) < DATE('now') AND remaining_amount > 0"
+
+        query += ' ORDER BY due_date ASC NULLS LAST'
+
+        cursor.execute(query, params)
+        rows = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        # Aggregate totals
+        total_remaining = sum(float(r.get('remaining_amount') or 0) for r in rows)
+        count = len(rows)
+
+        return jsonify({'success': True, 'debts': rows, 'count': count, 'total_remaining': total_remaining})
+    except Exception as e:
+        logger.error(f"Error fetching client debts: {e}")
+        return jsonify({'success': False, 'message': "Erreur lors de la récupération des créances"}), 500

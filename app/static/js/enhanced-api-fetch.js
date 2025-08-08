@@ -196,7 +196,18 @@ window.showApiToast = function(message, type = 'success', duration = 3000) {
   }, duration);
 };
 
-// Override the global apiFetch with our enhanced version
-window.apiFetch = window.enhancedApiFetch;
+// If a global apiFetch already exists, wrap it to preserve behavior, else set enhanced
+if (typeof window.apiFetch === 'function') {
+  const baseFetch = window.apiFetch;
+  window.apiFetch = function(url, options = {}) {
+    // Prefer enhanced for robustness while keeping compatibility
+    return window.enhancedApiFetch(url, options).catch(err => {
+      // Fallback to base fetch in case of unexpected enhanced failure
+      try { return baseFetch(url, options); } catch (e) { throw err; }
+    });
+  };
+} else {
+  window.apiFetch = window.enhancedApiFetch;
+}
 
-console.log('Enhanced API fetch utilities loaded');
+console.log('Enhanced API fetch utilities loaded and applied');

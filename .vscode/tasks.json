@@ -8,6 +8,13 @@
 			"group": "run",
 			"problemMatcher": [],
 			"isBackground": true
+		},
+		{
+			"label": "Run App with All Features",
+			"type": "shell",
+			"command": ".\\run_full_features.ps1",
+			"isBackground": true,
+			"group": "run"
 		}
 	]
 }

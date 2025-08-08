@@ -74,7 +74,7 @@
                 </div>
                 <div class="ml-4 flex-1">
                     <h3 class="text-sm font-medium text-gray-500">Ventes Aujourd'hui</h3>
-                    <p class="text-2xl font-bold text-gray-900" id="todaySales">{{ today_sales or '0,00' }} MRU</p>
+                    <p class="text-2xl font-bold text-gray-900" id="todaySales">{{ format_currency(today_sales or 0) }}</p>
                 </div>
             </div>
         </div>
@@ -85,7 +85,7 @@
                 </div>
                 <div class="ml-4 flex-1">
                     <h3 class="text-sm font-medium text-gray-500">Revenus Total</h3>
-                    <p class="text-2xl font-bold text-gray-900" id="totalRevenue">{{ total_revenue or '0,00' }} MRU</p>
+                    <p class="text-2xl font-bold text-gray-900" id="totalRevenue">{{ format_currency(total_revenue or 0) }}</p>
                 </div>
             </div>
         </div>
@@ -121,7 +121,7 @@
             </div>
             
             <div class="mt-4 text-center">
-                <a href="{{ url_for('reports', tab='products') }}" 
+                <a href="{{ url_for('inventory') }}" 
                    class="text-sm text-blue-600 hover:text-blue-800 font-medium">
                     Voir tous les produits →
                 </a>
@@ -199,9 +199,9 @@
                         <div class="mt-2 text-sm text-red-700">
                             <p id="pendingDebts">
                                 {% if pending_debts and pending_debts.count %}
-                                    {{ pending_debts.count }} clients ont des paiements en retard (Total: {{ pending_debts.total }} MRU)
+                                    {{ pending_debts.count }} clients ont des paiements en retard (Total: {{ format_currency(pending_debts.total) }})
                                 {% else %}
-                                    0 clients ont des paiements en retard (Total: 0,00 MRU)
+                                    0 clients ont des paiements en retard (Total: {{ format_currency(0) }})
                                 {% endif %}
                             </p>
                             <button onclick="viewOverduePayments()" 
@@ -292,7 +292,7 @@
             data: {
                 labels: ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'],
                 datasets: [{
-                    label: 'Ventes (MRU)',
+                    label: `Ventes (${window.AppConfig?.currentCurrency || 'MRU'})`,
                     data: [0, 0, 0, 0, 0, 0, 0],
                     borderColor: 'rgb(59, 130, 246)',
                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -308,7 +308,7 @@
                         beginAtZero: true,
                         ticks: {
                             callback: function(value) {
-                                return value.toLocaleString() + ' MRU';
+                                return window.formatCurrency ? window.formatCurrency(value) : (value.toLocaleString() + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
                             }
                         }
                     }
@@ -411,13 +411,15 @@
                 // Update counters
                 document.getElementById('totalProducts').textContent = stats.total_products || '0';
                 document.getElementById('lowStockCount').textContent = stats.low_stock_count || '0';
-                document.getElementById('todaySales').textContent = `${stats.today_sales || '0,00'} MRU`;
-                document.getElementById('totalRevenue').textContent = `${stats.total_revenue || '0,00'} MRU`;
+                document.getElementById('todaySales').textContent = window.formatCurrency ? window.formatCurrency(stats.today_sales || 0) : `${stats.today_sales || '0,00'} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
+                document.getElementById('totalRevenue').textContent = window.formatCurrency ? window.formatCurrency(stats.total_revenue || 0) : `${stats.total_revenue || '0,00'} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
                 
                 // Update warning section if it exists
                 const pendingDebtsElement = document.getElementById('pendingDebts');
                 if (pendingDebtsElement && stats.pending_debts_count) {
-                    pendingDebtsElement.textContent = `${stats.pending_debts_count} clients ont des paiements en retard (Total: ${stats.pending_debts} MRU)`;
+                    const cur = window.AppConfig?.currentCurrency || 'MRU';
+                    const debtsText = window.formatCurrency ? window.formatCurrency(stats.pending_debts || 0) : `${(stats.pending_debts || 0).toLocaleString()} ${cur}`;
+                    pendingDebtsElement.textContent = `${stats.pending_debts_count} clients ont des paiements en retard (Total: ${debtsText})`;
                 }
                 
                 // Update top products
@@ -456,7 +458,7 @@
                             </div>
                         </div>
                         <div class="text-right">
-                            <p class="font-semibold text-gray-900">${product.total_sales} MRU</p>
+                            <p class="font-semibold text-gray-900">${window.formatCurrency ? window.formatCurrency(product.total_sales || 0) : ((product.total_sales || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</p>
                             <p class="text-sm text-gray-500">${product.category}</p>
                         </div>
                     `;
@@ -619,8 +621,8 @@
     }
     
     function loadMoreActivities() {
-        // Redirect to full activities report
-        window.location.href = "{{ url_for('reports') }}?tab=activities";
+    // Redirect to reports page Activities tab
+    window.location.href = "{{ url_for('reports') }}?tab=activities";
     }
     
     // Initialize dashboard

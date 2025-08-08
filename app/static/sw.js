@@ -41,6 +41,7 @@ const STATIC_CACHE_URLS = [
     '/api/inventory/products',
     '/api/sales/recent',
     '/api/finance/summary',
+    '/api/customers',
     '/api/customers/list'
 ];
 
@@ -50,7 +51,7 @@ const API_CACHE_PATTERNS = [
     /^\/api\/dashboard\/stats/,
     /^\/api\/sales\/recent/,
     /^\/api\/finance\/summary/,
-    /^\/api\/customers\/list/
+    /^\/api\/customers(\/list)?/
 ];
 
 // Install event - cache static resources

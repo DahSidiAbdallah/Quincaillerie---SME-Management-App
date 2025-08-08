@@ -24,14 +24,8 @@ import uuid
 from functools import wraps
 import logging
 
-# Import our custom modules with error handling
-try:
-    # We'll import these conditionally in the initialization block
-    MODULES_AVAILABLE = True
-except ImportError as e:
-    print(f"⚠️  Some modules not available: {e}")
-    print("📝 Running in minimal mode. Create missing modules for full functionality.")
-    MODULES_AVAILABLE = False
+# Import availability flag (actual imports occur in init block below)
+MODULES_AVAILABLE = True
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -71,11 +65,11 @@ if MODULES_AVAILABLE:
         from models.ml_forecasting import StockPredictor, SalesForecaster
         from offline.sync_manager import SyncManager
         from autologin import register_autologin_blueprint
-        
+
         db_manager = DatabaseManager()
         db_manager.init_database()
         logger.info("Database initialized successfully")
-        
+
         # Initialize AI models with proper error handling
         try:
             stock_predictor = StockPredictor()
@@ -83,14 +77,14 @@ if MODULES_AVAILABLE:
         except Exception as e:
             logger.error(f"Error initializing stock predictor: {e}")
             stock_predictor = None
-        
+
         try:
             sales_forecaster = SalesForecaster()
             logger.info("Sales forecaster initialized successfully")
         except Exception as e:
             logger.error(f"Error initializing sales forecaster: {e}")
             sales_forecaster = None
-        
+
         # Initialize sync manager for offline functionality
         try:
             sync_manager = SyncManager()
@@ -98,7 +92,7 @@ if MODULES_AVAILABLE:
         except Exception as e:
             logger.error(f"Error initializing sync manager: {e}")
             sync_manager = None
-        
+
         # Register blueprints
         app.register_blueprint(auth_bp, url_prefix='/api/auth')
         app.register_blueprint(inventory_bp, url_prefix='/api/inventory')
@@ -109,14 +103,14 @@ if MODULES_AVAILABLE:
         app.register_blueprint(ai_bp, url_prefix='/api/ai')
         app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
         app.register_blueprint(admin_bp, url_prefix='/api/admin')
-        
+
         # Register auto-login blueprint
         register_autologin_blueprint(app)
-        
-        # Initialize settings routes with necessary dependencies
-        SUPPORTED_LANGUAGES = {'fr': 'Français', 'ar': 'العربية'}
+
+        # Initialize settings routes with necessary dependencies (add English support)
+        SUPPORTED_LANGUAGES = {'fr': 'Français', 'ar': 'العربية', 'en': 'English'}
         init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES)
-        
+
         print("✅ All modules loaded successfully")
     except Exception as e:
         print(f"⚠️  Error initializing modules: {e}")
@@ -137,7 +131,8 @@ else:
 # Language support
 SUPPORTED_LANGUAGES = {
     'fr': 'Français',
-    'ar': 'العربية'
+    'ar': 'العربية',
+    'en': 'English'
 }
 
 def get_user_language():
@@ -166,6 +161,25 @@ def admin_required(f):
 @app.context_processor
 def inject_globals():
     """Inject global variables into all templates"""
+    # Determine current currency from settings if possible
+    current_currency = 'MRU'
+    try:
+        if db_manager is not None:
+            settings = db_manager.get_app_settings()
+            current_currency = (settings.get('currency') or 'MRU').upper()
+    except Exception as _e:
+        current_currency = 'MRU'
+
+    # Simple money formatter for templates
+    def format_currency(value):
+        try:
+            num = float(value or 0)
+            # French-style formatting: space thousands, comma decimals
+            formatted = f"{num:,.2f}".replace(',', ' ').replace('.', ',')
+            return f"{formatted} {current_currency}"
+        except Exception:
+            return f"0,00 {current_currency}"
+
     return {
         'current_language': get_user_language(),
         'supported_languages': SUPPORTED_LANGUAGES,
@@ -173,7 +187,9 @@ def inject_globals():
         'user_role': session.get('user_role', 'employee'),
         'app_version': '1.0.0',
         'current_year': datetime.now().year,
-        'is_minimal_mode': not MODULES_AVAILABLE
+        'is_minimal_mode': not MODULES_AVAILABLE,
+        'current_currency': current_currency,
+        'format_currency': format_currency
     }
 
 # Main Routes
@@ -421,11 +437,20 @@ def inventory():
         inventory_stats = db_manager.get_inventory_stats() if db_manager is not None else {}
         
         # Prepare context for template
+        # Determine currency for server-side formatting if needed
+        current_currency = 'MRU'
+        try:
+            if db_manager is not None:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+        except Exception:
+            pass
+
         context = {
             'total_products': inventory_stats.get('total', 0),
             'in_stock_products': inventory_stats.get('total', 0) - inventory_stats.get('out_of_stock', 0),
             'low_stock_products': inventory_stats.get('low_stock', 0),
-            'stock_value': f"{inventory_stats.get('inventory_value', 0):,.0f}",  # Format with commas
+            'stock_value': f"{inventory_stats.get('inventory_value', 0):,.0f}",  # numeric only; template will add currency
             'categories': inventory_stats.get('categories', [])
         }
         
@@ -493,6 +518,13 @@ def sales_stats():
     """Get sales statistics"""
     if MODULES_AVAILABLE and db_manager is not None:
         try:
+            # Determine currency
+            current_currency = 'MRU'
+            try:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+            except Exception:
+                pass
             # Get sales statistics from database
             conn = db_manager.get_connection()
             cursor = conn.cursor()
@@ -545,40 +577,63 @@ def sales_stats():
                 'count': monthly_data['count'] if monthly_data else 0
             }
             
-            # Get total pending credits
-            cursor.execute('''
-                SELECT SUM(remaining_amount) as total, COUNT(*) as count
-                FROM sales
-                WHERE payment_status = 'partial'
-                AND is_deleted = 0
-            ''')
-            
+            # Get total pending credits (support DBs without remaining_amount and legacy paid column)
+            cursor.execute('PRAGMA table_info(sales)')
+            sales_cols = [col[1] for col in cursor.fetchall()]
+            if 'remaining_amount' in sales_cols:
+                cursor.execute('''
+                    SELECT SUM(remaining_amount) as total, COUNT(*) as count
+                    FROM sales
+                    WHERE remaining_amount > 0
+                    AND is_deleted = 0
+                ''')
+            else:
+                paid_col = 'amount_paid' if 'amount_paid' in sales_cols else ('paid_amount' if 'paid_amount' in sales_cols else None)
+                if paid_col:
+                    cursor.execute(
+                        f'''
+                        SELECT SUM(total_amount - {paid_col}) as total,
+                               SUM(CASE WHEN total_amount > {paid_col} THEN 1 ELSE 0 END) as count
+                        FROM sales
+                        WHERE (total_amount - {paid_col}) > 0
+                        AND is_deleted = 0
+                        '''
+                    )
+                else:
+                    # No paid column, nothing to compute
+                    credit_data = {'total': 0, 'count': 0}
+                    credits = {
+                        'total': 0,
+                        'count': 0
+                    }
+                    # Continue to formatting block
+                    
             credit_data = cursor.fetchone()
             credits = {
                 'total': float(credit_data['total']) if credit_data and credit_data['total'] else 0,
                 'count': credit_data['count'] if credit_data else 0
             }
             
-            # Format values
+        # Format values
             stats = {
                 'today': {
-                    'total': f"{today_sales_data.get('total', 0):,.2f} DH",
+            'total': f"{today_sales_data.get('total', 0):,.2f} {current_currency}",
                     'count': today_sales_data.get('count', 0)
                 },
                 'yesterday': {
-                    'total': f"{yesterday_sales['total']:,.2f} DH",
+            'total': f"{yesterday_sales['total']:,.2f} {current_currency}",
                     'count': yesterday_sales['count']
                 },
                 'weekly': {
-                    'total': f"{weekly_sales['total']:,.2f} DH",
+            'total': f"{weekly_sales['total']:,.2f} {current_currency}",
                     'count': weekly_sales['count']
                 },
                 'monthly': {
-                    'total': f"{monthly_sales['total']:,.2f} DH",
+            'total': f"{monthly_sales['total']:,.2f} {current_currency}",
                     'count': monthly_sales['count']
                 },
                 'credits': {
-                    'total': f"{credits['total']:,.2f} DH",
+            'total': f"{credits['total']:,.2f} {current_currency}",
                     'count': credits['count']
                 }
             }
@@ -589,15 +644,22 @@ def sales_stats():
             return jsonify({'success': False, 'error': str(e)})
     else:
         # Fallback data for minimal mode
+        current_currency = 'MRU'
+        try:
+            if db_manager is not None:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+        except Exception:
+            pass
         return jsonify({
             'success': False,
             'message': 'Sales statistics not available in minimal mode',
             'stats': {
-                'today': {'total': '0.00 DH', 'count': 0},
-                'yesterday': {'total': '0.00 DH', 'count': 0},
-                'weekly': {'total': '0.00 DH', 'count': 0},
-                'monthly': {'total': '0.00 DH', 'count': 0},
-                'credits': {'total': '0.00 DH', 'count': 0}
+                'today': {'total': f'0.00 {current_currency}', 'count': 0},
+                'yesterday': {'total': f'0.00 {current_currency}', 'count': 0},
+                'weekly': {'total': f'0.00 {current_currency}', 'count': 0},
+                'monthly': {'total': f'0.00 {current_currency}', 'count': 0},
+                'credits': {'total': f'0.00 {current_currency}', 'count': 0}
             }
         })
 
@@ -781,12 +843,18 @@ def finance_summary():
             # Get cash balance
             cash_balance = db_manager.get_cash_balance() if db_manager is not None else 0
             
+            current_currency = 'MRU'
+            try:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+            except Exception:
+                pass
             # Format values
             summary = {
-                'total_revenue': f"{total_revenue:,.2f} MRU",
-                'total_expenses': f"{total_expenses:,.2f} MRU",
-                'net_profit': f"{net_profit:,.2f} MRU",
-                'cash_balance': f"{cash_balance:,.2f} MRU"
+                'total_revenue': f"{total_revenue:,.2f} {current_currency}",
+                'total_expenses': f"{total_expenses:,.2f} {current_currency}",
+                'net_profit': f"{net_profit:,.2f} {current_currency}",
+                'cash_balance': f"{cash_balance:,.2f} {current_currency}"
             }
             
             return jsonify({'success': True, 'summary': summary})
@@ -795,14 +863,21 @@ def finance_summary():
             return jsonify({'success': False, 'error': str(e)})
     else:
         # Fallback data for minimal mode
+        current_currency = 'MRU'
+        try:
+            if db_manager is not None:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+        except Exception:
+            pass
         return jsonify({
             'success': False,
             'message': 'Financial data not available in minimal mode',
             'summary': {
-                'total_revenue': '0.00 MRU',
-                'total_expenses': '0.00 MRU',
-                'net_profit': '0.00 MRU',
-                'cash_balance': '0.00 MRU'
+                'total_revenue': f'0.00 {current_currency}',
+                'total_expenses': f'0.00 {current_currency}',
+                'net_profit': f'0.00 {current_currency}',
+                'cash_balance': f'0.00 {current_currency}'
             }
         })
 
@@ -1060,22 +1135,39 @@ def reports_sales():
                 averages.append(float(row['average']) if row['average'] else 0)
             
             # Get product sales breakdown
-            cursor.execute('''
-                SELECT 
-                    p.name as product_name,
-                    SUM(sd.quantity) as quantity,
-                    SUM(sd.quantity * sd.unit_price) as total
-                FROM sale_details sd
-                JOIN products p ON sd.product_id = p.id
-                JOIN sales s ON sd.sale_id = s.id
-                WHERE s.sale_date BETWEEN ? AND ?
-                AND s.is_deleted = 0
-                GROUP BY sd.product_id
-                ORDER BY total DESC
-                LIMIT 10
-            ''', (start_date, end_date))
-            
+            # Prefer new schema (sale_items); gracefully fallback to legacy (sale_details)
             top_products = []
+            try:
+                cursor.execute('''
+                    SELECT 
+                        p.name as product_name,
+                        SUM(si.quantity) as quantity,
+                        SUM(si.quantity * si.unit_price) as total
+                    FROM sale_items si
+                    JOIN products p ON si.product_id = p.id
+                    JOIN sales s ON si.sale_id = s.id
+                    WHERE s.sale_date BETWEEN ? AND ?
+                    AND s.is_deleted = 0
+                    GROUP BY si.product_id
+                    ORDER BY total DESC
+                    LIMIT 10
+                ''', (start_date, end_date))
+            except Exception:
+                cursor.execute('''
+                    SELECT 
+                        p.name as product_name,
+                        SUM(sd.quantity) as quantity,
+                        SUM(sd.quantity * sd.unit_price) as total
+                    FROM sale_details sd
+                    JOIN products p ON sd.product_id = p.id
+                    JOIN sales s ON sd.sale_id = s.id
+                    WHERE s.sale_date BETWEEN ? AND ?
+                    AND s.is_deleted = 0
+                    GROUP BY sd.product_id
+                    ORDER BY total DESC
+                    LIMIT 10
+                ''', (start_date, end_date))
+            
             for row in cursor.fetchall():
                 top_products.append({
                     'name': row['product_name'],
@@ -1109,11 +1201,17 @@ def reports_sales():
             avg_sales = sum(totals) / len(totals) if totals else 0
             total_transactions = sum(counts)
             
+            current_currency = 'MRU'
+            try:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+            except Exception:
+                pass
             summary = {
-                'total_sales': f"{total_sales:,.2f} DH",
+                'total_sales': f"{total_sales:,.2f} {current_currency}",
                 'total_transactions': total_transactions,
-                'average_per_period': f"{avg_sales:,.2f} DH",
-                'average_per_transaction': f"{(total_sales / total_transactions if total_transactions else 0):,.2f} DH"
+                'average_per_period': f"{avg_sales:,.2f} {current_currency}",
+                'average_per_transaction': f"{(total_sales / total_transactions if total_transactions else 0):,.2f} {current_currency}"
             }
             
             # Return all report data
@@ -1245,8 +1343,14 @@ def reports_inventory():
             total_items = result['total_items'] if result else 0
             
             # Prepare summary
+            current_currency = 'MRU'
+            try:
+                settings = db_manager.get_app_settings()
+                current_currency = (settings.get('currency') or 'MRU').upper()
+            except Exception:
+                pass
             summary = {
-                'total_value': f"{total_value:,.2f} DH",
+                'total_value': f"{total_value:,.2f} {current_currency}",
                 'total_products': total_products,
                 'total_items': total_items,
                 'low_stock_count': len(low_stock_items) if isinstance(low_stock_items, list) else 0
@@ -1328,31 +1432,35 @@ def dashboard_stats():
     """Get dashboard statistics"""
     if MODULES_AVAILABLE and db_manager is not None:
         try:
+            # Return numeric values for currency; frontend will format with current currency
+            def as_number(value):
+                try:
+                    return float(value or 0)
+                except Exception:
+                    return 0.0
+
             # Fetch detailed statistics from database
             inv_stats = db_manager.get_inventory_stats()
             total_products = inv_stats.get('total', 0)
             low_stock_items = db_manager.get_low_stock_items() if db_manager is not None else []
             today_sales_data = db_manager.get_today_sales() if db_manager is not None else {'total': 0, 'count': 0}
-            total_revenue = db_manager.get_total_revenue() if db_manager is not None else 0
+            total_revenue_val = db_manager.get_total_revenue() if db_manager is not None else 0
             pending_debts_data = db_manager.get_pending_debts() if db_manager is not None else {'total': 0, 'count': 0}
-            cash_balance = db_manager.get_cash_balance() if db_manager is not None else 0
-            
-            # Get sales statistics specifically formatted for the dashboard
-            sales_stats = db_manager.get_sales_stats() if db_manager is not None else {'today': {'count': 0, 'amount': 0}, 'month': {'count': 0, 'amount': 0}, 'credits': {'count': 0, 'amount': 0}}
-            
-            # Compile all dashboard data
-            dashboard_data = {
+            cash_balance_val = db_manager.get_cash_balance() if db_manager is not None else 0
+
+            # Build response aligned with frontend expectations
+            stats = {
                 'total_products': total_products,
-                'low_stock_items': len(low_stock_items) if isinstance(low_stock_items, list) else 0,
-                'today_sales': today_sales_data.get('total', 0),
-                'today_transactions': today_sales_data.get('count', 0),
-                'total_revenue': total_revenue,
-                'pending_debts': pending_debts_data.get('total', 0),
-                'cash_balance': cash_balance,
-                'sales_stats': sales_stats
+                'low_stock_count': len(low_stock_items) if isinstance(low_stock_items, list) else 0,
+                'today_sales_count': today_sales_data.get('count', 0),
+                'today_sales': as_number(today_sales_data.get('total', 0)),
+                'total_revenue': as_number(total_revenue_val),
+                'pending_debts_count': pending_debts_data.get('count', 0),
+                'pending_debts': as_number(pending_debts_data.get('total', 0)),
+                'cash_balance': as_number(cash_balance_val)
             }
-            
-            return jsonify({'success': True, 'stats': dashboard_data})
+
+            return jsonify({'success': True, 'stats': stats})
         except Exception as e:
             logger.error(f"Error fetching dashboard stats: {e}")
             return jsonify({'success': False, 'error': str(e)})
@@ -1372,19 +1480,54 @@ def dashboard_activities():
             # Get limit parameter with default value
             limit = request.args.get('limit', 10, type=int)
             
-            # Fetch activities from database
-            activities = db_manager.get_recent_activities(limit=limit) if db_manager is not None else []
-            
-            # Format timestamps for readability
-            for activity in activities:
-                if 'created_at' in activity:
-                    try:
-                        # Convert UTC timestamp to local time and format it
-                        timestamp = datetime.fromisoformat(activity['created_at'].replace('Z', '+00:00'))
-                        activity['formatted_time'] = timestamp.strftime('%d/%m/%Y %H:%M')
-                    except Exception:
-                        activity['formatted_time'] = activity['created_at']
-            
+            # Fetch raw activities
+            rows = db_manager.get_recent_activities(limit=limit) if db_manager is not None else []
+
+            # Map to frontend-friendly shape
+            def determine_activity_type(action_type: str):
+                at = (action_type or '').lower()
+                if 'vente' in at or 'sale' in at:
+                    return 'sale'
+                if 'stock' in at or 'inventory' in at:
+                    return 'stock'
+                if 'login' in at or 'connexion' in at:
+                    return 'login'
+                if 'paiement' in at or 'payment' in at:
+                    return 'payment'
+                return 'other'
+
+            def time_ago(ts: str):
+                if not ts:
+                    return "Récemment"
+                try:
+                    t = datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+                    diff = datetime.now() - t
+                    if diff.days > 0:
+                        return f"Il y a {diff.days} jour{'s' if diff.days > 1 else ''}"
+                    if diff.seconds >= 3600:
+                        h = diff.seconds // 3600
+                        return f"Il y a {h} heure{'s' if h > 1 else ''}"
+                    if diff.seconds >= 60:
+                        m = diff.seconds // 60
+                        return f"Il y a {m} minute{'s' if m > 1 else ''}"
+                    return "À l'instant"
+                except Exception:
+                    return "Récemment"
+
+            activities = []
+            for r in rows:
+                action = (r.get('action_type') if isinstance(r, dict) else (r[0] if r else '')) or ''
+                description = (r.get('description') if isinstance(r, dict) else '') or ''
+                created = (r.get('created_at') if isinstance(r, dict) else None) or ''
+                username = (r.get('username') if isinstance(r, dict) else '') or ''
+                activities.append({
+                    'type': determine_activity_type(action),
+                    'title': action or 'Action',
+                    'description': description or '',
+                    'time_ago': time_ago(created),
+                    'user': username or ''
+                })
+
             return jsonify({'success': True, 'activities': activities})
         except Exception as e:
             logger.error(f"Error fetching activities: {e}")
@@ -1545,21 +1688,7 @@ def internal_error(error):
 def forbidden(error):
     return render_template('error.html', error_code=403, error_message='Accès interdit'), 403
 
-# Service Worker for offline functionality
-@app.route('/sw.js')
-def serve_service_worker():
-    """Serve the service worker JavaScript file"""
-    response = app.send_static_file('sw.js')
-    # Set the correct content type to avoid MIME type errors
-    response.headers['Content-Type'] = 'application/javascript'
-    # Cache control - service worker should be checked frequently
-    response.headers['Cache-Control'] = 'no-cache'
-    return response
-
-@app.route('/manifest.json')
-def serve_manifest():
-    """Web app manifest for PWA functionality"""
-    return app.send_static_file('manifest.json'), 200, {'Content-Type': 'application/json'}
+# (Routes for sw.js and manifest.json are already defined above as serve_service_worker_file and serve_manifest_file)
 
 if __name__ == '__main__':
     # Development server

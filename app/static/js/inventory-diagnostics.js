@@ -265,7 +265,7 @@ window.inventoryDiagnostics = {
                             <h3 class="font-bold text-lg">${product.name}</h3>
                             <p class="text-gray-600 text-sm">${product.category || 'No Category'}</p>
                             <div class="flex justify-between items-center mt-2">
-                                <span class="font-semibold">${product.sale_price || 0} MRU</span>
+                                <span class="font-semibold">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
                                 <span>Stock: ${product.current_stock || 0}</span>
                             </div>
                         `;
@@ -287,7 +287,7 @@ window.inventoryDiagnostics = {
                     if (totalEl) totalEl.textContent = stats.total || '0';
                     if (inStockEl) inStockEl.textContent = (stats.total || 0) - (stats.out_of_stock || 0);
                     if (lowStockEl) lowStockEl.textContent = stats.low_stock || '0';
-                    if (stockValueEl) stockValueEl.textContent = (stats.inventory_value || 0) + ' MRU';
+                    if (stockValueEl) stockValueEl.textContent = window.formatCurrency ? window.formatCurrency(stats.inventory_value || 0) : ((stats.inventory_value || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
                     
                     fixes.push('Updated statistics');
                     console.log('✅ Fixed: Updated statistics');

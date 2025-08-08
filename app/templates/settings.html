@@ -154,7 +154,7 @@
                         </div>
                         <div>
                             <label class="flex items-center">
-                                <input type="checkbox" x-model="preferences.dark_mode" class="rounded border-gray-300">
+                                <input type="checkbox" x-model="preferences.dark_mode" @change="applyTheme(preferences.dark_mode)" class="rounded border-gray-300">
                                 <span class="ml-2 text-sm text-gray-700">Mode sombre</span>
                             </label>
                         </div>
@@ -263,6 +263,12 @@
                                 <span class="ml-2 text-sm text-gray-700">Journal d'activité personnel</span>
                             </label>
                         </div>
+                    </div>
+                    <div class="flex justify-end mt-6">
+                        <button @click="saveSecurity()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                            <i class="fas fa-save mr-2"></i>
+                            Sauvegarder la sécurité
+                        </button>
                     </div>
                 </div>
             </div>
@@ -464,6 +470,14 @@
                 errorMessage: '',
                 
                 init() {
+                    // Bootstrap theme from localStorage early
+                    try {
+                        const saved = localStorage.getItem('theme');
+                        if (saved === 'dark') {
+                            this.preferences.dark_mode = true;
+                            this.applyTheme(true);
+                        }
+                    } catch (e) {}
                     this.loadSettings();
                 },
                 
@@ -471,7 +485,6 @@
                     this.isLoading = true;
                     // Fetch user information from API
                     apiFetch('/api/settings/user-info')
-                        .then(response => response.json())
                         .then(data => {
                             if (data.success) {
                                 // Update profile info
@@ -499,6 +512,11 @@
                                         };
                                     });
                                 }
+
+                                // Hydrate security prefs if present
+                                if (data.user.preferences && data.user.preferences.security) {
+                                    this.security = Object.assign({}, this.security, data.user.preferences.security);
+                                }
                             } else {
                                 console.error('Failed to load user settings:', data.error);
                                 this.errorMessage = data.error || 'Failed to load user settings';
@@ -509,7 +527,28 @@
                             this.errorMessage = 'Error connecting to server';
                         })
                         .finally(() => {
-                            this.isLoading = false;
+                            // Load additional preferences and notifications
+                            Promise.all([
+                                apiFetch('/api/settings/preferences').catch(() => null),
+                                apiFetch('/api/settings/notifications').catch(() => null)
+                            ]).then(([prefsData, notifData]) => {
+                                if (prefsData && prefsData.success && prefsData.preferences) {
+                                    this.preferences = Object.assign({}, this.preferences, prefsData.preferences);
+                                    // Map theme key to dark_mode if provided by API
+                                    if (prefsData.preferences.theme) {
+                                        this.preferences.dark_mode = prefsData.preferences.theme === 'dark';
+                                        this.applyTheme(this.preferences.dark_mode);
+                                    }
+                                }
+                                if (notifData && notifData.success && notifData.notifications) {
+                                    // Map to our UI structure
+                                    this.notifications.email.low_stock = !!notifData.notifications.low_stock_alerts;
+                                    this.notifications.email.daily_reports = !!notifData.notifications.daily_summary;
+                                    this.notifications.browser.system_errors = !!notifData.notifications.system_alerts;
+                                }
+                            }).finally(() => {
+                                this.isLoading = false;
+                            });
                         });
                 },
                 
@@ -533,7 +572,6 @@
                         },
                         body: JSON.stringify(profileData)
                     })
-                    .then(response => response.json())
                     .then(data => {
                         // Hide loading indicator
                         hideToast(loadingToast);
@@ -562,6 +600,7 @@
                         date_format: this.preferences.date_format,
                         timezone: this.preferences.timezone,
                         dark_mode: this.preferences.dark_mode,
+                        theme: this.preferences.dark_mode ? 'dark' : 'light',
                         default_page: this.preferences.default_page,
                         items_per_page: this.preferences.items_per_page,
                         auto_refresh: this.preferences.auto_refresh,
@@ -576,13 +615,14 @@
                         },
                         body: JSON.stringify(preferencesData)
                     })
-                    .then(response => response.json())
                     .then(data => {
                         // Hide loading indicator
                         hideToast(loadingToast);
                         
                         if (data.success) {
                             showToast('Préférences sauvegardées avec succès!', 'success');
+                            // Persist theme locally and apply immediately
+                            this.applyTheme(this.preferences.dark_mode);
                             
                             // Update language if changed
                             if (data.reload_required) {
@@ -602,6 +642,20 @@
                     });
                 },
                 
+                applyTheme(isDark) {
+                    try {
+                        if (isDark) {
+                            document.documentElement.setAttribute('data-theme', 'dark');
+                            document.documentElement.classList.add('dark');
+                            localStorage.setItem('theme', 'dark');
+                        } else {
+                            document.documentElement.removeAttribute('data-theme');
+                            document.documentElement.classList.remove('dark');
+                            localStorage.setItem('theme', 'light');
+                        }
+                    } catch (e) { /* no-op */ }
+                },
+                
                 changeLanguage(lang) {
                     const loadingToast = showToast('Changement de langue...', 'info', -1);
                     
@@ -612,7 +666,6 @@
                         },
                         body: JSON.stringify({ language: lang })
                     })
-                    .then(response => response.json())
                     .then(data => {
                         hideToast(loadingToast);
                         
@@ -655,7 +708,6 @@
                             new_pin: this.security.new_pin
                         })
                     })
-                    .then(response => response.json())
                     .then(data => {
                         hideToast(loadingToast);
                         
@@ -686,7 +738,6 @@
                         method: 'POST',
                         body: formData
                     })
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 this.profile.photo_url = data.photo_url;
@@ -710,7 +761,6 @@
                         },
                         body: JSON.stringify(this.notifications)
                     })
-                    .then(response => response.json())
                     .then(data => {
                         hideToast(loadingToast);
                         
@@ -723,6 +773,32 @@
                     .catch(error => {
                         hideToast(loadingToast);
                         console.error('Error saving notification preferences:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+
+                saveSecurity() {
+                    const loadingToast = showToast('Sauvegarde des options de sécurité...', 'info', -1);
+                    const payload = {
+                        auto_logout: this.security.auto_logout,
+                        auto_logout_time: this.security.auto_logout_time,
+                        login_notifications: this.security.login_notifications,
+                        activity_log: this.security.activity_log
+                    };
+                    apiFetch('/api/settings/update-security', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }).then(data => {
+                        hideToast(loadingToast);
+                        if (data.success) {
+                            showToast('Options de sécurité sauvegardées', 'success');
+                        } else {
+                            showToast(data.error || 'Erreur lors de la sauvegarde', 'error');
+                        }
+                    }).catch(err => {
+                        hideToast(loadingToast);
+                        console.error('Error saving security options:', err);
                         showToast('Erreur de connexion au serveur', 'error');
                     });
                 }

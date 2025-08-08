@@ -414,7 +414,7 @@ def get_price_suggestions():
                 'product_name': product['name'],
                 'current_price': current_price,
                 'purchase_price': purchase_price,
-                'suggested_price': round(suggested_price, 0),  # Round to nearest MRU
+                'suggested_price': round(suggested_price, 0),  # Rounded to nearest unit
                 'current_margin': round(current_margin, 1),
                 'suggested_margin': round(((suggested_price - purchase_price) / suggested_price * 100), 1),
                 'velocity': velocity,
@@ -507,7 +507,8 @@ def get_smart_alerts():
                 'type': 'overdue_debt',
                 'severity': severity,
                 'title': f'Dette en retard: {row["client_name"]}',
-                'message': f'Montant: {row["remaining_amount"]} MRU. En retard de {days_overdue} jours.',
+                # Use current currency from settings
+                'message': (lambda cur: f"Montant: {row['remaining_amount']} {cur}. En retard de {days_overdue} jours.")((db_manager.get_app_settings().get('currency') or 'MRU')),
                 'client_name': row['client_name'],
                 'amount': row['remaining_amount'],
                 'priority': 3 if severity == 'critical' else 2
@@ -536,7 +537,7 @@ def get_smart_alerts():
                 'type': 'unusual_expense',
                 'severity': 'warning',
                 'title': f'Dépenses élevées détectées',
-                'message': f'Dépenses du {row["date"]}: {row["daily_total"]} MRU (inhabituel)',
+                'message': (lambda cur: f"Dépenses du {row['date']}: {row['daily_total']} {cur} (inhabituel)")((db_manager.get_app_settings().get('currency') or 'MRU')),
                 'date': row['date'],
                 'amount': row['daily_total'],
                 'priority': 2
@@ -687,10 +688,11 @@ def get_ai_summary():
         sales_count = metrics['sales_count'] or 0
         
         if revenue > 0:
-            summary_parts.append(f"Vous avez réalisé {revenue:,.0f} MRU de chiffre d'affaires {period_text}")
+            _cur = (db_manager.get_app_settings().get('currency') or 'MRU')
+            summary_parts.append(f"Vous avez réalisé {revenue:,.0f} {_cur} de chiffre d'affaires {period_text}")
             if profit > 0:
                 margin = (profit / revenue * 100)
-                summary_parts.append(f"avec {profit:,.0f} MRU de bénéfice (marge de {margin:.1f}%)")
+                summary_parts.append(f"avec {profit:,.0f} {_cur} de bénéfice (marge de {margin:.1f}%)")
             summary_parts.append(f"sur {sales_count} vente{'s' if sales_count > 1 else ''}")
         else:
             summary_parts.append(f"Aucune vente enregistrée {period_text}")
@@ -705,7 +707,8 @@ def get_ai_summary():
         
         # Debt situation
         if debts['count'] and debts['count'] > 0:
-            summary_parts.append(f"Vous avez {debts['count']} créance{'s' if debts['count'] > 1 else ''} en attente pour {debts['total']:,.0f} MRU")
+            _cur = (db_manager.get_app_settings().get('currency') or 'MRU')
+            summary_parts.append(f"Vous avez {debts['count']} créance{'s' if debts['count'] > 1 else ''} en attente pour {debts['total']:,.0f} {_cur}")
         
         # Generate recommendations
         recommendations = []

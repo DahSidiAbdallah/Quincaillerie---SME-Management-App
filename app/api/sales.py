@@ -148,20 +148,15 @@ def create_sale():
         db_manager.log_user_action(
             session['user_id'],
             'create_sale',
-            f'Vente créée: {data["total_amount"]} MRU à {data.get("customer_name", "Client")}',
-            'sales',
-            sale_id,
-            None,
-            {
-                'total_amount': data['total_amount'],
-                'items_count': len(data['sale_items']),
-                'profit': total_profit,
-                'is_credit': is_credit
-            }
+            # Use current currency from settings for human-readable log
+            (lambda cur: f'Vente créée: {data["total_amount"]} {cur} à {data.get("customer_name", "Client")}')( (db_manager.get_app_settings().get('currency') or 'MRU') ),
         )
         
         # Add to sync queue
-        db_manager.add_to_sync_queue('sales', sale_id, 'insert', data)
+        try:
+            db_manager.add_to_sync_queue('sales', sale_id, 'insert', data)
+        except Exception:
+            pass
         
         conn.close()
         
@@ -236,6 +231,13 @@ def get_sales():
     except Exception as e:
         logger.error(f"Error fetching sales: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des ventes'}), 500
+
+# Backward-compatible aliases to list sales at the blueprint root
+@sales_bp.route('', methods=['GET'])
+@sales_bp.route('/', methods=['GET'])
+def get_sales_alias():
+    """Alias for listing sales when calling /api/sales or /api/sales/"""
+    return get_sales()
 
 @sales_bp.route('/sales/<int:sale_id>', methods=['GET'])
 def get_sale_details(sale_id):
@@ -338,11 +340,12 @@ def get_sales_stats():
         
         conn.close()
         
+        # Return numeric amounts; frontend will format with the selected currency
         stats = {
-            'today_sales': f"{today_sales['amount']:.0f} MRU",
+            'today_sales': float(today_sales['amount'] or 0),
             'active_customers': active_customers['count'],
             'pending_payments': pending_payments['count'],
-            'monthly_revenue': f"{monthly_revenue['amount']:.0f} MRU"
+            'monthly_revenue': float(monthly_revenue['amount'] or 0)
         }
         
         return jsonify({'success': True, 'stats': stats})
@@ -350,58 +353,64 @@ def get_sales_stats():
     except Exception as e:
         logger.error(f"Error fetching sales stats: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des statistiques de ventes'}), 500
+
+@sales_bp.route('/sales/<int:sale_id>', methods=['PUT'])
+def update_sale(sale_id):
+    """Update allowed fields on a sale (admin only)"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
     if session.get('user_role') != 'admin':
         return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
-    
+
     data = request.get_json()
     if not data:
         return jsonify({'success': False, 'message': 'Données requises'}), 400
-    
+
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Get current sale data
         cursor.execute('SELECT * FROM sales WHERE id = ?', (sale_id,))
         old_sale = cursor.fetchone()
         if not old_sale:
             return jsonify({'success': False, 'message': 'Vente non trouvée'}), 404
-        
+
         old_sale = dict(old_sale)
-        
+
         # Only allow updating certain fields
         updatable_fields = ['customer_name', 'customer_phone', 'notes', 'credit_due_date']
         update_fields = []
         values = []
-        
+
         for field in updatable_fields:
             if field in data:
                 update_fields.append(f'{field} = ?')
                 values.append(data[field])
-        
+
         if update_fields:
             values.append(sale_id)
             query = f"UPDATE sales SET {', '.join(update_fields)} WHERE id = ?"
             cursor.execute(query, values)
             conn.commit()
-            
+
             # Log the update
             db_manager.log_user_action(
                 session['user_id'],
                 'update_sale',
-                f'Mise à jour vente #{sale_id}',
-                'sales',
-                sale_id,
-                old_sale,
-                data
+                f'Mise à jour vente #{sale_id}'
             )
-            
+
             # Add to sync queue
-            db_manager.add_to_sync_queue('sales', sale_id, 'update', data)
-        
+            try:
+                db_manager.add_to_sync_queue('sales', sale_id, 'update', data)
+            except Exception:
+                pass
+
         conn.close()
         return jsonify({'success': True, 'message': 'Vente mise à jour avec succès'})
-        
+
     except Exception as e:
         logger.error(f"Error updating sale: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour de la vente'}), 500
@@ -503,19 +512,19 @@ def record_debt_payment(debt_id):
         db_manager.log_user_action(
             session['user_id'],
             'debt_payment',
-            f'Paiement dette: {payment_amount} MRU de {debt["client_name"]}',
-            'client_debts',
-            debt_id,
-            {'old_paid_amount': debt['paid_amount']},
-            {'new_paid_amount': new_paid_amount, 'payment_amount': payment_amount}
+            # Use current currency from settings for human-readable log
+            (lambda cur: f'Paiement dette: {payment_amount} {cur} de {debt["client_name"]}')( (db_manager.get_app_settings().get('currency') or 'MRU') ),
         )
         
         # Add to sync queue
-        db_manager.add_to_sync_queue('client_debts', debt_id, 'update', {
-            'paid_amount': new_paid_amount,
-            'remaining_amount': new_remaining_amount,
-            'status': new_status
-        })
+        try:
+            db_manager.add_to_sync_queue('client_debts', debt_id, 'update', {
+                'paid_amount': new_paid_amount,
+                'remaining_amount': new_remaining_amount,
+                'status': new_status
+            })
+        except Exception:
+            pass
         
         return jsonify({
             'success': True,

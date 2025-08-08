@@ -15,7 +15,7 @@
         </div>
 
         <!-- Financial Summary Cards -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <div class="bg-white rounded-lg shadow p-6">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
@@ -23,8 +23,8 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Revenus Total</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.total_revenue">0 MRU</p>
-                        <p class="text-sm text-green-600">+12% ce mois</p>
+                        <p class="text-2xl font-bold text-gray-900" x-text="summary.total_revenue">0 {{ current_currency }}</p>
+            <!-- Removed fake delta to avoid misleading metrics -->
                     </div>
                 </div>
             </div>
@@ -36,8 +36,8 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Dépenses Total</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.total_expenses">0 MRU</p>
-                        <p class="text-sm text-red-600">+8% ce mois</p>
+                        <p class="text-2xl font-bold text-gray-900" x-text="summary.total_expenses">0 {{ current_currency }}</p>
+            <!-- Removed fake delta to avoid misleading metrics -->
                     </div>
                 </div>
             </div>
@@ -49,8 +49,8 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Bénéfice Net</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.net_profit">0 MRU</p>
-                        <p class="text-sm text-blue-600">+15% ce mois</p>
+                        <p class="text-2xl font-bold text-gray-900" x-text="summary.net_profit">0 {{ current_currency }}</p>
+            <!-- Removed fake delta to avoid misleading metrics -->
                     </div>
                 </div>
             </div>
@@ -62,7 +62,7 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Solde Caisse</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.cash_balance">0 MRU</p>
+                        <p class="text-2xl font-bold text-gray-900" x-text="summary.cash_balance">0 {{ current_currency }}</p>
                         <p class="text-sm text-gray-500">Dernière MAJ: Aujourd'hui</p>
                     </div>
                 </div>
@@ -97,11 +97,11 @@
 
         <!-- Action Buttons -->
         <div class="flex flex-wrap gap-4 mb-6">
-            <button @click="showTransactionModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <button @click="newTransaction.type='income'; showTransactionModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-plus mr-2"></i>
                 Nouvelle Transaction
             </button>
-            <button @click="showExpenseModal = true" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <button @click="newTransaction.type='expense'; showTransactionModal = true" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-minus mr-2"></i>
                 Nouvelle Dépense
             </button>
@@ -113,6 +113,48 @@
                 <i class="fas fa-save mr-2"></i>
                 Sauvegarde
             </button>
+        </div>
+
+        <!-- Receivables (when navigated with tab=receivables) -->
+        <div x-show="activeTab==='receivables'" class="bg-white shadow rounded-lg overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                <h3 class="text-lg font-medium text-gray-900">Créances Clients (en retard)</h3>
+                <div>
+                    <button @click="loadReceivables(true)" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant dû</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Échéance</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jours de retard</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="d in receivables" :key="d.id">
+                            <tr>
+                                <td class="px-6 py-4 text-sm text-gray-900" x-text="d.client_name"></td>
+                                <td class="px-6 py-4 text-sm text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(d.remaining_amount) : (Number(d.remaining_amount||0).toFixed(2)+' '+(window.AppConfig?.currentCurrency||'MRU'))"></td>
+                                <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDate(d.due_date)"></td>
+                                <td class="px-6 py-4 text-sm" :class="(d.days_overdue||0)>0 ? 'text-red-600 font-semibold' : 'text-gray-500'" x-text="d.days_overdue||0"></td>
+                            </tr>
+                        </template>
+                        <tr x-show="receivables.length===0">
+                            <td colspan="4" class="px-6 py-4 text-center text-gray-500">Aucune créance en retard</td>
+                        </tr>
+                    </tbody>
+                    <tfoot class="bg-gray-50">
+                        <tr>
+                            <td class="px-6 py-3 text-right text-sm font-medium" colspan="1">Total</td>
+                            <td class="px-6 py-3 text-sm font-semibold" x-text="window.formatCurrency ? window.formatCurrency(receivablesTotal) : (Number(receivablesTotal||0).toFixed(2)+' '+(window.AppConfig?.currentCurrency||'MRU'))"></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
 
         <!-- Recent Transactions -->
@@ -144,9 +186,14 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
+                        <tr x-show="isLoadingTransactions">
+                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">
+                                <i class="fas fa-spinner fa-spin mr-2"></i>Chargement des transactions...
+                            </td>
+                        </tr>
                         <template x-for="transaction in filteredTransactions" :key="transaction.id">
                             <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(transaction.date)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date)"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.description"></td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
@@ -162,7 +209,7 @@
                                         'text-green-600': transaction.type === 'income',
                                         'text-red-600': transaction.type === 'expense'
                                     }">
-                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + transaction.amount + ' MRU'"></span>
+                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(transaction.amount) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))"></span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.category"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -189,7 +236,7 @@
             </div>
         </div>
 
-        <!-- Transaction Modal -->
+    <!-- Transaction Modal -->
         <div x-show="showTransactionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
             <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
                 <div class="mt-3">
@@ -210,7 +257,7 @@
                                 </select>
                             </div>
                             <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Montant (MRU)</label>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Montant ({{ current_currency }})</label>
                                 <input type="number" x-model="newTransaction.amount" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
                             </div>
                         </div>
@@ -242,74 +289,188 @@
                 </div>
             </div>
         </div>
-    </main>
 
-    <!-- Footer -->
-    <footer class="bg-slate-800 text-white py-4 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <p>&copy; {{ current_year }} Quincaillerie Management v{{ app_version }}</p>
-            <div class="flex items-center space-x-4">
-                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
-                <span>Mode: {{ user_role|title }}</span>
-                <span>Utilisateur: {{ current_user }}</span>
+        <!-- Edit Transaction Modal -->
+        <div x-show="showEditModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">Modifier Transaction</h3>
+                        <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <form @submit.prevent="updateTransaction()">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                                <input type="text" x-model="editData.type" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100" disabled>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Montant ({{ current_currency }})</label>
+                                <input type="number" x-model.number="editData.amount" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <input type="text" x-model="editData.description" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div class="mb-4" x-show="editData.type === 'expense'">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
+                            <select x-model="editData.category" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="">Sélectionner une catégorie</option>
+                                <template x-for="category in categories" :key="category">
+                                    <option :value="category" x-text="category"></option>
+                                </template>
+                            </select>
+                        </div>
+                        <div class="flex justify-end space-x-3">
+                            <button type="button" @click="showEditModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                                Annuler
+                            </button>
+                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                                Enregistrer
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </footer>
+    <!-- Toasts (inside same Alpine scope) -->
+    <div class="fixed top-4 right-4 space-y-2 z-[60]">
+        <template x-for="t in toasts" :key="t.id">
+            <div class="px-4 py-3 rounded shadow text-white"
+                 :class="{'bg-green-600': t.type==='success', 'bg-red-600': t.type==='error', 'bg-yellow-600': t.type==='warning'}">
+                <div class="flex items-center">
+                    <i class="fas mr-2" :class="{
+                        'fa-check-circle': t.type==='success',
+                        'fa-exclamation-triangle': t.type==='warning',
+                        'fa-times-circle': t.type==='error'
+                    }"></i>
+                    <span x-text="t.message"></span>
+                </div>
+            </div>
+        </template>
+    </div>
+    </main>
 {% endblock %}
 
 {% block extra_scripts %}
     <script>
-        function financeManager() {
+    function financeManager() {
             return {
+        activeTab: 'summary',
                 summary: {
-                    total_revenue: '0 MRU',
-                    total_expenses: '0 MRU',
-                    net_profit: '0 MRU',
-                    cash_balance: '0 MRU'
+                    total_revenue: '0 ' + (window.AppConfig?.currentCurrency || 'MRU'),
+                    total_expenses: '0 ' + (window.AppConfig?.currentCurrency || 'MRU'),
+                    net_profit: '0 ' + (window.AppConfig?.currentCurrency || 'MRU'),
+                    cash_balance: '0 ' + (window.AppConfig?.currentCurrency || 'MRU')
                 },
                 transactions: [],
-                categories: ['Ventes', 'Achats', 'Salaires', 'Loyer', 'Électricité', 'Maintenance', 'Marketing', 'Divers'],
+        receivables: [],
+        receivablesTotal: 0,
+                // Used as expense subcategories; backend categories are 'business'|'personal'
+                categories: ['Achats', 'Salaires', 'Loyer', 'Électricité', 'Maintenance', 'Marketing', 'Divers'],
                 showTransactionModal: false,
-                showExpenseModal: false,
+                showEditModal: false,
                 newTransaction: {
                     type: 'income',
                     amount: '',
                     description: '',
                     category: ''
                 },
+                editData: { id: null, type: 'income', amount: 0, description: '', category: '' },
                 searchTerm: '',
                 filterType: '',
                 chartPeriod: 'month',
                 revenueChart: null,
                 expenseChart: null,
+                isLoadingSummary: true,
+                isLoadingTransactions: true,
+                toasts: [],
                 
                 init() {
+                    // Route-based tab handling (e.g., ?tab=receivables&filter=overdue)
+                    const params = new URLSearchParams(window.location.search);
+                    const tab = params.get('tab');
+                    const filter = params.get('filter');
+                    if (tab === 'receivables') {
+                        this.activeTab = 'receivables';
+                        this.loadReceivables(filter === 'overdue');
+                    }
+
                     this.loadData();
                     this.$nextTick(() => {
-                        this.initCharts();
+                        if (window.Chart) {
+                            this.initCharts();
+                        } else {
+                            const s = document.createElement('script');
+                            s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                            s.onload = () => this.initCharts();
+                            document.head.appendChild(s);
+                        }
                     });
+                },
+                loadReceivables(onlyOverdue=false) {
+                    const url = onlyOverdue ? '/api/finance/client-debts?status=pending&overdue=true' : '/api/finance/client-debts?status=pending';
+                    apiFetch(url)
+                        .then(data => {
+                            if (data?.success) {
+                                this.receivables = data.debts || [];
+                                this.receivablesTotal = Number(data.total_remaining || 0);
+                            } else if (data && Array.isArray(data)) {
+                                this.receivables = data;
+                                this.receivablesTotal = this.receivables.reduce((s, d) => s + Number(d.remaining_amount||0), 0);
+                            }
+                        })
+                        .catch(err => console.error('Error loading receivables', err));
                 },
                 
                 loadData() {
                     // Load financial summary
-                    apiFetch('/api/finance/summary')
-                        .then(response => response.json())
+                        this.isLoadingSummary = true; // Load financial summary (use blueprint numeric endpoint)
+                        apiFetch('/api/finance/financial-summary')
                         .then(data => {
-                            if (data.success) {
-                                this.summary = data.summary;
+                            const cur = (window.AppConfig?.currentCurrency || 'MRU');
+                            const formatCur = (v) => window.formatCurrency ? window.formatCurrency(Number(v||0)) : (Number(v||0).toFixed(2) + ' ' + cur);
+                            const fs = data?.summary || data?.financial_summary || data;
+                            if (fs && (fs.total_revenue !== undefined || fs.current_cash_balance !== undefined || fs.total_business_expenses !== undefined || fs.total_expenses !== undefined)) {
+                                const totalExp = fs.total_expenses !== undefined
+                                    ? Number(fs.total_expenses || 0)
+                                    : (Number(fs.total_business_expenses||0) + Number(fs.total_personal_expenses||0));
+                                const net = fs.net_profit !== undefined
+                                    ? Number(fs.net_profit || 0)
+                                    : (Number(fs.total_profit || fs.total_revenue || 0) - totalExp);
+                                this.summary = {
+                                    total_revenue: formatCur(fs.total_revenue || 0),
+                                    total_expenses: formatCur(totalExp),
+                                    net_profit: formatCur(net),
+                                    cash_balance: formatCur(fs.current_cash_balance || fs.cash_balance || 0)
+                                };
+                            } else if (data && (data.success === false)) {
+                                this.showToast('error', data.message || 'Erreur de chargement du résumé');
                             }
+                            this.isLoadingSummary = false;
                         })
-                        .catch(error => console.error('Error loading summary:', error));
+                        .catch(error => { console.error('Error loading summary:', error); this.isLoadingSummary = false; this.showToast('error', 'Erreur de chargement du résumé'); });
                     
                     // Load transactions history
+                    this.isLoadingTransactions = true;
                     apiFetch('/api/finance/transactions')
-                        .then(response => response.json())
                         .then(data => {
-                            if (data.success) {
+                            if (Array.isArray(data)) {
+                                this.transactions = data;
+                            } else if (data?.transactions) {
                                 this.transactions = data.transactions || [];
+                            } else if (data?.success === false) {
+                                this.showToast('error', data.message || 'Erreur de chargement des transactions');
+                            } else {
+                                // Accept object keyed by id as fallback
+                                this.transactions = Object.values(data || {});
                             }
+                            this.isLoadingTransactions = false;
                         })
-                        .catch(error => console.error('Error loading transactions:', error));
+                        .catch(error => { console.error('Error loading transactions:', error); this.isLoadingTransactions = false; this.showToast('error', 'Erreur de chargement des transactions'); });
                 },
                 
                 get filteredTransactions() {
@@ -322,12 +483,15 @@
                 },
                 
                 initCharts() {
-                    const revenueCtx = document.getElementById('revenueChart').getContext('2d');
-                    const expenseCtx = document.getElementById('expenseChart').getContext('2d');
+                    const rev = document.getElementById('revenueChart');
+                    const exp = document.getElementById('expenseChart');
+                    if (!rev || !exp || !window.Chart) return;
+                    const revenueCtx = rev.getContext('2d');
+                    const expenseCtx = exp.getContext('2d');
 
                     this.revenueChart = new Chart(revenueCtx, {
                         type: 'line',
-                        data: { labels: [], datasets: [{ label: 'Revenus (MRU)', data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4 }] },
+                        data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4 }] },
                         options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
                     });
 
@@ -339,25 +503,26 @@
 
                     // Load chart data from reports API
                     apiFetch('/api/reports/financial-report')
-                        .then(r => r.json())
                         .then(data => {
-                            if (data.success) {
-                                const perf = data.report.daily_performance || [];
-                                this.revenueChart.data.labels = perf.map(p => p.date);
-                                this.revenueChart.data.datasets[0].data = perf.map(p => p.revenue);
-                                this.revenueChart.update();
+                            const report = data?.report || data;
+                            if (!report) return;
+                            const perf = report.daily_performance || [];
+                            this.revenueChart.data.labels = perf.map(p => p.date);
+                            this.revenueChart.data.datasets[0].data = perf.map(p => Number(p.revenue || 0));
+                            this.revenueChart.update();
 
-                                const breakdown = data.report.expenses_breakdown || [];
-                                this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
-                                this.expenseChart.data.datasets[0].data = breakdown.map(b => b.total_amount);
-                                this.expenseChart.update();
-                            }
+                            const breakdown = report.expenses_breakdown || [];
+                            this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
+                            this.expenseChart.data.datasets[0].data = breakdown.map(b => Number(b.total_amount || 0));
+                            this.expenseChart.update();
                         })
                         .catch(error => console.error('Error loading chart data:', error));
                 },
                 
                 updateCharts() {
                     const params = new URLSearchParams();
+                    const today = new Date().toISOString().split('T')[0];
+                    params.append('end_date', today);
                     if (this.chartPeriod === 'week') {
                         params.append('start_date', new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0]);
                     } else if (this.chartPeriod === 'month') {
@@ -366,19 +531,18 @@
                         params.append('start_date', new Date(Date.now() - 365*24*60*60*1000).toISOString().split('T')[0]);
                     }
                     apiFetch(`/api/reports/financial-report?${params.toString()}`)
-                        .then(r => r.json())
                         .then(data => {
-                            if (data.success) {
-                                const perf = data.report.daily_performance || [];
-                                this.revenueChart.data.labels = perf.map(p => p.date);
-                                this.revenueChart.data.datasets[0].data = perf.map(p => p.revenue);
-                                this.revenueChart.update();
+                            const report = data?.report || data;
+                            if (!report) return;
+                            const perf = report.daily_performance || [];
+                            this.revenueChart.data.labels = perf.map(p => p.date);
+                            this.revenueChart.data.datasets[0].data = perf.map(p => Number(p.revenue || 0));
+                            this.revenueChart.update();
 
-                                const breakdown = data.report.expenses_breakdown || [];
-                                this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
-                                this.expenseChart.data.datasets[0].data = breakdown.map(b => b.total_amount);
-                                this.expenseChart.update();
-                            }
+                            const breakdown = report.expenses_breakdown || [];
+                            this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
+                            this.expenseChart.data.datasets[0].data = breakdown.map(b => Number(b.total_amount || 0));
+                            this.expenseChart.update();
                         })
                         .catch(err => console.error('Error updating charts:', err));
                 },
@@ -394,7 +558,9 @@
                         entry_date: today
                     } : {
                         amount: this.newTransaction.amount,
-                        category: this.newTransaction.category || 'Divers',
+                        // Map UI category to backend schema
+                        category: 'business',
+                        subcategory: this.newTransaction.category || 'Divers',
                         description: this.newTransaction.description,
                         expense_date: today
                     };
@@ -404,22 +570,52 @@
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
                     })
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 this.loadData();
                                 this.showTransactionModal = false;
                                 this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
-                                alert('Transaction créée avec succès!');
+                                this.showToast('success', 'Transaction créée avec succès');
                             } else {
-                                alert(data.message || 'Erreur lors de la création');
+                                this.showToast('error', data.message || 'Erreur lors de la création');
                             }
                         })
-                        .catch(err => console.error('Error creating transaction:', err));
+                        .catch(err => { console.error('Error creating transaction:', err); this.showToast('error', 'Erreur lors de la création'); });
                 },
                 
                 editTransaction(transaction) {
-                    alert('Éditer transaction #' + transaction.id);
+                    this.editData = {
+                        id: transaction.id,
+                        type: transaction.type,
+                        amount: Number(transaction.amount || 0),
+                        description: transaction.description || '',
+                        category: transaction.category || ''
+                    };
+                    this.showEditModal = true;
+                },
+
+                updateTransaction() {
+                    if (!this.editData.id) return;
+                    const isIncome = this.editData.type === 'income';
+                    const url = isIncome ? `/api/finance/capital/${this.editData.id}` : `/api/finance/expenses/${this.editData.id}`;
+                    const body = isIncome
+                        ? { amount: Number(this.editData.amount || 0) }
+                        : { amount: Number(this.editData.amount || 0) };
+                    apiFetch(url, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(body)
+                    })
+                    .then(data=>{
+                        if (data.success) {
+                            this.showEditModal = false;
+                            this.loadData();
+                            this.showToast('success', 'Transaction mise à jour');
+                        } else {
+                            this.showToast('error', data.message || 'Erreur lors de la mise à jour');
+                        }
+                    })
+                    .catch(err=>{ console.error('Error updating transaction:', err); this.showToast('error', 'Erreur lors de la mise à jour'); });
                 },
                 
                 deleteTransaction(transaction) {
@@ -430,27 +626,56 @@
                         : `/api/finance/expenses/${transaction.id}`;
 
                     apiFetch(url, { method: 'DELETE' })
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 this.transactions = this.transactions.filter(t => t.id !== transaction.id);
+                                this.showToast('success', 'Transaction supprimée');
                             } else {
-                                alert(data.message || 'Erreur lors de la suppression');
+                                this.showToast('error', data.message || 'Erreur lors de la suppression');
                             }
                         })
-                        .catch(err => console.error('Error deleting transaction:', err));
+                        .catch(err => { console.error('Error deleting transaction:', err); this.showToast('error', 'Erreur lors de la suppression'); });
                 },
                 
                 generateFinanceReport() {
-                    alert('Génération du rapport financier...');
+                    // Respect current chart period for report time window
+                    const params = new URLSearchParams();
+                    const now = Date.now();
+                    if (this.chartPeriod === 'week') {
+                        params.append('start_date', new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]);
+                    } else if (this.chartPeriod === 'month') {
+                        params.append('start_date', new Date(now - 30*24*60*60*1000).toISOString().split('T')[0]);
+                    } else if (this.chartPeriod === 'year') {
+                        params.append('start_date', new Date(now - 365*24*60*60*1000).toISOString().split('T')[0]);
+                    }
+                    window.open(`/api/reports/financial-report?${params.toString()}`, '_blank');
                 },
                 
                 backupData() {
-                    alert('Sauvegarde des données financières...');
+                    // Requires admin; backend will enforce permissions
+                    apiFetch('/api/admin/backups', { method: 'POST' })
+                        .then(data => {
+                            if (data.success) {
+                                this.showToast('success', 'Sauvegarde créée avec succès');
+                            } else {
+                                this.showToast('error', data.message || 'Échec de la sauvegarde (droits admin requis)');
+                            }
+                        })
+                        .catch(err => { console.error('Backup error:', err); this.showToast('error', 'Erreur lors de la sauvegarde'); });
                 },
                 
                 formatDate(dateString) {
-                    return new Date(dateString).toLocaleDateString('fr-FR');
+                    if (!dateString) return '-';
+                    const d = new Date(dateString);
+                    if (isNaN(d.getTime())) return '-';
+                    return d.toLocaleDateString('fr-FR');
+                },
+                showToast(type, message) {
+                    const id = Date.now() + Math.random();
+                    this.toasts.push({ id, type, message });
+                    setTimeout(() => {
+                        this.toasts = this.toasts.filter(t => t.id !== id);
+                    }, 3000);
                 }
             }
         }

@@ -173,7 +173,7 @@ async function processPendingOperations() {
                         method = 'PUT';
                         break;
                     case 'create_customer':
-                        endpoint = '/api/customers/create';
+                        endpoint = '/api/customers';
                         method = 'POST';
                         break;
                     case 'update_inventory':
@@ -292,7 +292,7 @@ async function getProducts() {
 
 // Fetch customers with fallback to cached data
 async function getCustomers() {
-    return await fetchAndCacheData('/api/customers/list', 'customers');
+    return await fetchAndCacheData('/api/customers', 'customers');
 }
 
 // Create a sale (works online or offline)

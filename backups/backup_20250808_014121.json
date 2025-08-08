@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "date": "2025-08-08T01:41:21.841688",
+    "type": "backup"
+  },
+  "app_settings": {
+    "id": 1,
+    "store_name": "Quincaillerie ALalawiyin",
+    "store_address": "",
+    "store_phone": "",
+    "tax_rate": 20,
+    "currency": "MRU",
+    "language": "fr",
+    "low_stock_threshold": 5,
+    "ai_features_enabled": 1,
+    "updated_at": "2025-08-07 22:50:29",
+    "backup_frequency": "daily",
+    "company_name": "Alalwayin",
+    "created_at": "2025-08-01 19:55:38",
+    "default_language": "en",
+    "description": "Company name",
+    "enable_audit_log": "True",
+    "enable_notifications": "True",
+    "key": "company_name",
+    "value": "Quincaillerie Management",
+    "session_timeout_minutes": 30,
+    "max_login_attempts": 5,
+    "audit_log_enabled": true
+  },
+  "users": [
+    {
+      "id": 1,
+      "username": "Dah",
+      "role": "admin",
+      "language": "fr",
+      "created_at": "2025-07-24 16:31:25",
+      "last_login": "2025-08-08 01:10:03",
+      "is_active": 1,
+      "created_at_formatted": "24/07/2025 16:31",
+      "last_login_formatted": "08/08/2025 01:10"
+    },
+    {
+      "id": 2,
+      "username": "Isselmou",
+      "role": "employee",
+      "language": "fr",
+      "created_at": "2025-07-29 15:22:57",
+      "last_login": null,
+      "is_active": 1,
+      "created_at_formatted": "29/07/2025 15:22"
+    },
+    {
+      "id": 3,
+      "username": "admin",
+      "role": "admin",
+      "language": "fr",
+      "created_at": "2025-08-08 00:50:33",
+      "last_login": null,
+      "is_active": 0,
+      "created_at_formatted": "08/08/2025 00:50"
+    }
+  ]
+}

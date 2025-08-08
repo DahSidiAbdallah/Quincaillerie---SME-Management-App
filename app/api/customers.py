@@ -19,6 +19,7 @@ def require_auth():
 
 
 @customers_bp.route('/customers', methods=['GET'])
+@customers_bp.route('/customers/list', methods=['GET'])  # backward-compatible alias
 def list_customers():
     auth_check = require_auth()
     if auth_check:
@@ -92,6 +93,7 @@ def delete_customer(customer_id):
 
 
 @customers_bp.route('/customers', methods=['POST'])
+@customers_bp.route('/customers/create', methods=['POST'])  # backward-compatible alias
 def add_customer():
     auth_check = require_auth()
     if auth_check:

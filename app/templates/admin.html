@@ -18,31 +18,53 @@
             <p class="text-gray-600 mt-2">Gérez les utilisateurs, paramètres système et configuration</p>
         </div>
 
+        <!-- Logs -->
+        <div x-show="activeTab === 'logs'" class="space-y-4">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Journaux Récents</h3>
+                    <button @click="loadLogs()" class="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-1 rounded-md">Rafraîchir</button>
+                </div>
+                <div class="h-80 overflow-auto bg-gray-50 border border-gray-200 rounded p-3 font-mono text-sm whitespace-pre-wrap">
+                    <template x-if="logs.entries && logs.entries.length">
+                        <div>
+                            <template x-for="(line, idx) in logs.entries" :key="idx">
+                                <div x-text="line"></div>
+                            </template>
+                        </div>
+                    </template>
+                    <template x-if="!logs.entries || !logs.entries.length">
+                        <div class="text-gray-500">Aucun journal à afficher.</div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
         <!-- Admin Menu Tabs -->
         <div class="bg-white rounded-lg shadow mb-8">
             <div class="border-b border-gray-200">
                 <nav class="-mb-px flex space-x-8 px-6">
-                    <button @click="activeTab = 'users'" 
+                    <button @click="switchTab('users')" 
                             :class="activeTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-users mr-2"></i>Utilisateurs
                     </button>
-                    <button @click="activeTab = 'settings'" 
+                    <button @click="switchTab('settings')" 
                             :class="activeTab === 'settings' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-cog mr-2"></i>Paramètres
                     </button>
-                    <button @click="activeTab = 'backup'" 
+                    <button @click="switchTab('backup')" 
                             :class="activeTab === 'backup' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-database mr-2"></i>Sauvegarde
                     </button>
-                    <button @click="activeTab = 'logs'" 
+                    <button @click="switchTab('logs')" 
                             :class="activeTab === 'logs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-list-alt mr-2"></i>Journaux
                     </button>
-                    <button @click="activeTab = 'system'" 
+                    <button @click="switchTab('system')" 
                             :class="activeTab === 'system' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-server mr-2"></i>Système
@@ -135,11 +157,11 @@
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Nom de l'entreprise</label>
-                            <input type="text" x-model="settings.company_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <input type="text" x-model="settings.store_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Langue par défaut</label>
-                            <select x-model="settings.default_language" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <select x-model="settings.language" class="w-full border border-gray-300 rounded-md px-3 py-2">
                                 <option value="fr">Français</option>
                                 <option value="ar">العربية</option>
                                 
@@ -155,7 +177,7 @@
                         </div>
                         <div>
                             <label class="flex items-center">
-                                <input type="checkbox" x-model="settings.enable_notifications" class="rounded border-gray-300">
+                                <input type="checkbox" x-model="settings.email_notifications" class="rounded border-gray-300">
                                 <span class="ml-2 text-sm text-gray-700">Activer les notifications</span>
                             </label>
                         </div>
@@ -168,11 +190,11 @@
                     <div class="space-y-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Durée de session (minutes)</label>
-                            <input type="number" x-model="settings.session_timeout" min="5" max="480" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <input type="number" x-model.number="settings.session_timeout_minutes" min="5" max="480" class="w-full border border-gray-300 rounded-md px-3 py-2">
                         </div>
                         <div>
                             <label class="block text-sm font-medium text-gray-700 mb-2">Tentatives de connexion max</label>
-                            <input type="number" x-model="settings.max_login_attempts" min="3" max="10" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <input type="number" x-model.number="settings.max_login_attempts" min="3" max="10" class="w-full border border-gray-300 rounded-md px-3 py-2">
                         </div>
                         <div>
                             <label class="flex items-center">
@@ -182,7 +204,7 @@
                         </div>
                         <div>
                             <label class="flex items-center">
-                                <input type="checkbox" x-model="settings.enable_audit_log" class="rounded border-gray-300">
+                                <input type="checkbox" x-model="settings.audit_log_enabled" class="rounded border-gray-300">
                                 <span class="ml-2 text-sm text-gray-700">Activer le journal d'audit</span>
                             </label>
                         </div>
@@ -222,12 +244,21 @@
                     <h3 class="text-lg font-medium text-gray-900 mb-4">Restauration</h3>
                     <div class="space-y-4">
                         <p class="text-gray-600">Restaurez vos données à partir d'une sauvegarde.</p>
-                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center" @dragover.prevent @dragenter.prevent @drop.prevent="onRestoreDrop($event)">
                             <i class="fas fa-upload text-4xl text-gray-400 mb-2"></i>
                             <p class="text-gray-500">Glissez-déposez votre fichier de sauvegarde ici</p>
-                            <button class="mt-2 bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
-                                Sélectionner Fichier
-                            </button>
+                            <div class="mt-2">
+                                <input type="file" id="restoreFileInput" class="hidden" accept="application/json" @change="onRestoreFileSelected($event)">
+                                <button @click="triggerRestoreFile()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md">
+                                    Sélectionner Fichier
+                                </button>
+                                <template x-if="restoreFileName">
+                                    <div class="mt-2 text-sm text-gray-600" x-text="restoreFileName"></div>
+                                </template>
+                            </div>
+                            <template x-if="isRestoring">
+                                <div class="mt-3 text-blue-600 text-sm">Restauration en cours...</div>
+                            </template>
                         </div>
                     </div>
                 </div>
@@ -378,9 +409,12 @@
                     role: 'employee'
                 },
                 editingUserId: null,
-                settings: {},
+                settings: { store_name: '', language: 'fr', currency: 'MRU', email_notifications: true, session_timeout_minutes: 30, max_login_attempts: 5, audit_log_enabled: true, require_strong_passwords: false },
                 backups: [],
                 systemInfo: {},
+                logs: {},
+                isRestoring: false,
+                restoreFileName: '',
                 
                 init() {
                     this.loadData();
@@ -421,10 +455,9 @@
 
                     // Load settings data
                     apiFetch('/api/admin/settings')
-                        .then(r => r.json())
                         .then(data => { 
                             if (data.success) { 
-                                this.settings = data.settings || {}; 
+                                this.settings = Object.assign({}, this.settings, data.settings || {}); 
                                 console.log('Settings loaded:', Object.keys(this.settings).length);
                                 // Store in global backup
                                 storeGlobalData('settings', this.settings);
@@ -445,7 +478,6 @@
 
                     // Load backups data
                     apiFetch('/api/admin/backups')
-                        .then(r => r.json())
                         .then(data => { 
                             if (data.success) { 
                                 this.backups = data.backups || []; 
@@ -466,6 +498,16 @@
                                 console.log('Loaded backups from backup cache');
                             }
                         });
+                    
+                    // Preload logs when tab likely used later
+                    this.loadLogs();
+                },
+                
+                switchTab(tab) {
+                    this.activeTab = tab;
+                    if (tab === 'logs') {
+                        this.loadLogs();
+                    }
                 },
                 
                 createUser() {
@@ -480,7 +522,6 @@
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
                     })
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 this.loadData();
@@ -514,7 +555,6 @@
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({is_active: user.is_active})
                     })
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 console.log('User status updated successfully');
@@ -542,9 +582,8 @@
                         // Optimistic UI update - remove from list immediately
                         this.users = this.users.filter(u => u.id !== user.id);
                         
-                        apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' })
-                            .then(r => r.json())
-                            .then(data => {
+                apiFetch(`/api/auth/users/${user.id}`, { method: 'DELETE' })
+                    .then(data => {
                                 if (data.success) {
                                     console.log('User deleted successfully');
                                 } else {
@@ -575,37 +614,45 @@
                     statusEl.style.cssText = 'position: fixed; top: 20px; right: 20px; background: #3b82f6; color: white; padding: 10px; border-radius: 5px; z-index: 9999;';
                     document.body.appendChild(statusEl);
                     
+                    // Save general settings first
                     apiFetch('/api/admin/settings', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(this.settings)
                     })
-                        .then(r => r.json())
                         .then(data => { 
                             if (data.success) {
-                                statusEl.textContent = 'Paramètres sauvegardés avec succès';
-                                statusEl.style.background = '#10b981';
-                                setTimeout(() => statusEl.remove(), 3000);
-                                
-                                // Show feedback without blocking alert
-                                const feedback = document.createElement('div');
-                                feedback.textContent = '✅ Paramètres sauvegardés';
-                                feedback.style.cssText = 'position: fixed; bottom: 20px; left: 20px; background: #10b981; color: white; padding: 10px; border-radius: 5px; z-index: 9998;';
-                                document.body.appendChild(feedback);
-                                setTimeout(() => feedback.remove(), 3000);
-                                
-                                console.log('Settings saved successfully');
+                                // Then persist security-specific settings if backend supports it
+                                return apiFetch('/api/admin/settings/security', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({
+                                        session_timeout_minutes: this.settings.session_timeout_minutes,
+                                        max_login_attempts: this.settings.max_login_attempts,
+                                        audit_log_enabled: this.settings.audit_log_enabled,
+                                        email_notifications: this.settings.email_notifications,
+                                        currency: this.settings.currency
+                                    })
+                                }).then(sec => {
+                                    if (!sec.success) throw new Error(sec.message || 'Erreur paramètres sécurité');
+                                    return { success: true };
+                                });
                             } else {
                                 // Restore original settings on error
                                 this.settings = originalSettings;
-                                
-                                statusEl.textContent = 'Erreur: ' + (data.message || 'Erreur lors de la sauvegarde des paramètres');
-                                statusEl.style.background = '#ef4444';
-                                setTimeout(() => statusEl.remove(), 3000);
-                                
-                                alert(data.message || 'Erreur lors de la sauvegarde des paramètres');
-                                console.error('Error saving settings:', data.message);
+                                throw new Error(data.message || 'Erreur lors de la sauvegarde des paramètres');
                             }
+                        })
+                        .then(() => {
+                            statusEl.textContent = 'Paramètres sauvegardés avec succès';
+                            statusEl.style.background = '#10b981';
+                            setTimeout(() => statusEl.remove(), 3000);
+                            const feedback = document.createElement('div');
+                            feedback.textContent = '✅ Paramètres sauvegardés';
+                            feedback.style.cssText = 'position: fixed; bottom: 20px; left: 20px; background: #10b981; color: white; padding: 10px; border-radius: 5px; z-index: 9998;';
+                            document.body.appendChild(feedback);
+                            setTimeout(() => feedback.remove(), 3000);
+                            console.log('Settings saved successfully');
                         })
                         .catch(err => {
                             // Restore original settings on error
@@ -616,8 +663,67 @@
                             setTimeout(() => statusEl.remove(), 3000);
                             
                             console.error('Error saving settings:', err);
-                            alert('Erreur lors de la sauvegarde des paramètres');
+                            alert(err.message || 'Erreur lors de la sauvegarde des paramètres');
                         });
+                },
+                
+                loadLogs() {
+                    apiFetch('/api/admin/logs')
+                        .then(data => {
+                            if (data.success) {
+                                const entries = (data.logs && data.logs.recent) ? data.logs.recent : [];
+                                this.logs = { entries };
+                            } else {
+                                console.error('Erreur chargement journaux:', data.message);
+                            }
+                        })
+                        .catch(e => console.error('Erreur journaux:', e));
+                },
+
+                triggerRestoreFile() {
+                    const el = document.getElementById('restoreFileInput');
+                    if (el) el.click();
+                },
+                
+                onRestoreFileSelected(evt) {
+                    const file = evt.target.files && evt.target.files[0];
+                    if (file) {
+                        this.restoreFileName = file.name;
+                        this.uploadRestoreFile(file);
+                    }
+                },
+                
+                onRestoreDrop(event) {
+                    const file = event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files[0];
+                    if (file) {
+                        this.restoreFileName = file.name;
+                        this.uploadRestoreFile(file);
+                    }
+                },
+                
+                uploadRestoreFile(file) {
+                    this.isRestoring = true;
+                    const form = new FormData();
+                    form.append('file', file);
+                    apiFetch('/api/admin/backups/restore', {
+                        method: 'POST',
+                        body: form
+                    })
+                    .then(data => {
+                        this.isRestoring = false;
+                        if (data.success) {
+                            alert('Restauration réussie');
+                            // reload data
+                            this.loadData();
+                        } else {
+                            alert(data.message || 'Erreur de restauration');
+                        }
+                    })
+                    .catch(err => {
+                        this.isRestoring = false;
+                        console.error('Erreur restauration:', err);
+                        alert('Erreur lors de la restauration');
+                    });
                 },
                 
                 createBackup() {
@@ -631,7 +737,6 @@
                     document.body.appendChild(statusEl);
                     
                     apiFetch('/api/admin/backups', {method: 'POST'})
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 // Update status
@@ -689,7 +794,6 @@
                     document.body.appendChild(statusEl);
                     
                     apiFetch(`/api/admin/backups/${backup.id}`, {method: 'DELETE'})
-                        .then(r => r.json())
                         .then(data => { 
                             if (data.success) { 
                                 console.log('Backup deleted successfully');

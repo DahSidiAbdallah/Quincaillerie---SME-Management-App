@@ -71,8 +71,26 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                     profile = cursor.fetchone()
                     if profile:
                         prof = dict(profile)
-                        if prof.get('photo_path'):
-                            prof['photo_url'] = url_for('static', filename=prof['photo_path'].replace('static/', ''))
+                        # Build a robust photo_url regardless of how path was stored (absolute, static/..., or relative)
+                        photo_path = prof.get('photo_path')
+                        if photo_path:
+                            try:
+                                # Normalize slashes
+                                pp = str(photo_path).replace('\\', '/')
+                                # Resolve static root if available
+                                static_root = getattr(current_app, 'static_folder', None)
+                                static_root_norm = str(static_root).replace('\\', '/') if static_root else 'static'
+                                # Compute a path relative to static/
+                                if pp.startswith(static_root_norm):
+                                    idx = pp.rfind('static/')
+                                    rel = pp[idx + len('static/'):] if idx != -1 else pp
+                                elif 'static/' in pp:
+                                    rel = pp.split('static/', 1)[1]
+                                else:
+                                    rel = pp  # assume already relative like uploads/...
+                                prof['photo_url'] = url_for('static', filename=rel)
+                            except Exception:
+                                pass
                         user_data.update(prof)
                 
                 # Get user preferences if the table exists
@@ -94,29 +112,46 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                         except Exception as e:
                             logger.error(f"Error parsing preferences JSON: {e}")
                 
-                # Get user activity
-                cursor.execute('''
-                    SELECT 
-                        action_type, description, created_at, status
-                    FROM user_activity_log
-                    WHERE user_id = ?
-                    ORDER BY created_at DESC
-                    LIMIT 10
-                ''', (user_id,))
-                
+                # Get user activity: detect available timestamp column; be resilient if schema varies
                 activities = []
-                for row in cursor.fetchall():
-                    activity = dict(row)
-                    
-                    # Format timestamp
-                    if 'created_at' in activity:
+                try:
+                    # Determine which time column exists in user_activity_log
+                    cursor.execute("PRAGMA table_info(user_activity_log)")
+                    cols = [r[1] for r in cursor.fetchall()]
+                    time_col = 'action_time' if 'action_time' in cols else ('created_at' if 'created_at' in cols else None)
+
+                    def fetch_activities(col_name: str):
                         try:
-                            timestamp = datetime.fromisoformat(activity['created_at'].replace('Z', '+00:00'))
-                            activity['formatted_time'] = timestamp.strftime('%d/%m/%Y %H:%M')
+                            cursor.execute(f'''
+                                SELECT 
+                                    action_type, description, {col_name} AS created_at
+                                FROM user_activity_log
+                                WHERE user_id = ?
+                                ORDER BY {col_name} DESC
+                                LIMIT 10
+                            ''', (user_id,))
+                            return cursor.fetchall()
                         except Exception:
-                            activity['formatted_time'] = activity['created_at']
-                    
-                    activities.append(activity)
+                            return []
+
+                    rows = fetch_activities(time_col) if time_col else []
+
+                    for row in rows:
+                        activity = dict(row)
+                        # Format timestamp
+                        if 'created_at' in activity and activity['created_at']:
+                            try:
+                                timestamp = datetime.fromisoformat(str(activity['created_at']).replace('Z', '+00:00'))
+                                activity['formatted_time'] = timestamp.strftime('%d/%m/%Y %H:%M')
+                            except Exception:
+                                activity['formatted_time'] = activity['created_at']
+                        # Provide default status key for UI badge
+                        if 'status' not in activity:
+                            activity['status'] = 'success'
+                        activities.append(activity)
+                except Exception as _e:
+                    # Non-fatal: leave activities empty if schema differs
+                    activities = []
                 
                 return jsonify({
                     'success': True, 
@@ -149,33 +184,71 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 if not user_id:
                     return jsonify({'success': False, 'error': 'User not authenticated'})
 
-                if 'photo' not in request.files:
-                    return jsonify({'success': False, 'error': 'Aucun fichier'}), 400
-                file = request.files['photo']
-                if file.filename == '':
-                    return jsonify({'success': False, 'error': 'Aucun fichier'}), 400
+                # Language-aware error messaging
+                lang = session.get('language', 'fr')
+                def msg(no_file=False, bad_type=False):
+                    if lang == 'en':
+                        if no_file:
+                            return 'No file selected. Please choose an image to upload.'
+                        if bad_type:
+                            return 'Invalid file type. Please upload a JPG, PNG, or GIF image.'
+                        return 'An error occurred during upload.'
+                    elif lang == 'ar':
+                        if no_file:
+                            return 'لم يتم اختيار أي ملف. يرجى اختيار صورة للتحميل.'
+                        if bad_type:
+                            return 'نوع الملف غير صالح. يرجى رفع صورة بتنسيق JPG أو PNG أو GIF.'
+                        return 'حدث خطأ أثناء الرفع.'
+                    else:  # fr (default)
+                        if no_file:
+                            return 'Aucun fichier sélectionné. Veuillez choisir une image à téléverser.'
+                        if bad_type:
+                            return 'Type de fichier invalide. Veuillez téléverser une image JPG, PNG ou GIF.'
+                        return 'Une erreur est survenue lors du téléversement.'
 
-                filename = secure_filename(file.filename)
-                ext = os.path.splitext(filename)[1]
-                upload_dir = os.path.join(current_app.config['UPLOAD_FOLDER'], 'profiles')
+                if 'photo' not in request.files:
+                    return jsonify({'success': False, 'error': msg(no_file=True), 'code': 'NO_FILE'}), 400
+                file = request.files['photo']
+                original_name = (file.filename or '').strip()
+                if not original_name:
+                    return jsonify({'success': False, 'error': msg(no_file=True), 'code': 'NO_FILE'}), 400
+
+                filename = secure_filename(original_name)
+                ext = os.path.splitext(filename)[1].lower()
+                allowed = {'.jpg', '.jpeg', '.png', '.gif'}
+                if ext not in allowed:
+                    return jsonify({'success': False, 'error': msg(bad_type=True), 'code': 'BAD_TYPE'}), 400
+                # Always save under app static folder to match Flask static route
+                static_root = getattr(current_app, 'static_folder', None)
+                base_static = static_root if static_root else os.path.join(current_app.root_path, 'static')
+                upload_dir = os.path.join(base_static, 'uploads', 'profiles')
                 os.makedirs(upload_dir, exist_ok=True)
                 new_name = f'user_{user_id}{ext}'
                 path = os.path.join(upload_dir, new_name)
                 file.save(path)
+
+                # Build stored path (for DB) and URL (for response)
+                stored_photo_rel = ('uploads/profiles/' + new_name).replace('\\', '/')
+                stored_photo_path = ('static/' + stored_photo_rel).replace('\\', '/')
 
                 conn = db_manager.get_connection()
                 cursor = conn.cursor()
                 cursor.execute('SELECT id FROM user_profiles WHERE user_id = ?', (user_id,))
                 exists = cursor.fetchone() is not None
                 if exists:
-                    cursor.execute('UPDATE user_profiles SET photo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (path, user_id))
+                    cursor.execute('UPDATE user_profiles SET photo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (stored_photo_path, user_id))
                 else:
-                    cursor.execute('INSERT INTO user_profiles (user_id, photo_path) VALUES (?, ?)', (user_id, path))
+                    cursor.execute('INSERT INTO user_profiles (user_id, photo_path) VALUES (?, ?)', (user_id, stored_photo_path))
                 conn.commit(); conn.close()
 
-                db_manager.log_user_action(user_id, 'upload_photo', 'Mise à jour photo profil', 'user_profiles')
+                db_manager.log_user_action(user_id, 'upload_photo', 'Mise à jour photo profil')
+                # Build photo URL from stored relative path
+                try:
+                    photo_url = url_for('static', filename=stored_photo_rel)
+                except Exception:
+                    photo_url = None
 
-                return jsonify({'success': True, 'photo_url': url_for('static', filename=path.replace('static/',''))})
+                return jsonify({'success': True, 'photo_url': photo_url})
             except Exception as e:
                 logger.error(f"Error uploading photo: {e}")
                 return jsonify({'success': False, 'error': str(e)})
@@ -219,6 +292,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                             last_name TEXT,
                             email TEXT,
                             phone TEXT,
+                            photo_path TEXT,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY (user_id) REFERENCES users (id)
@@ -261,12 +335,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 conn.commit()
                 
                 # Log the action
-                db_manager.log_user_action(
-                    user_id, 
-                    'update_profile', 
-                    'Mise à jour du profil utilisateur',
-                    'user_profiles'
-                )
+                db_manager.log_user_action(user_id, 'update_profile', 'Mise à jour du profil utilisateur')
                 
                 return jsonify({
                     'success': True, 
@@ -303,12 +372,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 session['language'] = language
                 
                 # Log the action
-                db_manager.log_user_action(
-                    user_id, 
-                    'update_language', 
-                    f'Changement de langue vers {SUPPORTED_LANGUAGES[language]}',
-                    'users'
-                )
+                db_manager.log_user_action(user_id, 'update_language', f"Changement de langue vers {SUPPORTED_LANGUAGES[language]}")
                 
                 return jsonify({
                     'success': True, 
@@ -394,12 +458,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                     reload_required = True
                 
                 # Log the action
-                db_manager.log_user_action(
-                    user_id, 
-                    'update_preferences', 
-                    'Mise à jour des préférences utilisateur',
-                    'user_preferences'
-                )
+                db_manager.log_user_action(user_id, 'update_preferences', 'Mise à jour des préférences utilisateur')
                 
                 return jsonify({
                     'success': True, 
@@ -447,12 +506,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 conn.commit()
                 
                 # Log the action
-                db_manager.log_user_action(
-                    user_id, 
-                    'update_pin', 
-                    'Changement du PIN utilisateur',
-                    'users'
-                )
+                db_manager.log_user_action(user_id, 'update_pin', 'Changement du PIN utilisateur')
                 
                 return jsonify({
                     'success': True, 
@@ -523,12 +577,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 conn.commit()
                 
                 # Log the action
-                db_manager.log_user_action(
-                    user_id, 
-                    'update_notifications', 
-                    'Mise à jour des préférences de notification',
-                    'notification_preferences'
-                )
+                db_manager.log_user_action(user_id, 'update_notifications', 'Mise à jour des préférences de notification')
                 
                 return jsonify({
                     'success': True, 
@@ -555,7 +604,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 # Get user settings from database
                 settings = db_manager.get_app_settings()
                 
-                # Default preferences
+                # Default preferences (app-level)
                 preferences = {
                     'language': settings.get('language', 'fr'),
                     'currency': settings.get('currency', 'MRU'),
@@ -565,11 +614,20 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                     'show_tooltips': True,
                     'compact_view': False
                 }
-                
-                return jsonify({
-                    'success': True,
-                    'preferences': preferences
-                })
+                # Merge user-specific preferences if available
+                try:
+                    conn = db_manager.get_connection()
+                    cur = conn.cursor()
+                    cur.execute('SELECT preferences FROM user_preferences WHERE user_id = ?', (user_id,))
+                    row = cur.fetchone()
+                    if row and row['preferences']:
+                        user_prefs = json.loads(row['preferences'])
+                        if isinstance(user_prefs, dict):
+                            preferences.update(user_prefs)
+                except Exception as _e:
+                    pass
+
+                return jsonify({'success': True, 'preferences': preferences})
                 
             except Exception as e:
                 return jsonify({
@@ -594,7 +652,7 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 # Get notification settings from database
                 settings = db_manager.get_app_settings()
                 
-                # Default notification settings
+                # Default notification settings (app-level)
                 notifications = {
                     'email_notifications': settings.get('email_notifications', True),
                     'low_stock_alerts': True,
@@ -604,11 +662,22 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                     'daily_summary': False,
                     'weekly_reports': False
                 }
-                
-                return jsonify({
-                    'success': True,
-                    'notifications': notifications
-                })
+                # Merge per-user notification prefs if available
+                try:
+                    conn = db_manager.get_connection()
+                    cur = conn.cursor()
+                    cur.execute('SELECT preferences FROM notification_preferences WHERE user_id = ?', (user_id,))
+                    row = cur.fetchone()
+                    if row and row['preferences']:
+                        user_notif = json.loads(row['preferences'])
+                        if isinstance(user_notif, dict):
+                            # If saved structure is nested (email/browser/sound), return as-is
+                            # Frontend can handle nested when provided.
+                            notifications = user_notif
+                except Exception as _e:
+                    pass
+
+                return jsonify({'success': True, 'notifications': notifications})
                 
             except Exception as e:
                 return jsonify({
@@ -620,6 +689,80 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                 'success': False,
                 'error': 'Cette fonctionnalité n\'est pas disponible en mode minimal'
             })
+
+    @settings_bp.route('/api/settings/update-security', methods=['POST'])
+    def update_security():
+        """Persist per-user security preferences (auto logout, login notifications, activity log)."""
+        if MODULES_AVAILABLE and db_manager is not None:
+            try:
+                data = request.get_json() or {}
+                user_id = session.get('user_id')
+                if not user_id:
+                    return jsonify({'success': False, 'error': 'Utilisateur non authentifié'})
+
+                conn = db_manager.get_connection()
+                cursor = conn.cursor()
+
+                # Ensure user_preferences exists
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_preferences'")
+                if cursor.fetchone() is None:
+                    cursor.execute('''
+                        CREATE TABLE IF NOT EXISTS user_preferences (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            preferences TEXT,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (user_id) REFERENCES users (id)
+                        )
+                    ''')
+                    conn.commit()
+
+                # Load existing preferences
+                cursor.execute('SELECT preferences FROM user_preferences WHERE user_id = ?', (user_id,))
+                row = cursor.fetchone()
+                existing = {}
+                if row and row['preferences']:
+                    try:
+                        existing = json.loads(row['preferences'])
+                    except Exception:
+                        existing = {}
+
+                # Merge security subset
+                security = existing.get('security', {})
+                for key in ('auto_logout', 'auto_logout_time', 'login_notifications', 'activity_log'):
+                    if key in data:
+                        security[key] = data[key]
+                existing['security'] = security
+
+                # Save back
+                preferences_json = json.dumps(existing)
+                cursor.execute('SELECT id FROM user_preferences WHERE user_id = ?', (user_id,))
+                if cursor.fetchone():
+                    cursor.execute('''
+                        UPDATE user_preferences
+                        SET preferences = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = ?
+                    ''', (preferences_json, user_id))
+                else:
+                    cursor.execute('''
+                        INSERT INTO user_preferences (user_id, preferences)
+                        VALUES (?, ?)
+                    ''', (user_id, preferences_json))
+                conn.commit()
+
+                # Non-blocking log
+                try:
+                    db_manager.log_user_action(user_id, 'update_security', 'Mise à jour des préférences de sécurité')
+                except Exception:
+                    pass
+
+                return jsonify({'success': True, 'message': 'Préférences de sécurité mises à jour'})
+            except Exception as e:
+                logger.error(f"Error updating security preferences: {e}")
+                return jsonify({'success': False, 'error': str(e)})
+        else:
+            return jsonify({'success': False, 'error': 'Cette fonctionnalité n\'est pas disponible en mode minimal'})
     
     # Register the blueprint with the app
     app.register_blueprint(settings_bp)

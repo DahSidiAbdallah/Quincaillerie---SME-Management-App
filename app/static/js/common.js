@@ -69,9 +69,22 @@ function handleLogout() {
  * Data Consistency & Formatting Utilities
  */
 
-// Format currency values consistently
+// Format currency values consistently (uses AppConfig.currentCurrency when available)
 function formatCurrency(amount) {
-    return parseFloat(amount || 0).toFixed(2) + ' MRU';
+    try {
+        if (window.formatCurrency) {
+            return window.formatCurrency(amount);
+        }
+        const cur = (window.AppConfig && window.AppConfig.currentCurrency) ? window.AppConfig.currentCurrency : 'MRU';
+        const num = Number(amount || 0);
+        const parts = num.toFixed(2).split('.');
+        const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+        const fracPart = parts[1];
+        return `${intPart},${fracPart} ${cur}`;
+    } catch (e) {
+        const cur = (window.AppConfig && window.AppConfig.currentCurrency) ? window.AppConfig.currentCurrency : 'MRU';
+        return `0,00 ${cur}`;
+    }
 }
 
 // Format dates consistently

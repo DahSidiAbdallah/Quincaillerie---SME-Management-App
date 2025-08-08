@@ -32,7 +32,7 @@
                 <h3 class="text-lg font-medium text-gray-900">Types de Rapports</h3>
             </div>
             <div class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
                     <button @click="setActiveReport('sales')" 
                             :class="activeReport === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
@@ -59,6 +59,20 @@
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
                         <i class="fas fa-users text-2xl mb-2"></i>
                         <span class="font-medium">Rapport Clients</span>
+                    </button>
+
+                    <button @click="setActiveReport('activities')" 
+                            :class="activeReport === 'activities' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
+                        <i class="fas fa-clock text-2xl mb-2"></i>
+                        <span class="font-medium">Activités</span>
+                    </button>
+
+                    <button @click="setActiveReport('ai_insights')" 
+                            :class="activeReport === 'ai_insights' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
+                        <i class="fas fa-robot text-2xl mb-2"></i>
+                        <span class="font-medium">Insights IA</span>
                     </button>
                 </div>
             </div>
@@ -126,7 +140,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Chiffre d'Affaires</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.sales.revenue + ' MRU'">0 MRU</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.sales.revenue) : (reportData.sales.revenue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
                         </div>
                     </div>
                 </div>
@@ -138,7 +152,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Vente Moyenne</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.sales.average_sale + ' MRU'">0 MRU</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.sales.average_sale) : (reportData.sales.average_sale + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
                         </div>
                     </div>
                 </div>
@@ -182,12 +196,68 @@
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="product.name"></td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.quantity"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.revenue + ' MRU'"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.formatCurrency ? window.formatCurrency(product.revenue) : (product.revenue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))"></td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.percentage + '%'"></td>
                                 </tr>
                             </template>
                         </tbody>
                     </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Activities Report -->
+        <div x-show="activeReport === 'activities'" class="space-y-4">
+            <div class="bg-white rounded-lg shadow p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Activités récentes</h3>
+                    <button @click="loadActivities()" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
+                </div>
+                <div class="space-y-3">
+                    <template x-for="act in activities" :key="act.title + act.time_ago + act.user">
+                        <div class="flex items-start space-x-3 p-3 rounded border border-gray-100">
+                            <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
+                                 :class="{
+                                     'bg-green-100 text-green-600': act.type==='sale',
+                                     'bg-blue-100 text-blue-600': act.type==='stock',
+                                     'bg-purple-100 text-purple-600': act.type==='login',
+                                     'bg-yellow-100 text-yellow-600': act.type==='payment',
+                                     'bg-gray-100 text-gray-600': !['sale','stock','login','payment'].includes(act.type)
+                                 }">
+                                <span class="text-xs font-semibold" x-text="act.type.substring(0,1).toUpperCase()"></span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm text-gray-900"><span class="font-medium" x-text="act.title"></span> - <span x-text="act.description"></span></p>
+                                <p class="text-xs text-gray-500" x-text="`${act.time_ago} par ${act.user}`"></p>
+                            </div>
+                        </div>
+                    </template>
+                    <div x-show="activities.length===0" class="text-center text-gray-500 py-8">Aucune activité trouvée</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Insights Report (Admin oriented) -->
+        <div x-show="activeReport === 'ai_insights'" class="space-y-4">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Résumé IA</h3>
+                <p class="text-gray-700" x-text="ai.summary || 'Chargement du résumé...' "></p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h4 class="font-semibold text-gray-900 mb-1">Prédiction de ventes</h4>
+                    <p class="text-sm text-gray-600">Prévisions pour les prochains jours</p>
+                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.forecastDays + ' jours'"></p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h4 class="font-semibold text-gray-900 mb-1">Produits à réapprovisionner</h4>
+                    <p class="text-sm text-gray-600">Basé sur la demande et le stock</p>
+                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.restockCount"></p>
+                </div>
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h4 class="font-semibold text-gray-900 mb-1">Ajustements de prix suggérés</h4>
+                    <p class="text-sm text-gray-600">Optimisation des marges</p>
+                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.pricingCount"></p>
                 </div>
             </div>
         </div>
@@ -238,7 +308,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Valeur Stock</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.stock_value + ' MRU'">0 MRU</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.inventory.stock_value) : (reportData.inventory.stock_value + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
                         </div>
                     </div>
                 </div>
@@ -283,14 +353,16 @@
     </footer>
 {% block extra_scripts %}
     <script>
-        function reportsManager() {
+    function reportsManager() {
             return {
-                activeReport: 'sales',
+        activeReport: 'sales',
                 filters: {
                     period: 'month',
                     start_date: '',
                     end_date: ''
                 },
+        activities: [],
+        ai: { summary: '', restockCount: 0, pricingCount: 0, forecastDays: 7 },
                 reportData: {
                     sales: {
                         total_sales: 0,
@@ -309,6 +381,13 @@
                 salesChart: null,
                 
                 init() {
+                    // Honor ?tab=... query parameter for deep links
+                    const params = new URLSearchParams(window.location.search);
+                    const tab = params.get('tab');
+                    if (tab && ['sales','inventory','financial','customers','activities','ai_insights'].includes(tab)) {
+                        this.activeReport = tab;
+                    }
+
                     // Set default date range to current day to match sales page initially
                     this.filters.period = 'today';
                     const now = new Date();
@@ -316,6 +395,8 @@
                     this.filters.end_date = now.toISOString().split('T')[0];
                     
                     this.loadReportData();
+                    if (this.activeReport === 'activities') this.loadActivities();
+                    if (this.activeReport === 'ai_insights') this.loadAI();
                     this.$nextTick(() => {
                         this.initCharts();
                     });
@@ -332,7 +413,6 @@
 
                     // Load sales report with date filtering
                     apiFetch(`/api/reports/sales-report?start_date=${dateParams.startDate}&end_date=${dateParams.endDate}`)
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 const stats = data.report.overall_statistics;
@@ -350,8 +430,8 @@
                                     dataSourceElement.textContent = `Source des données: ${data.metadata?.report_type || 'Rapport de ventes'} - ${data.metadata?.date_range || 'Période personnalisée'}`;
                                 }
                                 // Get and format labels and data for chart
-                                let labels = data.report.sales_by_period.map(p => p.period);
-                                let amounts = data.report.sales_by_period.map(p => p.total_revenue);
+                                let labels = (data.report.sales_by_period || []).map(p => p.period);
+                                let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
                                 
                                 // If no data, show placeholder
                                 if (labels.length === 0) {
@@ -363,7 +443,7 @@
                                 if (this.salesChart) {
                                     this.salesChart.data.labels = labels;
                                     this.salesChart.data.datasets[0].data = amounts;
-                                    this.salesChart.data.datasets[0].label = `Ventes (MRU) - ${this.filters.period === 'today' ? 'Aujourd\'hui' : this.filters.period === 'week' ? '7 derniers jours' : this.filters.period === 'month' ? 'Ce mois' : 'Période sélectionnée'}`;
+                                    this.salesChart.data.datasets[0].label = `Ventes (${window.AppConfig?.currentCurrency || 'MRU'}) - ${this.filters.period === 'today' ? 'Aujourd\'hui' : this.filters.period === 'week' ? '7 derniers jours' : this.filters.period === 'month' ? 'Ce mois' : 'Période sélectionnée'}`;
                                     this.salesChart.update();
                                 }
                             }
@@ -372,15 +452,14 @@
 
                     // Get current inventory data - this should match what's shown on inventory page
                     apiFetch('/api/inventory/stats')
-                        .then(r => r.json())
                         .then(data => {
                             if (data.success) {
                                 // Use actual current inventory stats rather than historical data
                                 this.reportData.inventory = {
-                                    total_products: data.stats.total || 0,
-                                    low_stock: data.stats.low_stock || 0,
-                                    out_of_stock: data.stats.total - data.stats.in_stock || 0,
-                                    stock_value: formatCurrency(data.stats.total_value || 0)
+                                    total_products: Number(data.stats.total || 0),
+                                    low_stock: Number(data.stats.low_stock || 0),
+                                    out_of_stock: Number((data.stats.total || 0) - (data.stats.in_stock || 0)),
+                                    stock_value: Number(data.stats.total_value || 0)
                                 };
                                 
                                 // Add source info to data freshness indicator
@@ -391,6 +470,29 @@
                             }
                         })
                         .catch(error => console.error('Error loading inventory report:', error));
+                    
+                    // Load activities/AI when relevant
+                    if (this.activeReport === 'activities') this.loadActivities();
+                    if (this.activeReport === 'ai_insights') this.loadAI();
+                },
+                loadActivities() {
+                    apiFetch('/api/dashboard/activities?limit=50')
+                        .then(data => { if (data?.success) this.activities = data.activities || []; })
+                        .catch(err => console.error('Error loading activities', err));
+                },
+                loadAI() {
+                    // Summary
+                    apiFetch('/api/ai/summary-assistant?period=week')
+                        .then(d => { if (d?.success) this.ai.summary = d.summary?.text || ''; })
+                        .catch(()=>{});
+                    // Restock count
+                    apiFetch('/api/ai/restock-suggestions')
+                        .then(d => { if (d?.success) this.ai.restockCount = (d.suggestions||[]).length; })
+                        .catch(()=>{});
+                    // Pricing count
+                    apiFetch('/api/ai/price-suggestions')
+                        .then(d => { if (d?.success) this.ai.pricingCount = (d.suggestions||[]).length; })
+                        .catch(()=>{});
                 },
                 
                 initCharts() {
@@ -402,7 +504,7 @@
                             data: {
                                 labels: [],
                                 datasets: [{
-                                    label: 'Ventes (MRU)',
+                                    label: `Ventes (${window.AppConfig?.currentCurrency || 'MRU'})`,
                                     data: [],
                                     borderColor: 'rgb(59, 130, 246)',
                                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -418,7 +520,7 @@
                                         beginAtZero: true,
                                         ticks: {
                                             callback: function(value) {
-                                                return value + ' MRU';
+                                                return window.formatCurrency ? window.formatCurrency(value) : (value + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
                                             }
                                         }
                                     }
@@ -498,15 +600,30 @@
                 },
                 
                 exportToPDF() {
-                    alert('Export PDF en cours...');
+                    // Simple print to PDF using browser
+                    window.print();
                 },
                 
                 exportToExcel() {
-                    alert('Export Excel en cours...');
+                    // Use CSV exports; Excel can open CSV files
+                    if (this.activeReport === 'sales') {
+                        window.open('/api/reports/export/sales', '_blank');
+                    } else if (this.activeReport === 'inventory') {
+                        window.open('/api/reports/export/products', '_blank');
+                    } else {
+                        // Fallback to financial CSV via expenses
+                        window.open('/api/reports/export/expenses', '_blank');
+                    }
                 },
                 
                 exportToCSV() {
-                    alert('Export CSV en cours...');
+                    if (this.activeReport === 'sales') {
+                        window.open('/api/reports/export/sales', '_blank');
+                    } else if (this.activeReport === 'inventory') {
+                        window.open('/api/reports/export/products', '_blank');
+                    } else {
+                        window.open('/api/reports/export/expenses', '_blank');
+                    }
                 },
                 
                 scheduleReport() {

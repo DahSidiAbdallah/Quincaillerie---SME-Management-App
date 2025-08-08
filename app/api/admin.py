@@ -9,6 +9,7 @@ import logging
 import traceback
 import sys
 import platform
+import shutil
 import flask
 from datetime import datetime
 
@@ -17,6 +18,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../.
 
 # Import DatabaseManager from the correct location
 from app.data.database import DatabaseManager
+
+# Optional dependency: psutil
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover - optional dep may be absent
+    psutil = None  # Fallback handled in endpoint
 
 # Enhanced DatabaseManager to fix app settings issue
 class FixedDatabaseManager(DatabaseManager):
@@ -322,6 +329,51 @@ def app_settings():
         return response, 500
 
 
+@admin_bp.route('/settings/security', methods=['POST', 'OPTIONS'])
+def app_settings_security():
+    """Update security-related settings: session timeout, max login attempts, audit log, notifications, currency.
+    This complements the general /settings endpoint and ensures keys are persisted.
+    """
+    if request.method == 'OPTIONS':
+        response = jsonify({'success': True})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+
+    auth_check = require_admin()
+    if auth_check:
+        return auth_check
+
+    try:
+        data = request.get_json(silent=True) or {}
+        # Only keep recognized keys; values are stored in app_settings
+        allowed_keys = {
+            'session_timeout_minutes',
+            'max_login_attempts',
+            'audit_log_enabled',
+            'email_notifications',
+            'currency'
+        }
+        payload = {k: data[k] for k in data.keys() if k in allowed_keys}
+        if not payload:
+            response = jsonify({'success': False, 'message': 'Aucune donnée valide fournie'})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 400
+
+        db_manager.set_app_settings(payload)
+        db_manager.log_user_action(session['user_id'], 'update_security_settings', 'Mise à jour des paramètres de sécurité')
+        response = jsonify({'success': True, 'message': 'Paramètres de sécurité mis à jour'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Error updating security settings: {error_msg}")
+        response = jsonify({'success': False, 'message': error_msg})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+
+
 @admin_bp.route('/backups', methods=['GET', 'POST', 'OPTIONS'])
 def backups_list_create():
     # Handle CORS preflight request
@@ -438,6 +490,77 @@ def backup_download_delete(backup_id):
         stack_trace = traceback.format_exc()
         logger.error(f"Error handling backup {backup_id}: {error_msg}\n{stack_trace}")
         response = jsonify({'success': False, 'message': f'Erreur lors du traitement de la sauvegarde: {error_msg}'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response, 500
+
+
+@admin_bp.route('/backups/restore', methods=['POST', 'OPTIONS'])
+def backup_restore():
+    """Restore data from a previously exported backup JSON.
+    Accepts either multipart/form-data with a file field named 'file' or JSON body with 'data'.
+    Restores app settings and users minimally and logs the restore operation.
+    """
+    # Handle CORS preflight request
+    if request.method == 'OPTIONS':
+        response = jsonify({'success': True})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+        response.headers.add('Access-Control-Allow-Methods', 'POST,OPTIONS')
+        return response
+
+    auth_check = require_admin()
+    if auth_check:
+        return auth_check
+
+    try:
+        payload = None
+        if 'file' in request.files:
+            f = request.files['file']
+            content = f.read().decode('utf-8')
+            payload = json.loads(content)
+        else:
+            payload = request.get_json(silent=True) or {}
+            if 'data' in payload and isinstance(payload['data'], dict):
+                payload = payload['data']
+
+        if not payload:
+            response = jsonify({'success': False, 'message': 'Aucune donnée de sauvegarde fournie'})
+            response.headers.add('Access-Control-Allow-Origin', '*')
+            return response, 400
+
+        restored = {'settings': False, 'users': 0}
+
+        # Restore settings if present
+        settings_data = payload.get('app_settings') or payload.get('settings')
+        if isinstance(settings_data, dict):
+            try:
+                db_manager.set_app_settings(settings_data)
+                restored['settings'] = True
+            except Exception as e:
+                logger.warning(f"Failed to restore settings: {e}")
+
+        # Restore users (non-destructive upsert by username)
+        users = payload.get('users')
+        if isinstance(users, list):
+            for u in users:
+                try:
+                    if not isinstance(u, dict) or 'username' not in u:
+                        continue
+                    result = db_manager.upsert_user_by_username(u)
+                    if result.get('success'):
+                        restored['users'] += 1
+                except Exception as e:
+                    logger.warning(f"Skipping user restore for {u}: {e}")
+
+        db_manager.log_user_action(session['user_id'], 'restore_backup', 'Restauration des données depuis sauvegarde')
+        response = jsonify({'success': True, 'message': 'Restauration terminée', 'restored': restored})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
+    except Exception as e:
+        error_msg = str(e)
+        stack_trace = traceback.format_exc()
+        logger.error(f"Error restoring backup: {error_msg}\n{stack_trace}")
+        response = jsonify({'success': False, 'message': f'Erreur lors de la restauration: {error_msg}'})
         response.headers.add('Access-Control-Allow-Origin', '*')
         return response, 500
 
@@ -722,10 +845,11 @@ def admin_logs():
     
     try:
         # Check authentication
-        if not session.get('logged_in'):
-            response = jsonify({'success': False, 'message': 'Authentication required'})
+        # Require admin
+        if session.get('user_role') != 'admin':
+            response = jsonify({'success': False, 'message': 'Accès administrateur requis'})
             response.headers.add('Access-Control-Allow-Origin', '*')
-            return response, 401
+            return response, 403
         
         # Get logs from the logs directory
         logs_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'logs')
@@ -787,70 +911,75 @@ def admin_system_info():
     
     try:
         # Check authentication
-        if not session.get('logged_in'):
-            response = jsonify({'success': False, 'message': 'Authentication required'})
+        if session.get('user_role') != 'admin':
+            response = jsonify({'success': False, 'message': 'Accès administrateur requis'})
             response.headers.add('Access-Control-Allow-Origin', '*')
-            return response, 401
+            return response, 403
         
-        import psutil
-        import platform
-        
-        # Get system information
-        system_info = {
-            'platform': {
-                'system': platform.system(),
-                'release': platform.release(),
-                'version': platform.version(),
-                'machine': platform.machine(),
-                'processor': platform.processor(),
-                'python_version': platform.python_version()
-            },
-            'cpu': {
-                'cores': psutil.cpu_count(),
-                'cores_logical': psutil.cpu_count(logical=True),
-                'usage_percent': psutil.cpu_percent(interval=1)
-            },
-            'memory': {
-                'total': psutil.virtual_memory().total,
-                'available': psutil.virtual_memory().available,
-                'used': psutil.virtual_memory().used,
-                'percent': psutil.virtual_memory().percent
-            },
-            'disk': {
-                'total': psutil.disk_usage('/').total if platform.system() != 'Windows' else psutil.disk_usage('C:').total,
-                'used': psutil.disk_usage('/').used if platform.system() != 'Windows' else psutil.disk_usage('C:').used,
-                'free': psutil.disk_usage('/').free if platform.system() != 'Windows' else psutil.disk_usage('C:').free,
-                'percent': psutil.disk_usage('/').percent if platform.system() != 'Windows' else psutil.disk_usage('C:').percent
-            },
-            'app': {
-                'working_directory': os.getcwd(),
-                'database_path': getattr(db_manager, 'db_path', 'Unknown'),
-                'python_executable': sys.executable,
-                'flask_version': getattr(flask, '__version__', 'Unknown')
+        # Determine disk root
+        disk_root = 'C:' if platform.system() == 'Windows' else '/'
+
+        # Get system information with psutil when available; otherwise use limited info
+        if psutil is not None:
+            system_info = {
+                'platform': {
+                    'system': platform.system(),
+                    'release': platform.release(),
+                    'version': platform.version(),
+                    'machine': platform.machine(),
+                    'processor': platform.processor(),
+                    'python_version': platform.python_version()
+                },
+                'cpu': {
+                    'cores': psutil.cpu_count(),
+                    'cores_logical': psutil.cpu_count(logical=True),
+                    'usage_percent': psutil.cpu_percent(interval=1)
+                },
+                'memory': {
+                    'total': psutil.virtual_memory().total,
+                    'available': psutil.virtual_memory().available,
+                    'used': psutil.virtual_memory().used,
+                    'percent': psutil.virtual_memory().percent
+                },
+                'disk': {
+                    'total': psutil.disk_usage(disk_root).total,
+                    'used': psutil.disk_usage(disk_root).used,
+                    'free': psutil.disk_usage(disk_root).free,
+                    'percent': psutil.disk_usage(disk_root).percent
+                },
+                'app': {
+                    'working_directory': os.getcwd(),
+                    'database_path': getattr(db_manager, 'db_path', 'Unknown'),
+                    'python_executable': sys.executable,
+                    'flask_version': getattr(flask, '__version__', 'Unknown')
+                }
             }
-        }
+        else:
+            # Fallback system info without psutil
+            du = shutil.disk_usage(disk_root)
+            system_info = {
+                'platform': {
+                    'system': platform.system(),
+                    'release': platform.release(),
+                    'version': platform.version(),
+                    'machine': platform.machine(),
+                    'processor': platform.processor(),
+                    'python_version': platform.python_version()
+                },
+                'disk': {
+                    'total': du.total,
+                    'used': du.used,
+                    'free': du.free,
+                },
+                'app': {
+                    'working_directory': os.getcwd(),
+                    'database_path': getattr(db_manager, 'db_path', 'Unknown'),
+                    'python_executable': sys.executable,
+                    'flask_version': getattr(flask, '__version__', 'Unknown')
+                },
+                'note': 'Limited system info available (psutil not installed)'
+            }
         
-        response = jsonify({
-            'success': True,
-            'system_info': system_info
-        })
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        return response
-        
-    except ImportError as e:
-        logger.warning(f"psutil not available for system info: {e}")
-        # Fallback system info without psutil
-        system_info = {
-            'platform': {
-                'system': platform.system(),
-                'python_version': platform.python_version()
-            },
-            'app': {
-                'working_directory': os.getcwd(),
-                'python_executable': sys.executable
-            },
-            'note': 'Limited system info available (psutil not installed)'
-        }
         response = jsonify({
             'success': True,
             'system_info': system_info

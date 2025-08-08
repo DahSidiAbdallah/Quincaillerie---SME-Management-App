@@ -65,6 +65,14 @@ class DatabaseManager:
                 )
             ''')
 
+            # Generic app settings key/value store for flexible configuration
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            ''')
+
             # Customers table - used for sales and credit tracking
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS customers (
@@ -103,12 +111,10 @@ class DatabaseManager:
                 )
             ''')
 
-            # Add index for product lookups
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_products_name ON products(name);
-                CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku);
-                CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode);
-            ''')
+            # Add index for product lookups (split statements to avoid sqlite3 single-statement restriction)
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)')
             
             # Stock Movements table (for inventory tracking)
             cursor.execute('''
@@ -160,11 +166,9 @@ class DatabaseManager:
                 )
             ''')
 
-            # Add index for sale details lookups
-            cursor.execute('''
-                CREATE INDEX IF NOT EXISTS idx_sale_details_sale_id ON sale_details(sale_id);
-                CREATE INDEX IF NOT EXISTS idx_sale_details_product_id ON sale_details(product_id);
-            ''')
+            # Add index for sale details lookups (split to avoid sqlite single-statement restriction)
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_sale_details_sale_id ON sale_details(sale_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_sale_details_product_id ON sale_details(product_id)')
             
             # Payments table (for tracking partial payments)
             cursor.execute('''
@@ -480,16 +484,25 @@ class DatabaseManager:
             conn.close()
     
     def log_user_action(self, user_id, action_type, description):
-        """Log user activity"""
+        """Log user activity, respecting audit logging toggle (app_settings.audit_log_enabled)."""
+        # Quick check for audit logging enabled (defaults to True)
+        try:
+            if not self.is_audit_enabled():
+                return True
+        except Exception:
+            # If we fail to determine, proceed with logging to be safe
+            pass
+
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         try:
-            cursor.execute('''
+            cursor.execute(
+                '''
                 INSERT INTO user_activity_log (user_id, action_type, description)
                 VALUES (?, ?, ?)
-            ''', (user_id, action_type, description))
-            
+                ''',
+                (user_id, action_type, description),
+            )
             conn.commit()
             return True
         except Exception as e:
@@ -497,37 +510,125 @@ class DatabaseManager:
             return False
         finally:
             conn.close()
-    
-    def get_recent_activities(self, limit=20):
-        """Get recent user activities for dashboard"""
+
+    def is_audit_enabled(self) -> bool:
+        """Return True if audit logging is enabled in app_settings (default True)."""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         try:
-            cursor.execute('''
-                SELECT 
-                    a.id, a.action_type, a.description, a.created_at,
-                    u.username
-                FROM user_activity_log a
-                JOIN users u ON a.user_id = u.id
-                ORDER BY a.created_at DESC
-                LIMIT ?
-            ''', (limit,))
-            
+            cursor.execute("SELECT value FROM app_settings WHERE key = 'audit_log_enabled'")
+            row = cursor.fetchone()
+            if not row:
+                return True
+            val = row['value'] if isinstance(row, sqlite3.Row) else row[0]
+            if isinstance(val, str):
+                val_lower = val.strip().lower()
+                if val_lower in ('true', '1', 'yes', 'on'):
+                    return True
+                if val_lower in ('false', '0', 'no', 'off'):
+                    return False
+            # Try JSON bool
+            try:
+                decoded = json.loads(val)
+                if isinstance(decoded, bool):
+                    return decoded
+            except Exception:
+                pass
+            return bool(val)
+        except Exception:
+            return True
+        finally:
+            conn.close()
+
+    def upsert_user_by_username(self, user_data: dict):
+        """Upsert a user by username. If exists, update fields; else create a new user.
+        Expects keys: username (required), role, language, is_active, pin (optional for new users).
+        Returns dict(success: bool, user_id?: int, created?: bool)
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            username = user_data.get('username')
+            if not username:
+                return {'success': False, 'error': 'username manquant'}
+            cursor.execute('SELECT id FROM users WHERE username = ?', (username,))
+            row = cursor.fetchone()
+            if row:
+                user_id = row['id'] if isinstance(row, sqlite3.Row) else row[0]
+                updates = []
+                params = []
+                for key in ('role', 'language', 'is_active'):
+                    if key in user_data:
+                        updates.append(f"{key} = ?")
+                        val = user_data[key]
+                        if key == 'is_active':
+                            val = 1 if val in (True, 1, '1', 'true', 'True') else 0
+                        params.append(val)
+                if updates:
+                    params.append(user_id)
+                    cursor.execute(f"UPDATE users SET {', '.join(updates)} WHERE id = ?", params)
+                conn.commit()
+                return {'success': True, 'user_id': user_id, 'created': False}
+            else:
+                # Create
+                pin = user_data.get('pin') or '1234'
+                pin_hash = generate_password_hash(pin)
+                role = user_data.get('role', 'employee')
+                language = user_data.get('language', 'fr')
+                cursor.execute(
+                    'INSERT INTO users (username, pin_hash, role, language) VALUES (?, ?, ?, ?)',
+                    (username, pin_hash, role, language),
+                )
+                user_id = cursor.lastrowid
+                conn.commit()
+                return {'success': True, 'user_id': user_id, 'created': True}
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error upserting user by username: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            conn.close()
+    
+    def get_recent_activities(self, limit=20):
+        """Get recent user activities for dashboard. Supports action_time or created_at."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        try:
+            def fetch(col_name: str):
+                try:
+                    cursor.execute(
+                        f'''
+                        SELECT 
+                            a.id, a.action_type, a.description, a.{col_name} AS created_at,
+                            u.username
+                        FROM user_activity_log a
+                        JOIN users u ON a.user_id = u.id
+                        ORDER BY a.{col_name} DESC
+                        LIMIT ?
+                        ''',
+                        (limit,),
+                    )
+                    return cursor.fetchall()
+                except Exception:
+                    return []
+
+            rows = fetch('action_time')
+            if not rows:
+                rows = fetch('created_at')
+
             activities = []
-            for row in cursor.fetchall():
+            for row in rows:
                 activity = dict(row)
-                
                 # Format date
-                if 'created_at' in activity:
+                if 'created_at' in activity and activity['created_at']:
                     try:
-                        action_time = datetime.fromisoformat(activity['created_at'].replace('Z', '+00:00'))
+                        action_time = datetime.fromisoformat(str(activity['created_at']).replace('Z', '+00:00'))
                         activity['formatted_time'] = action_time.strftime('%d/%m/%Y %H:%M')
                     except Exception:
-                        activity['formatted_time'] = activity['action_time']
-                
+                        activity['formatted_time'] = activity.get('created_at')
                 activities.append(activity)
-            
+
             return activities
         except Exception as e:
             logger.error(f"Error fetching recent activities: {e}")
@@ -690,15 +791,57 @@ class DatabaseManager:
             ''', (this_month,))
             month_result = cursor.fetchone()
             
-            # Credit sales (pending debts)
-            cursor.execute('''
-                SELECT 
-                    SUM(total_amount - paid_amount) as amount,
-                    COUNT(*) as count
-                FROM sales
-                WHERE (total_amount - paid_amount) > 0
-                AND is_deleted = 0
-            ''')
+            # Credit/partial sales (pending debts) - support DBs without remaining_amount and with legacy paid column name
+            cursor.execute('PRAGMA table_info(sales)')
+            sales_cols = [col[1] for col in cursor.fetchall()]
+            if 'remaining_amount' in sales_cols:
+                cursor.execute(
+                    '''
+                    SELECT 
+                        SUM(remaining_amount) as amount,
+                        COUNT(*) as count
+                    FROM sales
+                    WHERE remaining_amount > 0
+                    AND is_deleted = 0
+                    '''
+                )
+            else:
+                # Derive remaining as total_amount - paid_column (amount_paid or paid_amount), with robust fallback
+                tried = False
+                for paid_col in ('amount_paid', 'paid_amount'):
+                    if paid_col in sales_cols:
+                        try:
+                            tried = True
+                            cursor.execute(
+                                f'''
+                                SELECT 
+                                    SUM(total_amount - {paid_col}) as amount,
+                                    SUM(CASE WHEN total_amount > {paid_col} THEN 1 ELSE 0 END) as count
+                                FROM sales
+                                WHERE (total_amount - {paid_col}) > 0
+                                AND is_deleted = 0
+                                '''
+                            )
+                            break
+                        except Exception:
+                            # Try next column name
+                            continue
+                if not tried:
+                    # Fallback: no paid column, return zeros
+                    return {
+                        'today': {
+                            'amount': float(today_result['amount']) if today_result and today_result['amount'] else 0,
+                            'count': today_result['count'] if today_result else 0
+                        },
+                        'month': {
+                            'amount': float(month_result['amount']) if month_result and month_result['amount'] else 0,
+                            'count': month_result['count'] if month_result else 0
+                        },
+                        'credits': {
+                            'amount': 0,
+                            'count': 0
+                        }
+                    }
             credits_result = cursor.fetchone()
             
             return {
@@ -728,6 +871,143 @@ class DatabaseManager:
     def get_total_products(self):
         """Get total number of products"""
         return self.get_inventory_stats().get('total', 0)
+
+    def get_customers_list(self):
+        """Get list of active customers. Falls back to deriving from sales if needed."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+            has_customers = cursor.fetchone() is not None
+            if has_customers:
+                cursor.execute(
+                    '''
+                    SELECT id, name, phone
+                    FROM customers
+                    WHERE is_active = 1
+                    ORDER BY name
+                    '''
+                )
+            else:
+                # Fallback: derive basic customer list from sales if columns available
+                # Attempt typical alternate columns customer_name/customer_phone
+                try:
+                    cursor.execute(
+                        '''
+                        SELECT MIN(rowid) as id, customer_name as name, customer_phone as phone
+                        FROM sales
+                        WHERE COALESCE(customer_name, '') <> ''
+                        GROUP BY customer_name, customer_phone
+                        ORDER BY customer_name
+                        '''
+                    )
+                except Exception:
+                    return []
+            return [dict(r) for r in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error fetching customers list: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_customer_by_id(self, customer_id: int):
+        """Fetch a single customer by id if exists and active."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+            if cursor.fetchone() is None:
+                return None
+            cursor.execute(
+                '''
+                SELECT id, name, phone, email, address, created_at, updated_at
+                FROM customers
+                WHERE id = ? AND is_active = 1
+                ''',
+                (customer_id,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error fetching customer by id: {e}")
+            return None
+        finally:
+            conn.close()
+
+    def update_customer(self, customer_id: int, name: str, phone: str = '', email: str = '', address: str = ''):
+        """Update basic customer fields if table exists."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+            if cursor.fetchone() is None:
+                return False
+            cursor.execute(
+                '''
+                UPDATE customers
+                SET name = ?, phone = ?, email = ?, address = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND is_active = 1
+                ''',
+                (name, phone, email, address, customer_id),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error updating customer: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def delete_customer(self, customer_id: int):
+        """Soft-delete a customer if table exists."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+            if cursor.fetchone() is None:
+                return False
+            cursor.execute(
+                '''
+                UPDATE customers
+                SET is_active = 0, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ? AND is_active = 1
+                ''',
+                (customer_id,),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error deleting customer: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def create_customer(self, name: str, phone: str = '', email: str = '', address: str = ''):
+        """Create a new customer record if table exists; otherwise return None."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='customers'")
+            if cursor.fetchone() is None:
+                return None
+            cursor.execute(
+                '''
+                INSERT INTO customers (name, phone, email, address)
+                VALUES (?, ?, ?, ?)
+                ''',
+                (name, phone, email, address),
+            )
+            customer_id = cursor.lastrowid
+            conn.commit()
+            return customer_id
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error creating customer: {e}")
+            return None
+        finally:
+            conn.close()
     
     def get_pending_debts(self):
         """Get pending credit sales for dashboard"""
@@ -735,14 +1015,42 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
-            cursor.execute('''
-                SELECT 
-                    SUM(total_amount - paid_amount) as total,
-                    COUNT(*) as count
-                FROM sales
-                WHERE is_credit = 1 OR paid_amount < total_amount
-                AND is_deleted = 0
-            ''')
+            # Support DBs without remaining_amount by deriving it and handle legacy paid column
+            cursor.execute('PRAGMA table_info(sales)')
+            sales_cols = [col[1] for col in cursor.fetchall()]
+            if 'remaining_amount' in sales_cols:
+                cursor.execute(
+                    '''
+                    SELECT 
+                        SUM(remaining_amount) as total,
+                        COUNT(*) as count
+                    FROM sales
+                    WHERE remaining_amount > 0
+                    AND is_deleted = 0
+                    '''
+                )
+            else:
+                # Try both possible paid columns with fallback
+                executed = False
+                for paid_col in ('amount_paid', 'paid_amount'):
+                    if paid_col in sales_cols:
+                        try:
+                            cursor.execute(
+                                f'''
+                                SELECT 
+                                    SUM(total_amount - {paid_col}) as total,
+                                    SUM(CASE WHEN total_amount > {paid_col} THEN 1 ELSE 0 END) as count
+                                FROM sales
+                                WHERE (total_amount - {paid_col}) > 0
+                                AND is_deleted = 0
+                                '''
+                            )
+                            executed = True
+                            break
+                        except Exception:
+                            continue
+                if not executed:
+                    return {'total': 0, 'count': 0}
             
             result = cursor.fetchone()
             
@@ -753,6 +1061,158 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error fetching pending debts: {e}")
             return {'total': 0, 'count': 0}
+        finally:
+            conn.close()
+
+    def add_to_sync_queue(self, table_name, record_id, operation, data=None):
+        """Add operation to a local sync queue (offline-first). Safe no-op if table doesn't exist.
+        Table schema (created on first use):
+          sync_queue(id PK, table_name TEXT, record_id INTEGER, operation TEXT,
+                     data TEXT, sync_status TEXT DEFAULT 'pending',
+                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                     synced_at TIMESTAMP)
+        """
+        conn = None
+        try:
+            conn = self.get_connection()
+            cursor = conn.cursor()
+            # Ensure table exists (lazy create)
+            cursor.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS sync_queue (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    table_name TEXT NOT NULL,
+                    record_id INTEGER,
+                    operation TEXT NOT NULL,
+                    data TEXT,
+                    sync_status TEXT DEFAULT 'pending',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    synced_at TIMESTAMP
+                )
+                '''
+            )
+            payload = json.dumps(data) if data is not None else None
+            cursor.execute(
+                '''
+                INSERT INTO sync_queue (table_name, record_id, operation, data)
+                VALUES (?, ?, ?, ?)
+                ''',
+                (table_name, record_id, operation, payload),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.warning(f"add_to_sync_queue failed (non-fatal): {e}")
+            return False
+        finally:
+            try:
+                if conn:
+                    conn.close()
+            except Exception:
+                pass
+
+    def populate_mauritania_data(self):
+        """Populate the database with minimal realistic sample data for Mauritania.
+        This method is used by helper scripts to seed demo data and is safe to call multiple times.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            # Ensure at least one admin user exists
+            cursor.execute("SELECT COUNT(*) as cnt FROM users")
+            if cursor.fetchone()[0] == 0:
+                pin_hash = generate_password_hash('1234')
+                cursor.execute(
+                    "INSERT INTO users (username, pin_hash, role, language) VALUES (?, ?, ?, ?)",
+                    ('admin', pin_hash, 'admin', 'fr')
+                )
+
+            # Seed products if empty
+            cursor.execute("SELECT COUNT(*) as cnt FROM products WHERE is_active = 1")
+            if cursor.fetchone()[0] == 0:
+                sample_products = [
+                    ('Marteau Acier', 'Marteau robuste pour usage général', 150.0, 220.0, 'OUTILS', 'Fournisseur A', '0012345678901', 50, 5),
+                    ('Tournevis Plat', 'Tournevis plat 5mm', 80.0, 120.0, 'OUTILS', 'Fournisseur B', '0012345678902', 80, 8),
+                    ('Peinture Blanche 5L', 'Peinture acrylique', 600.0, 900.0, 'PEINTURE', 'Fournisseur C', '0012345678903', 30, 4),
+                    ('Clé à Molette', 'Clé ajustable 200mm', 200.0, 300.0, 'QUINCAILLERIE', 'Fournisseur A', '0012345678904', 40, 6),
+                    ('Perceuse Électrique', 'Perceuse 500W', 1500.0, 2200.0, 'OUTILS', 'Fournisseur D', '0012345678905', 15, 3)
+                ]
+                for p in sample_products:
+                    cursor.execute(
+                        '''INSERT INTO products (name, description, purchase_price, selling_price, sku, barcode, category, supplier, initial_stock, current_stock, reorder_level)
+                           VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)''',
+                        (p[0], p[1], p[2], p[3], p[6], p[4], p[5], p[7], p[7], p[8])
+                    )
+
+            # Seed a few sales if none
+            cursor.execute("SELECT COUNT(*) FROM sales WHERE is_deleted = 0")
+            has_sales = cursor.fetchone()[0] > 0
+            if not has_sales:
+                # Get product ids and prices
+                cursor.execute("SELECT id, selling_price FROM products WHERE is_active = 1")
+                products = cursor.fetchall()
+                if products:
+                    from random import randint, choice
+                    for d in range(10):
+                        sale_date = (datetime.now() - timedelta(days=randint(0, 9))).strftime('%Y-%m-%d %H:%M:%S')
+                        payment_method = choice(['cash', 'mobile', 'cash', 'cash'])
+                        items_count = randint(1, 3)
+                        total_amount = 0.0
+                        cursor.execute('''
+                            INSERT INTO sales (invoice_number, customer_id, total_amount, amount_paid, remaining_amount, payment_method, payment_status, sale_date, created_by, notes, is_deleted)
+                            VALUES (?, NULL, 0, 0, 0, ?, 'paid', ?, 1, NULL, 0)
+                        ''', (f'INV{int(datetime.now().timestamp())}{d}', payment_method, sale_date))
+                        sale_id = cursor.lastrowid
+                        for _ in range(items_count):
+                            pr = choice(products)
+                            product_id = pr['id']
+                            unit_price = float(pr['selling_price'])
+                            qty = randint(1, 4)
+                            line_total = unit_price * qty
+                            total_amount += line_total
+                            cursor.execute('''
+                                INSERT INTO sale_details (sale_id, product_id, quantity, unit_price, discount_percent, total_price)
+                                VALUES (?, ?, ?, ?, 0, ?)
+                            ''', (sale_id, product_id, qty, unit_price, line_total))
+                            # Decrease stock and log movement
+                            cursor.execute("UPDATE products SET current_stock = current_stock - ? WHERE id = ?", (qty, product_id))
+                            cursor.execute('''
+                                INSERT INTO stock_movements (product_id, movement_type, quantity, reference_id, reference_type, notes, created_by)
+                                VALUES (?, 'sale', ?, ?, 'sale', NULL, 1)
+                            ''', (product_id, qty, sale_id))
+                        # finalize sale totals
+                        cursor.execute("UPDATE sales SET total_amount = ?, amount_paid = ?, remaining_amount = 0 WHERE id = ?", (total_amount, total_amount, sale_id))
+
+            # Seed recent activities if none
+            cursor.execute("SELECT COUNT(*) FROM user_activity_log")
+            has_activities = cursor.fetchone()[0] > 0
+            if not has_activities:
+                samples = [
+                    ('sale', 'Vente réalisée au comptoir'),
+                    ('stock', 'Sortie de stock pour commande client'),
+                    ('login', 'Connexion administrateur'),
+                    ('payment', 'Paiement reçu en espèces'),
+                    ('stock', 'Réception de marchandises (entrée)')
+                ]
+                # Find an admin user id
+                cursor.execute("SELECT id FROM users WHERE role='admin' LIMIT 1")
+                admin_row = cursor.fetchone()
+                admin_id = admin_row['id'] if admin_row else 1
+                for action_type, description in samples:
+                    cursor.execute(
+                        """
+                        INSERT INTO user_activity_log (user_id, action_type, description, action_time)
+                        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                        """,
+                        (admin_id, action_type, description)
+                    )
+
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Failed to populate Mauritania data: {e}")
+            return False
         finally:
             conn.close()
     
@@ -801,35 +1261,49 @@ class DatabaseManager:
             conn.close()
     
     def get_top_selling_products(self, days=30, limit=5):
-        """Get top selling products for dashboard"""
+        """Get top selling products for dashboard.
+        Prefer sale_items (new schema); gracefully fallback to sale_details if needed.
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         try:
             # Calculate date range
             end_date = datetime.now()
             # Include today in the range
             start_date = end_date - timedelta(days=days - 1)
 
-            cursor.execute('''
+            # Detect which sale detail table to use
+            try:
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_items'")
+                has_sale_items = cursor.fetchone() is not None
+            except Exception:
+                has_sale_items = False
+
+            table_alias = 'si' if has_sale_items else 'sd'
+            table_name = 'sale_items' if has_sale_items else 'sale_details'
+
+            query = f'''
                 SELECT
                     p.id, p.name, p.category,
-                    SUM(sd.quantity) as quantity_sold,
-                    SUM(sd.total_price) as total_sales
-                FROM sale_details sd
-                JOIN products p ON sd.product_id = p.id
-                JOIN sales s ON sd.sale_id = s.id
+                    SUM({table_alias}.quantity) as quantity_sold,
+                    SUM({table_alias}.total_price) as total_sales
+                FROM {table_name} {table_alias}
+                JOIN products p ON {table_alias}.product_id = p.id
+                JOIN sales s ON {table_alias}.sale_id = s.id
                 WHERE DATE(s.sale_date) BETWEEN ? AND ?
-                AND s.is_deleted = 0
+                AND (CASE WHEN EXISTS (SELECT 1 FROM pragma_table_info('sales') WHERE name='is_deleted') THEN s.is_deleted = 0 ELSE 1 END)
                 GROUP BY p.id
                 ORDER BY quantity_sold DESC
                 LIMIT ?
-            ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), limit))
-            
-            products = []
-            for row in cursor.fetchall():
-                products.append(dict(row))
-            
+            '''
+
+            cursor.execute(
+                query,
+                (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), limit),
+            )
+
+            products = [dict(row) for row in cursor.fetchall()]
             return products
         except Exception as e:
             logger.error(f"Error fetching top selling products: {e}")
@@ -927,22 +1401,56 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
+            # Base settings from row-based table
             cursor.execute('SELECT * FROM settings WHERE id = 1')
-            settings = cursor.fetchone()
-            
-            if settings:
-                return dict(settings)
-            else:
-                return {
-                    'store_name': 'Quincaillerie',
-                    'store_address': '',
-                    'store_phone': '',
-                    'tax_rate': 0.0,
-                    'currency': 'MRU',
-                    'language': 'fr',
-                    'low_stock_threshold': 5,
-                    'ai_features_enabled': True
-                }
+            settings_row = cursor.fetchone()
+            base_settings = dict(settings_row) if settings_row else {
+                'store_name': 'Quincaillerie',
+                'store_address': '',
+                'store_phone': '',
+                'tax_rate': 0.0,
+                'currency': 'MRU',
+                'language': 'fr',
+                'low_stock_threshold': 5,
+                'ai_features_enabled': True
+            }
+
+            # Overlay with key-value app_settings for flexible keys
+            try:
+                cursor.execute('SELECT key, value FROM app_settings')
+                for row in cursor.fetchall():
+                    key = row['key'] if isinstance(row, sqlite3.Row) else row[0]
+                    val = row['value'] if isinstance(row, sqlite3.Row) else row[1]
+                    # Try to decode JSON values, else keep as string/bool/number
+                    try:
+                        decoded = json.loads(val)
+                        base_settings[key] = decoded
+                    except Exception:
+                        # Coerce simple types
+                        if val in ('true', 'false'):
+                            base_settings[key] = val == 'true'
+                        else:
+                            # Try number
+                            try:
+                                if '.' in str(val):
+                                    base_settings[key] = float(val)
+                                else:
+                                    base_settings[key] = int(val)
+                            except Exception:
+                                base_settings[key] = val
+            except Exception:
+                # app_settings may not exist; ignore
+                pass
+
+            # Ensure presence of security-related defaults so UI fields are populated
+            if 'session_timeout_minutes' not in base_settings or not isinstance(base_settings.get('session_timeout_minutes'), (int, float)):
+                base_settings['session_timeout_minutes'] = 30
+            if 'max_login_attempts' not in base_settings or not isinstance(base_settings.get('max_login_attempts'), (int, float)):
+                base_settings['max_login_attempts'] = 5
+            if 'audit_log_enabled' not in base_settings or not isinstance(base_settings.get('audit_log_enabled'), bool):
+                base_settings['audit_log_enabled'] = True
+
+            return base_settings
         except Exception as e:
             logger.error(f"Error fetching app settings: {e}")
             return {}
@@ -955,61 +1463,51 @@ class DatabaseManager:
         cursor = conn.cursor()
         
         try:
-            # Get current settings
-            cursor.execute('SELECT * FROM settings WHERE id = 1')
-            current = cursor.fetchone()
-            
-            if current:
-                # Update existing settings
-                updates = []
-                params = []
-                
-                for key, value in settings_data.items():
-                    if key in ['id', 'updated_at']:  # Skip these fields
-                        continue
-                    
-                    updates.append(f'{key} = ?')
-                    params.append(value)
-                
-                if not updates:
-                    return {'success': True, 'message': 'No changes made'}
-                
-                # Add updated_at and ID
-                updates.append('updated_at = CURRENT_TIMESTAMP')
-                
-                # Build update query
-                query = f'''
-                    UPDATE settings
-                    SET {', '.join(updates)}
-                    WHERE id = 1
-                '''
-                
-                cursor.execute(query, params)
-            else:
-                # Insert new settings
-                keys = []
-                placeholders = []
-                params = []
-                
-                for key, value in settings_data.items():
-                    if key in ['id', 'updated_at']:  # Skip these fields
-                        continue
-                    
-                    keys.append(key)
-                    placeholders.append('?')
-                    params.append(value)
-                
-                # Add id = 1
-                keys.append('id')
-                placeholders.append('1')
-                
-                # Build insert query
-                query = f'''
-                    INSERT INTO settings ({', '.join(keys)})
-                    VALUES ({', '.join(placeholders)})
-                '''
-                
-                cursor.execute(query, params)
+            # Determine columns of settings table
+            cursor.execute('PRAGMA table_info(settings)')
+            settings_columns = [row[1] for row in cursor.fetchall()]
+
+            # Split incoming dict into known settings columns and extra keys
+            settings_updates = {}
+            kv_updates = {}
+            for key, value in settings_data.items():
+                if key in ['id', 'updated_at']:
+                    continue
+                if key in settings_columns:
+                    settings_updates[key] = value
+                else:
+                    kv_updates[key] = value
+
+            # Upsert to settings table for known columns
+            cursor.execute('SELECT 1 FROM settings WHERE id = 1')
+            exists = cursor.fetchone() is not None
+            if settings_updates:
+                if exists:
+                    updates = [f"{k} = ?" for k in settings_updates.keys()]
+                    params = list(settings_updates.values())
+                    updates.append('updated_at = CURRENT_TIMESTAMP')
+                    cursor.execute(f"UPDATE settings SET {', '.join(updates)} WHERE id = 1", params)
+                else:
+                    keys = list(settings_updates.keys()) + ['id']
+                    placeholders = ['?'] * len(settings_updates) + ['1']
+                    params = list(settings_updates.values())
+                    cursor.execute(
+                        f"INSERT INTO settings ({', '.join(keys)}) VALUES ({', '.join(placeholders)})",
+                        params
+                    )
+
+            # Upsert extra keys into app_settings (store JSON when needed)
+            if kv_updates:
+                for key, value in kv_updates.items():
+                    to_store = value
+                    if isinstance(value, (dict, list)):
+                        to_store = json.dumps(value)
+                    else:
+                        to_store = str(value)
+                    cursor.execute(
+                        "REPLACE INTO app_settings (key, value) VALUES (?, ?)",
+                        (key, to_store)
+                    )
             
             conn.commit()
             return {'success': True}
@@ -1017,5 +1515,23 @@ class DatabaseManager:
             conn.rollback()
             logger.error(f"Error updating app settings: {e}")
             return {'success': False, 'error': str(e)}
+        finally:
+            conn.close()
+
+    def update_user_language(self, user_id, language):
+        """Update the preferred language for a user."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                UPDATE users SET language = ?, last_login = last_login
+                WHERE id = ?
+            ''', (language, user_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error updating user language: {e}")
+            return False
         finally:
             conn.close()
