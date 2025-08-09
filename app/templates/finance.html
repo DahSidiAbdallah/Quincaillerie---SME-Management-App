@@ -186,9 +186,16 @@
                             <option value="income">Revenus</option>
                             <option value="expense">Dépenses</option>
                         </select>
-                        <button @click="loadData(); updateCharts();" class="border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">Rafraîchir</button>
+                        <button @click="refreshPeriod();" class="border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">Rafraîchir</button>
                     </div>
                 </div>
+            </div>
+            <!-- Totals above table -->
+            <div class="px-6 py-3 text-sm text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>Revenus: <span class="font-semibold" x-text="formatCurrencyPlain(totalIncome)"></span></div>
+                <div>Dépenses: <span class="font-semibold" x-text="formatCurrencyPlain(totalExpense)"></span></div>
+                <div>Net: <span class="font-semibold" :class="(totalIncome-totalExpense)>=0?'text-green-600':'text-red-600'" x-text="formatCurrencyPlain(totalIncome-totalExpense)"></span></div>
+                <div>Total lignes: <span class="font-semibold" x-text="filteredTransactions.length"></span></div>
             </div>
             
             <div class="overflow-x-auto">
@@ -229,7 +236,7 @@
                                     }">
                                     <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(Number(transaction.amount||0)) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))"></span>
                                 </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.category"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.subcategory || transaction.category"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <button @click="editTransaction(transaction)" class="text-blue-600 hover:text-blue-900 mr-3">
                                         <i class="fas fa-edit"></i>
@@ -407,6 +414,8 @@
                 isLoadingTransactions: true,
                 isLoadingCharts: true,
                 toasts: [],
+                totalIncome: 0,
+                totalExpense: 0,
                 // Helpers
                 parseDateFlex(s) {
                     if (!s) return null;
@@ -487,7 +496,11 @@
                         .catch(err => console.error('Error loading receivables', err));
                 },
                 
-                loadData() {
+                refreshPeriod() {
+                    this.loadData(true);
+                    this.updateCharts();
+                },
+                loadData(applyPeriod=false) {
                     // Load financial summary
                         this.isLoadingSummary = true; // Load financial summary (use blueprint numeric endpoint)
                         apiFetch('/api/finance/financial-summary')
@@ -515,38 +528,42 @@
                         })
                         .catch(error => { console.error('Error loading summary:', error); this.isLoadingSummary = false; this.showToast('error', 'Erreur de chargement du résumé'); });
                     
-                    // Load transactions history by merging expenses + capital
+                    // Load transactions via unified endpoint (date filters align with chart period)
                     this.isLoadingTransactions = true;
-                    Promise.all([
-                        apiFetch('/api/finance/expenses'),
-                        apiFetch('/api/finance/capital')
-                    ])
-                    .then(([expData, capData]) => {
-                        const expenses = expData?.expenses || (Array.isArray(expData) ? expData : []);
-                        const capitals = capData?.capital_entries || (Array.isArray(capData) ? capData : []);
-                        const mapExp = expenses.map(e => ({
-                            id: e.id,
-                            date: e.expense_date || e.created_at || e.date,
-                            amount: e.amount,
-                            description: e.description,
-                            type: 'expense',
-                            category: e.category || 'business'
-                        }));
-                        const mapCap = capitals.map(c => ({
-                            id: c.id,
-                            date: c.entry_date || c.created_at || c.date,
-                            amount: c.amount,
-                            description: c.source,
-                            type: 'income',
-                            category: 'capital'
-                        }));
-                        this.transactions = [...mapExp, ...mapCap].sort((a,b)=> {
-                            const db = this.parseDateFlex(b.date || b.created_at);
-                            const da = this.parseDateFlex(a.date || a.created_at);
-                            const nb = db ? db.getTime() : 0;
-                            const na = da ? da.getTime() : 0;
-                            return nb - na;
+                    const p = new URLSearchParams();
+                    if (applyPeriod) {
+                        const today = new Date().toISOString().split('T')[0];
+                        p.append('end_date', today);
+                        if (this.chartPeriod === 'week') {
+                            p.append('start_date', new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0]);
+                        } else if (this.chartPeriod === 'month') {
+                            p.append('start_date', new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0]);
+                        } else if (this.chartPeriod === 'year') {
+                            p.append('start_date', new Date(Date.now() - 365*24*60*60*1000).toISOString().split('T')[0]);
+                        } else {
+                            p.append('start_date', '2000-01-01');
+                        }
+                    }
+                    apiFetch('/api/finance/transactions' + (p.toString()?('?' + p.toString()):''))
+                    .then((data)=>{
+                        const list = data?.transactions || [];
+                        // Normalize and sort
+                        this.transactions = list.map(t=>({
+                            id: t.id,
+                            date: t.date || t.entry_date || t.expense_date || t.created_at,
+                            amount: Number(t.amount||0),
+                            description: t.description || t.source || '-',
+                            type: t.type,
+                            category: t.category,
+                            subcategory: t.subcategory || ''
+                        })).sort((a,b)=>{
+                            const db = this.parseDateFlex(b.date);
+                            const da = this.parseDateFlex(a.date);
+                            return (db?db.getTime():0) - (da?da.getTime():0);
                         });
+                        // Totals
+                        this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0);
+                        this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);
                         this.isLoadingTransactions = false;
                     })
                     .catch(error => { console.error('Error loading transactions:', error); this.isLoadingTransactions = false; this.showToast('error', 'Erreur de chargement des transactions'); });
@@ -583,6 +600,8 @@
 
                     // Load chart data initially using selected period (including 'all')
                     this.updateCharts();
+                    // Align transactions with initial period
+                    this.loadData(true);
                 },
                 
                 updateCharts() {
@@ -713,7 +732,7 @@
                         type: transaction.type,
                         amount: Number(transaction.amount || 0),
                         description: transaction.description || '',
-                        category: transaction.category || ''
+                        category: transaction.subcategory || transaction.category || ''
                     };
                     this.showEditModal = true;
                 },
@@ -723,8 +742,8 @@
                     const isIncome = this.editData.type === 'income';
                     const url = isIncome ? `/api/finance/capital/${this.editData.id}` : `/api/finance/expenses/${this.editData.id}`;
                     const body = isIncome
-                        ? { amount: Number(this.editData.amount || 0) }
-                        : { amount: Number(this.editData.amount || 0) };
+                        ? { amount: Number(this.editData.amount || 0), source: this.editData.description }
+                        : { amount: Number(this.editData.amount || 0), description: this.editData.description, subcategory: this.editData.category };
                     apiFetch(url, {
                         method: 'PUT',
                         headers: {'Content-Type': 'application/json'},
@@ -797,6 +816,13 @@
                     } catch (e) {
                         return this.toYMD(d);
                     }
+                },
+                formatCurrencyPlain(v){
+                    const cur = (window.AppConfig?.currentCurrency || 'MRU');
+                    const num = Number(v||0);
+                    const parts = num.toFixed(2).split('.');
+                    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+                    return `${intPart},${parts[1]} ${cur}`;
                 },
                 showToast(type, message) {
                     const id = Date.now() + Math.random();

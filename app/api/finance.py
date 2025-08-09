@@ -341,7 +341,12 @@ def modify_expense(expense_id):
 
 @finance_bp.route('/transactions', methods=['GET'])
 def get_transactions():
-    """Return combined list of income and expense transactions"""
+    """Return combined list of income and expense transactions with optional date filters.
+
+    Query params:
+    - start_date: YYYY-MM-DD inclusive
+    - end_date: YYYY-MM-DD inclusive
+    """
     auth_check = require_auth()
     if auth_check:
         return auth_check
@@ -350,17 +355,40 @@ def get_transactions():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
-        cursor.execute('''
-            SELECT id, entry_date AS date, amount, source AS description,
-                   'income' AS type, 'capital' AS category
-            FROM capital_entries
-            UNION ALL
-            SELECT id, expense_date AS date, amount, description,
-                   'expense' AS type, category
-            FROM expenses
-            ORDER BY date DESC
-        ''')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
 
+        # Build filters for both tables
+        cap_where = 'WHERE 1=1'
+        exp_where = 'WHERE 1=1'
+        params = []
+        params2 = []
+        if start_date:
+            cap_where += ' AND DATE(entry_date) >= ?'
+            exp_where += ' AND DATE(expense_date) >= ?'
+            params.append(start_date)
+            params2.append(start_date)
+        if end_date:
+            cap_where += ' AND DATE(entry_date) <= ?'
+            exp_where += ' AND DATE(expense_date) <= ?'
+            params.append(end_date)
+            params2.append(end_date)
+
+        # Use UNION ALL with aligned columns and include subcategory + created_at for stable ordering
+        query = f'''
+            SELECT id, DATE(entry_date) AS date, created_at, amount, source AS description,
+                   'income' AS type, 'capital' AS category, 'capital' AS subcategory
+            FROM capital_entries
+            {cap_where}
+            UNION ALL
+            SELECT id, DATE(expense_date) AS date, created_at, amount, description,
+                   'expense' AS type, category, COALESCE(subcategory, '') AS subcategory
+            FROM expenses
+            {exp_where}
+            ORDER BY date DESC, created_at DESC
+        '''
+
+        cursor.execute(query, params + params2)
         transactions = [dict(row) for row in cursor.fetchall()]
         conn.close()
 
