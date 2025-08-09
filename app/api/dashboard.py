@@ -159,7 +159,7 @@ def get_dashboard_activities():
 def get_top_products():
     """Get top selling products"""
     try:
-        # Get top selling products
+        # Get top selling products 
         products = db_manager.get_top_selling_products(days=30, limit=5)
         # Fallback: if no recent sales, broaden the window to all-time to avoid empty UI
         if not products:

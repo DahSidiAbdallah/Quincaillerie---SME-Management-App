@@ -12,6 +12,16 @@
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900">Gestion Financière</h1>
             <p class="text-gray-600 mt-2">Suivez vos revenus, dépenses et performance financière</p>
+        <!-- Tabs: Summary vs Receivables (visible so deep links are not confusing) -->
+        <div class="mt-4 flex items-center gap-2 text-sm">
+        <button @click="setTab('summary')"
+            :class="activeTab==='summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+            class="px-3 py-1 rounded-md">Résumé</button>
+        <button @click="setTab('receivables')"
+            :class="activeTab==='receivables' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
+            class="px-3 py-1 rounded-md">Créances en retard</button>
+        <span x-show="activeTab==='receivables'" class="ml-2 text-xs text-gray-500">(filtré: en retard)</span>
+        </div>
         </div>
 
         <!-- Financial Summary Cards -->
@@ -79,9 +89,13 @@
                         <option value="week">7 derniers jours</option>
                         <option value="month">30 derniers jours</option>
                         <option value="year">12 derniers mois</option>
+                        <option value="all">Tout le temps</option>
                     </select>
                 </div>
-                <div class="h-64">
+                <div class="h-64 relative">
+                    <div x-show="isLoadingCharts" class="absolute inset-0 flex items-center justify-center text-gray-500">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>Chargement du graphique...
+                    </div>
                     <canvas id="revenueChart"></canvas>
                 </div>
             </div>
@@ -89,7 +103,10 @@
             <!-- Expense Breakdown -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Répartition des Dépenses</h3>
-                <div class="h-64">
+                <div class="h-64 relative">
+                    <div x-show="isLoadingCharts" class="absolute inset-0 flex items-center justify-center text-gray-500">
+                        <i class="fas fa-spinner fa-spin mr-2"></i>Chargement du graphique...
+                    </div>
                     <canvas id="expenseChart"></canvas>
                 </div>
             </div>
@@ -169,6 +186,7 @@
                             <option value="income">Revenus</option>
                             <option value="expense">Dépenses</option>
                         </select>
+                        <button @click="loadData(); updateCharts();" class="border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">Rafraîchir</button>
                     </div>
                 </div>
             </div>
@@ -194,7 +212,7 @@
                         <template x-for="transaction in filteredTransactions" :key="transaction.id">
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date)"></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.description"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.description || transaction.source || '-' "></td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
                                           :class="{
@@ -209,7 +227,7 @@
                                         'text-green-600': transaction.type === 'income',
                                         'text-red-600': transaction.type === 'expense'
                                     }">
-                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(transaction.amount) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))"></span>
+                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(Number(transaction.amount||0)) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))"></span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.category"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -382,31 +400,74 @@
                 editData: { id: null, type: 'income', amount: 0, description: '', category: '' },
                 searchTerm: '',
                 filterType: '',
-                chartPeriod: 'month',
+                chartPeriod: 'all',
                 revenueChart: null,
                 expenseChart: null,
                 isLoadingSummary: true,
                 isLoadingTransactions: true,
+                isLoadingCharts: true,
                 toasts: [],
+                // Helpers
+                parseDateFlex(s) {
+                    if (!s) return null;
+                    // Native parse first (handles ISO like 2025-08-09 or 2025-08-09T12:00:00Z)
+                    let d = new Date(s);
+                    if (!isNaN(d)) return d;
+                    // Try "YYYY-MM-DD HH:MM:SS" by slicing date part
+                    if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) {
+                        const part = s.slice(0, 10);
+                        const d3 = new Date(part);
+                        if (!isNaN(d3)) return d3;
+                    }
+                    // Try DD/MM/YYYY or DD-MM-YYYY
+                    const m = /^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})/.exec(String(s));
+                    if (m) {
+                        const dd = parseInt(m[1], 10), mm = parseInt(m[2], 10) - 1, yy = parseInt(m[3].length === 2 ? ('20' + m[3]) : m[3], 10);
+                        const d2 = new Date(yy, mm, dd);
+                        return isNaN(d2) ? null : d2;
+                    }
+                    return null;
+                },
+                toYMD(d) { return d ? d.toISOString().split('T')[0] : ''; },
+                setTab(tab) {
+                    this.activeTab = tab;
+                    try {
+                        const u = new URL(window.location);
+                        if (tab === 'receivables') {
+                            u.searchParams.set('tab', 'receivables');
+                            u.searchParams.set('filter', 'overdue');
+                            this.loadReceivables(true);
+                        } else {
+                            // default summary view
+                            u.searchParams.delete('tab');
+                            u.searchParams.delete('filter');
+                        }
+                        window.history.replaceState(null, '', u.toString());
+                    } catch (e) { /* no-op */ }
+                },
                 
                 init() {
                     // Route-based tab handling (e.g., ?tab=receivables&filter=overdue)
                     const params = new URLSearchParams(window.location.search);
                     const tab = params.get('tab');
                     const filter = params.get('filter');
+                    const period = params.get('period');
+                    if (period && ['week','month','year','all'].includes(period)) {
+                        this.chartPeriod = period;
+                    }
                     if (tab === 'receivables') {
                         this.activeTab = 'receivables';
                         this.loadReceivables(filter === 'overdue');
                     }
 
                     this.loadData();
-                    this.$nextTick(() => {
+            this.$nextTick(() => {
                         if (window.Chart) {
-                            this.initCharts();
+                this.initCharts();
                         } else {
                             const s = document.createElement('script');
                             s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-                            s.onload = () => this.initCharts();
+                s.onload = () => this.initCharts();
                             document.head.appendChild(s);
                         }
                     });
@@ -454,29 +515,48 @@
                         })
                         .catch(error => { console.error('Error loading summary:', error); this.isLoadingSummary = false; this.showToast('error', 'Erreur de chargement du résumé'); });
                     
-                    // Load transactions history
+                    // Load transactions history by merging expenses + capital
                     this.isLoadingTransactions = true;
-                    apiFetch('/api/finance/transactions')
-                        .then(data => {
-                            if (Array.isArray(data)) {
-                                this.transactions = data;
-                            } else if (data?.transactions) {
-                                this.transactions = data.transactions || [];
-                            } else if (data?.success === false) {
-                                this.showToast('error', data.message || 'Erreur de chargement des transactions');
-                            } else {
-                                // Accept object keyed by id as fallback
-                                this.transactions = Object.values(data || {});
-                            }
-                            this.isLoadingTransactions = false;
-                        })
-                        .catch(error => { console.error('Error loading transactions:', error); this.isLoadingTransactions = false; this.showToast('error', 'Erreur de chargement des transactions'); });
+                    Promise.all([
+                        apiFetch('/api/finance/expenses'),
+                        apiFetch('/api/finance/capital')
+                    ])
+                    .then(([expData, capData]) => {
+                        const expenses = expData?.expenses || (Array.isArray(expData) ? expData : []);
+                        const capitals = capData?.capital_entries || (Array.isArray(capData) ? capData : []);
+                        const mapExp = expenses.map(e => ({
+                            id: e.id,
+                            date: e.expense_date || e.created_at || e.date,
+                            amount: e.amount,
+                            description: e.description,
+                            type: 'expense',
+                            category: e.category || 'business'
+                        }));
+                        const mapCap = capitals.map(c => ({
+                            id: c.id,
+                            date: c.entry_date || c.created_at || c.date,
+                            amount: c.amount,
+                            description: c.source,
+                            type: 'income',
+                            category: 'capital'
+                        }));
+                        this.transactions = [...mapExp, ...mapCap].sort((a,b)=> {
+                            const db = this.parseDateFlex(b.date || b.created_at);
+                            const da = this.parseDateFlex(a.date || a.created_at);
+                            const nb = db ? db.getTime() : 0;
+                            const na = da ? da.getTime() : 0;
+                            return nb - na;
+                        });
+                        this.isLoadingTransactions = false;
+                    })
+                    .catch(error => { console.error('Error loading transactions:', error); this.isLoadingTransactions = false; this.showToast('error', 'Erreur de chargement des transactions'); });
                 },
                 
                 get filteredTransactions() {
                     return this.transactions.filter(transaction => {
-                        const matchesSearch = !this.searchTerm || 
-                            transaction.description.toLowerCase().includes(this.searchTerm.toLowerCase());
+                        const term = (this.searchTerm || '').toLowerCase();
+                        const desc = (transaction.description || transaction.source || '').toLowerCase();
+                        const matchesSearch = !term || desc.includes(term);
                         const matchesType = !this.filterType || transaction.type === this.filterType;
                         return matchesSearch && matchesType;
                     });
@@ -501,25 +581,18 @@
                         options: { responsive: true, maintainAspectRatio: false }
                     });
 
-                    // Load chart data from reports API
-                    apiFetch('/api/reports/financial-report')
-                        .then(data => {
-                            const report = data?.report || data;
-                            if (!report) return;
-                            const perf = report.daily_performance || [];
-                            this.revenueChart.data.labels = perf.map(p => p.date);
-                            this.revenueChart.data.datasets[0].data = perf.map(p => Number(p.revenue || 0));
-                            this.revenueChart.update();
-
-                            const breakdown = report.expenses_breakdown || [];
-                            this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
-                            this.expenseChart.data.datasets[0].data = breakdown.map(b => Number(b.total_amount || 0));
-                            this.expenseChart.update();
-                        })
-                        .catch(error => console.error('Error loading chart data:', error));
+                    // Load chart data initially using selected period (including 'all')
+                    this.updateCharts();
                 },
                 
                 updateCharts() {
+                    this.isLoadingCharts = true;
+                    // Persist selected period in URL (no reload)
+                    try {
+                        const u = new URL(window.location);
+                        u.searchParams.set('period', this.chartPeriod);
+                        window.history.replaceState(null, '', u.toString());
+                    } catch (e) { /* no-op */ }
                     const params = new URLSearchParams();
                     const today = new Date().toISOString().split('T')[0];
                     params.append('end_date', today);
@@ -529,22 +602,73 @@
                         params.append('start_date', new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0]);
                     } else if (this.chartPeriod === 'year') {
                         params.append('start_date', new Date(Date.now() - 365*24*60*60*1000).toISOString().split('T')[0]);
+                    } else if (this.chartPeriod === 'all') {
+                        // Fetch all-time data
+                        params.append('start_date', '2000-01-01');
                     }
+                    const parseDateFlex = this.parseDateFlex;
+                    const toYMD = this.toYMD;
+
                     apiFetch(`/api/reports/financial-report?${params.toString()}`)
-                        .then(data => {
+                        .then(async (data) => {
                             const report = data?.report || data;
-                            if (!report) return;
-                            const perf = report.daily_performance || [];
+                            // 1) Revenue line: prefer report.daily_performance; if empty, build from /api/sales
+                            let perf = (report?.daily_performance || []).slice();
+                            if (!perf.length) {
+                                try {
+                                    const salesData = await apiFetch('/api/sales?limit=100000');
+                                    const sales = salesData?.sales || (Array.isArray(salesData) ? salesData : []);
+                                    const bucket = new Map();
+                                    for (const s of sales) {
+                                        const d = parseDateFlex(s.sale_date);
+                                        if (!d) continue;
+                                        const key = toYMD(d);
+                                        bucket.set(key, (bucket.get(key) || 0) + Number(s.total_amount || 0));
+                                    }
+                                    perf = [...bucket.entries()].map(([date, revenue]) => ({ date, revenue }))
+                                        .sort((a,b)=> new Date(a.date) - new Date(b.date));
+                                } catch (e) {
+                                    console.warn('Revenue fallback from sales failed', e);
+                                    perf = [];
+                                }
+                            } else {
+                                perf.sort((a,b)=> new Date(a.date) - new Date(b.date));
+                            }
+                            // If still no data, show safe placeholder
+                            if (!perf.length) {
+                                perf = [{ date: today, revenue: 0 }];
+                            }
                             this.revenueChart.data.labels = perf.map(p => p.date);
                             this.revenueChart.data.datasets[0].data = perf.map(p => Number(p.revenue || 0));
                             this.revenueChart.update();
 
-                            const breakdown = report.expenses_breakdown || [];
-                            this.expenseChart.data.labels = breakdown.map(b => b.subcategory || b.category);
-                            this.expenseChart.data.datasets[0].data = breakdown.map(b => Number(b.total_amount || 0));
-                            this.expenseChart.update();
+                            // 2) Expense doughnut: compute from expenses API; if empty, fallback to report.expenses_breakdown
+                            try {
+                                const qs = (this.chartPeriod === 'all') ? '' : `?start_date=${params.get('start_date')}&end_date=${params.get('end_date')}`;
+                                const exp = await apiFetch('/api/finance/expenses' + qs);
+                                let list = exp?.expenses || (Array.isArray(exp) ? exp : []);
+                                if (!list.length && report?.expenses_breakdown?.length) {
+                                    // normalize from report breakdown
+                                    list = report.expenses_breakdown.map(e => ({ amount: e.total_amount, subcategory: e.subcategory || e.category }));
+                                }
+                                const agg = {};
+                                for (const e of list) {
+                                    const key = (e.subcategory || e.category || 'Divers');
+                                    agg[key] = (agg[key] || 0) + Number(e.amount || 0);
+                                }
+                                let entries = Object.entries(agg);
+                                if (!entries.length) {
+                                    entries = [['Aucune dépense', 0]];
+                                }
+                                this.expenseChart.data.labels = entries.map(([k]) => k || 'Divers');
+                                this.expenseChart.data.datasets[0].data = entries.map(([,v]) => Number(v || 0));
+                                this.expenseChart.update();
+                            } catch (e) {
+                                console.warn('Expense breakdown compute failed', e);
+                            }
                         })
-                        .catch(err => console.error('Error updating charts:', err));
+                        .catch(err => { console.error('Error updating charts:', err); })
+                        .finally(() => { this.isLoadingCharts = false; });
                 },
                 
                 createTransaction() {
@@ -666,9 +790,13 @@
                 
                 formatDate(dateString) {
                     if (!dateString) return '-';
-                    const d = new Date(dateString);
-                    if (isNaN(d.getTime())) return '-';
-                    return d.toLocaleDateString('fr-FR');
+                    const d = this.parseDateFlex(dateString);
+                    if (!d || isNaN(d.getTime())) return '-';
+                    try {
+                        return d.toLocaleDateString('fr-FR');
+                    } catch (e) {
+                        return this.toYMD(d);
+                    }
                 },
                 showToast(type, message) {
                     const id = Date.now() + Math.random();
