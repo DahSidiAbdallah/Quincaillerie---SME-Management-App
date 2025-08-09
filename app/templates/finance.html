@@ -515,32 +515,19 @@
                         })
                         .catch(error => { console.error('Error loading summary:', error); this.isLoadingSummary = false; this.showToast('error', 'Erreur de chargement du résumé'); });
                     
-                    // Load transactions history by merging expenses + capital
+                    // Load transactions history using unified endpoint
                     this.isLoadingTransactions = true;
-                    Promise.all([
-                        apiFetch('/api/finance/expenses'),
-                        apiFetch('/api/finance/capital')
-                    ])
-                    .then(([expData, capData]) => {
-                        const expenses = expData?.expenses || (Array.isArray(expData) ? expData : []);
-                        const capitals = capData?.capital_entries || (Array.isArray(capData) ? capData : []);
-                        const mapExp = expenses.map(e => ({
-                            id: e.id,
-                            date: e.expense_date || e.created_at || e.date,
-                            amount: e.amount,
-                            description: e.description,
-                            type: 'expense',
-                            category: e.category || 'business'
-                        }));
-                        const mapCap = capitals.map(c => ({
-                            id: c.id,
-                            date: c.entry_date || c.created_at || c.date,
-                            amount: c.amount,
-                            description: c.source,
-                            type: 'income',
-                            category: 'capital'
-                        }));
-                        this.transactions = [...mapExp, ...mapCap].sort((a,b)=> {
+                    apiFetch('/api/finance/transactions')
+                    .then(data => {
+                        const list = data?.transactions || (Array.isArray(data) ? data : []);
+                        this.transactions = list.map(t => ({
+                            id: t.id,
+                            date: t.date || t.entry_date || t.expense_date || t.sale_date,
+                            amount: t.amount,
+                            description: t.description || t.source || t.details || '',
+                            type: t.type || (t.category === 'income' ? 'income' : 'expense'),
+                            category: t.category || ''
+                        })).sort((a,b)=> {
                             const db = this.parseDateFlex(b.date || b.created_at);
                             const da = this.parseDateFlex(a.date || a.created_at);
                             const nb = db ? db.getTime() : 0;
@@ -593,79 +580,18 @@
                         u.searchParams.set('period', this.chartPeriod);
                         window.history.replaceState(null, '', u.toString());
                     } catch (e) { /* no-op */ }
-                    const params = new URLSearchParams();
-                    const today = new Date().toISOString().split('T')[0];
-                    params.append('end_date', today);
-                    if (this.chartPeriod === 'week') {
-                        params.append('start_date', new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0]);
-                    } else if (this.chartPeriod === 'month') {
-                        params.append('start_date', new Date(Date.now() - 30*24*60*60*1000).toISOString().split('T')[0]);
-                    } else if (this.chartPeriod === 'year') {
-                        params.append('start_date', new Date(Date.now() - 365*24*60*60*1000).toISOString().split('T')[0]);
-                    } else if (this.chartPeriod === 'all') {
-                        // Fetch all-time data
-                        params.append('start_date', '2000-01-01');
-                    }
-                    const parseDateFlex = this.parseDateFlex;
-                    const toYMD = this.toYMD;
-
-                    apiFetch(`/api/reports/financial-report?${params.toString()}`)
-                        .then(async (data) => {
-                            const report = data?.report || data;
-                            // 1) Revenue line: prefer report.daily_performance; if empty, build from /api/sales
-                            let perf = (report?.daily_performance || []).slice();
-                            if (!perf.length) {
-                                try {
-                                    const salesData = await apiFetch('/api/sales?limit=100000');
-                                    const sales = salesData?.sales || (Array.isArray(salesData) ? salesData : []);
-                                    const bucket = new Map();
-                                    for (const s of sales) {
-                                        const d = parseDateFlex(s.sale_date);
-                                        if (!d) continue;
-                                        const key = toYMD(d);
-                                        bucket.set(key, (bucket.get(key) || 0) + Number(s.total_amount || 0));
-                                    }
-                                    perf = [...bucket.entries()].map(([date, revenue]) => ({ date, revenue }))
-                                        .sort((a,b)=> new Date(a.date) - new Date(b.date));
-                                } catch (e) {
-                                    console.warn('Revenue fallback from sales failed', e);
-                                    perf = [];
-                                }
-                            } else {
-                                perf.sort((a,b)=> new Date(a.date) - new Date(b.date));
-                            }
-                            // If still no data, show safe placeholder
-                            if (!perf.length) {
-                                perf = [{ date: today, revenue: 0 }];
-                            }
-                            this.revenueChart.data.labels = perf.map(p => p.date);
-                            this.revenueChart.data.datasets[0].data = perf.map(p => Number(p.revenue || 0));
+                    const periodParam = this.chartPeriod === 'all' ? 'year' : this.chartPeriod;
+                    apiFetch(`/api/finance/charts?period=${periodParam}`)
+                        .then(data => {
+                            const chart = data?.chart_data || data || {};
+                            const rev = chart.revenue || {};
+                            this.revenueChart.data.labels = (rev.labels || []);
+                            this.revenueChart.data.datasets[0].data = (rev.data || []).map(v => Number(v || 0));
                             this.revenueChart.update();
-
-                            // 2) Expense doughnut: compute from expenses API; if empty, fallback to report.expenses_breakdown
-                            try {
-                                const qs = (this.chartPeriod === 'all') ? '' : `?start_date=${params.get('start_date')}&end_date=${params.get('end_date')}`;
-                                const exp = await apiFetch('/api/finance/expenses' + qs);
-                                let list = exp?.expenses || (Array.isArray(exp) ? exp : []);
-                                if (!list.length && report?.expenses_breakdown?.length) {
-                                    // normalize from report breakdown
-                                    list = report.expenses_breakdown.map(e => ({ amount: e.total_amount, subcategory: e.subcategory || e.category }));
-                                }
-                                const agg = {};
-                                for (const e of list) {
-                                    const key = (e.subcategory || e.category || 'Divers');
-                                    agg[key] = (agg[key] || 0) + Number(e.amount || 0);
-                                }
-                                let entries = Object.entries(agg);
-                                if (!entries.length) {
-                                    entries = [['Aucune dépense', 0]];
-                                }
-                                this.expenseChart.data.labels = entries.map(([k]) => k || 'Divers');
-                                this.expenseChart.data.datasets[0].data = entries.map(([,v]) => Number(v || 0));
-                                this.expenseChart.update();
-                            } catch (e) {
-                                console.warn('Expense breakdown compute failed', e);
-                            }
+                            const exp = chart.expense || {};
+                            this.expenseChart.data.labels = (exp.categories || []);
+                            this.expenseChart.data.datasets[0].data = (exp.data || []).map(v => Number(v || 0));
+                            this.expenseChart.update();
                         })
                         .catch(err => { console.error('Error updating charts:', err); })
                         .finally(() => { this.isLoadingCharts = false; });
