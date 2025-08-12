@@ -679,23 +679,34 @@
                 
                 exportToExcel() {
                     // Use CSV exports; Excel can open CSV files
-                    if (this.activeReport === 'sales') {
-                        window.open('/api/reports/export/sales', '_blank');
-                    } else if (this.activeReport === 'inventory') {
-                        window.open('/api/reports/export/products', '_blank');
-                    } else {
-                        // Fallback to financial CSV via expenses
-                        window.open('/api/reports/export/expenses', '_blank');
-                    }
+                    this.exportWithFilters();
                 },
-                
+
                 exportToCSV() {
+                    this.exportWithFilters();
+                },
+
+                exportWithFilters() {
+                    const params = new URLSearchParams({
+                        period: this.filters.period,
+                        start_date: this.filters.start_date || '',
+                        end_date: this.filters.end_date || ''
+                    }).toString();
+                    let endpoint;
                     if (this.activeReport === 'sales') {
-                        window.open('/api/reports/export/sales', '_blank');
+                        endpoint = '/api/reports/export/sales';
                     } else if (this.activeReport === 'inventory') {
-                        window.open('/api/reports/export/products', '_blank');
+                        endpoint = '/api/reports/export/products';
                     } else {
-                        window.open('/api/reports/export/expenses', '_blank');
+                        endpoint = '/api/reports/export/expenses';
+                    }
+                    try {
+                        window.open(`${endpoint}?${params}`, '_blank');
+                    } catch (e) {
+                        console.error('Error exporting report', e);
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('Erreur lors de l\'export du rapport.', 'error');
+                        }
                     }
                 },
                 

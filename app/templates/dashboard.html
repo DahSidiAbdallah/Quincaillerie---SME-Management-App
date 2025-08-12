@@ -574,54 +574,48 @@
     // Load AI insights data
     async function loadAIInsights() {
         try {
-            const forecastResp = await fetch('/api/ai/sales-forecast');
-            if (forecastResp.ok) {
-                const forecastData = await forecastResp.json();
-                if (forecastData.success && forecastData.forecast && forecastData.forecast.summary) {
-                    document.getElementById('forecastText').textContent = forecastData.forecast.summary;
-                } else {
-                    document.getElementById('forecastText').textContent = 'Indisponible';
-                }
+            const forecastData = await apiFetch('/api/ai/sales-forecast');
+            if (forecastData.success && forecastData.forecast && forecastData.forecast.summary) {
+                document.getElementById('forecastText').textContent = forecastData.forecast.summary;
             } else {
                 document.getElementById('forecastText').textContent = 'Indisponible';
             }
         } catch (e) {
             console.error('Error loading forecast', e);
             document.getElementById('forecastText').textContent = 'Indisponible';
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Erreur lors du chargement des prévisions de vente.', 'error');
+            }
         }
 
         try {
-            const restockResp = await fetch('/api/ai/restock-suggestions');
-            if (restockResp.ok) {
-                const restockData = await restockResp.json();
-                if (restockData.success) {
-                    document.getElementById('restockText').textContent = `${restockData.suggestions.length} produits recommandés`;
-                } else {
-                    document.getElementById('restockText').textContent = 'Indisponible';
-                }
+            const restockData = await apiFetch('/api/ai/restock-suggestions');
+            if (restockData.success) {
+                document.getElementById('restockText').textContent = `${restockData.suggestions.length} produits recommandés`;
             } else {
                 document.getElementById('restockText').textContent = 'Indisponible';
             }
         } catch (e) {
             console.error('Error loading restock', e);
             document.getElementById('restockText').textContent = 'Indisponible';
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Erreur lors du chargement des suggestions de réapprovisionnement.', 'error');
+            }
         }
 
         try {
-            const priceResp = await fetch('/api/ai/price-suggestions');
-            if (priceResp.ok) {
-                const priceData = await priceResp.json();
-                if (priceData.success) {
-                    document.getElementById('pricingText').textContent = `${priceData.suggestions.length} produits à ajuster`;
-                } else {
-                    document.getElementById('pricingText').textContent = 'Indisponible';
-                }
+            const priceData = await apiFetch('/api/ai/price-suggestions');
+            if (priceData.success) {
+                document.getElementById('pricingText').textContent = `${priceData.suggestions.length} produits à ajuster`;
             } else {
                 document.getElementById('pricingText').textContent = 'Indisponible';
             }
         } catch (e) {
             console.error('Error loading pricing', e);
             document.getElementById('pricingText').textContent = 'Indisponible';
+            if (typeof window.showNotification === 'function') {
+                window.showNotification('Erreur lors du chargement des suggestions de prix.', 'error');
+            }
         }
     }
     
