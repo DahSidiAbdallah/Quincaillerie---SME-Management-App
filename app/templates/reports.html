@@ -416,29 +416,35 @@
                         .then(data => {
                             if (data.success) {
                                 const stats = data.report.overall_statistics;
+                                // Compute best day from sales_by_period
+                                const periods = data.report.sales_by_period || [];
+                                let bestDay = '-';
+                                if (periods.length > 0) {
+                                    const maxEntry = periods.reduce((prev, curr) =>
+                                        Number(curr.total_revenue) > Number(prev.total_revenue) ? curr : prev
+                                    );
+                                    bestDay = maxEntry.period;
+                                }
                                 this.reportData.sales = {
                                     total_sales: stats.total_sales || 0,
                                     revenue: stats.total_revenue || 0,
                                     average_sale: stats.avg_sale_amount || 0,
-                                    best_day: data.report.metadata?.report_type || '',
+                                    best_day: bestDay,
                                     top_products: data.report.top_products || []
                                 };
-                                
                                 // Update sales data source info
                                 const dataSourceElement = document.getElementById('data-source-info');
                                 if (dataSourceElement && this.activeReport === 'sales') {
-                                    dataSourceElement.textContent = `Source des données: ${data.metadata?.report_type || 'Rapport de ventes'} - ${data.metadata?.date_range || 'Période personnalisée'}`;
+                                    dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${data.report.metadata?.date_range || 'Période personnalisée'}`;
                                 }
                                 // Get and format labels and data for chart
                                 let labels = (data.report.sales_by_period || []).map(p => p.period);
                                 let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
-                                
                                 // If no data, show placeholder
                                 if (labels.length === 0) {
                                     labels = ['Aucune donnée'];
                                     amounts = [0];
                                 }
-                                
                                 // Update chart
                                 if (this.salesChart) {
                                     this.salesChart.data.labels = labels;

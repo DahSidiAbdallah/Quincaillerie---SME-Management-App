@@ -375,6 +375,15 @@ def get_transactions():
             params2.append(end_date)
 
         # Use UNION ALL with aligned columns and include subcategory + created_at for stable ordering
+        sales_where = 'WHERE 1=1'
+        params3 = []
+        if start_date:
+            sales_where += ' AND DATE(sale_date) >= ?'
+            params3.append(start_date)
+        if end_date:
+            sales_where += ' AND DATE(sale_date) <= ?'
+            params3.append(end_date)
+
         query = f'''
             SELECT id, DATE(entry_date) AS date, created_at, amount, source AS description,
                    'income' AS type, 'capital' AS category, 'capital' AS subcategory
@@ -385,10 +394,15 @@ def get_transactions():
                    'expense' AS type, category, COALESCE(subcategory, '') AS subcategory
             FROM expenses
             {exp_where}
+            UNION ALL
+         SELECT id, DATE(sale_date) AS date, created_at, total_amount AS amount,
+             'Vente' AS description, 'income' AS type, 'ventes' AS category, '' AS subcategory
+            FROM sales
+            {sales_where}
             ORDER BY date DESC, created_at DESC
         '''
 
-        cursor.execute(query, params + params2)
+        cursor.execute(query, params + params2 + params3)
         transactions = [dict(row) for row in cursor.fetchall()]
         conn.close()
 
@@ -878,3 +892,31 @@ def get_client_debts():
     except Exception as e:
         logger.error(f"Error fetching client debts: {e}")
         return jsonify({'success': False, 'message': "Erreur lors de la récupération des créances"}), 500
+
+@finance_bp.route('/client-debts/<int:debt_id>/status', methods=['PATCH'])
+def mark_client_debt_paid(debt_id):
+    """Mark a client debt as paid."""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        # Check if debt exists
+        cursor.execute('SELECT * FROM client_debts WHERE id = ?', (debt_id,))
+        debt = cursor.fetchone()
+        if not debt:
+            conn.close()
+            return jsonify({'success': False, 'message': 'Créance introuvable'}), 404
+        # Mark as paid
+        cursor.execute('''
+            UPDATE client_debts
+            SET status = 'paid', remaining_amount = 0, paid_amount = total_amount, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (debt_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Créance marquée comme payée', 'debt_id': debt_id})
+    except Exception as e:
+        logger.error(f"Error marking client debt as paid: {e}")
+        return jsonify({'success': False, 'message': "Erreur lors de la mise à jour de la créance"}), 500

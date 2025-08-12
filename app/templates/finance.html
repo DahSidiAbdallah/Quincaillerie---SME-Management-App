@@ -294,7 +294,18 @@
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.subcategory || transaction.category"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.client_name || '-' "></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.payment_method || '-' "></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.payment_status || '-' "></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    <template x-if="['retard','pending','paid','completed'].includes((transaction.payment_status||'').toLowerCase())">
+                                        <span>
+                                            <template x-if="(transaction.payment_status||'').toLowerCase() === 'retard'">Retard</template>
+                                            <template x-if="(transaction.payment_status||'').toLowerCase() === 'pending'">En attente</template>
+                                            <template x-if="['paid','completed'].includes((transaction.payment_status||'').toLowerCase())">Payé</template>
+                                        </span>
+                                    </template>
+                                    <template x-if="!['retard','pending','paid','completed'].includes((transaction.payment_status||'').toLowerCase())">
+                                        <span x-text="transaction.payment_status || '-' "></span>
+                                    </template>
+                                </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div class="flex items-center gap-3">
                                         <button :disabled="transaction.origin==='sale'" @click="editTransaction(transaction)" :class="transaction.origin==='sale' ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'" title="" :title="transaction.origin==='sale' ? 'Les ventes ne sont pas modifiables ici' : 'Modifier'">
@@ -609,10 +620,32 @@
             },
             markSelectedReceivablesPaid() {
                 if (!this.selectedReceivables.length) return;
-                // Simulate API call for marking as paid
-                this.receivables = this.receivables.filter(r => !this.selectedReceivables.includes(r.id));
-                this.selectedReceivables = [];
-                this.showToast('success', 'Créances marquées comme payées');
+                const ids = [...this.selectedReceivables];
+                let successCount = 0, failCount = 0;
+                Promise.all(ids.map(id =>
+                    fetch(`/api/finance/client-debts/${id}/status`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin'
+                    })
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.success) {
+                            successCount++;
+                            // Remove from UI
+                            this.receivables = this.receivables.filter(r => r.id !== id);
+                        } else {
+                            failCount++;
+                        }
+                    })
+                    .catch(() => { failCount++; })
+                )).then(() => {
+                    this.selectedReceivables = [];
+                    if (successCount > 0)
+                        this.showToast('success', `${successCount} créance(s) marquée(s) comme payée(s)`);
+                    if (failCount > 0)
+                        this.showToast('error', `${failCount} échec(s) lors de la mise à jour`);
+                });
             },
             showTransactionModal: false,
             showEditModal: false,
@@ -733,13 +766,8 @@
                     const res = await apiFetch('/api/finance/transactions').catch(() => ({ transactions: [] }));
                     const baseList = (res?.transactions && Array.isArray(res.transactions)) ? res.transactions : (Array.isArray(res) ? res : []);
 
-                    // Try to include capital entries explicitly (app route may omit them)
-                    const caps = await apiFetch('/api/finance/capital').catch(() => ({ capital_entries: [] }));
-                    const capsList = Array.isArray(caps?.capital_entries) ? caps.capital_entries : (Array.isArray(caps) ? caps : []);
-
                     // Map backend fields to frontend expected fields
-                    const mapTx = (t, originHint=null) => {
-                        // Support both old and new API fields
+                    const mapTx = (t) => {
                         let type = t.type;
                         if (type === 'revenu') type = 'income';
                         if (type === 'expense') type = 'expense';
@@ -752,31 +780,17 @@
                             date: t.date || t.entry_date || t.expense_date || t.sale_date,
                             amount: Number(amount || t.total_amount || 0),
                             description: t.description || t.source || t.details || (category==='capital' ? 'Apport de capital' : ''),
-                            type: type || (category === 'income' ? 'income' : (originHint==='capital' ? 'income' : 'expense')),
-                            category: category || originHint || '',
+                            type: type || (category === 'income' ? 'income' : (category==='capital' ? 'income' : 'expense')),
+                            category: category || '',
                             subcategory: t.subcategory || '',
                             client_name: t.client_name || '',
                             payment_method: t.payment_method || '',
                             payment_status: t.payment_status || '',
-                            origin: originHint || (category==='capital' ? 'capital' : (type==='income' ? 'sale' : 'expense'))
+                            origin: category==='capital' ? 'capital' : (type==='income' ? 'sale' : 'expense')
                         };
                     };
 
-                    const merged = [];
-                    const seen = new Set();
-                    baseList.forEach(t => {
-                        const tx = mapTx(t, (t.type==='revenu' || t.type==='income' ? 'sale' : 'expense'));
-                        const key = `${tx.origin}:${tx.id}`;
-                        if (!seen.has(key)) { seen.add(key); merged.push(tx); }
-                    });
-                    capsList.forEach(c => {
-                        const tx = mapTx({ id: c.id, entry_date: c.entry_date, amount: c.amount, source: c.source, category: 'capital' }, 'capital');
-                        const key = `${tx.origin}:${tx.id}`;
-                        if (!seen.has(key)) { seen.add(key); merged.push(tx); }
-                    });
-
-                    // Sort by date desc
-                    this.transactions = merged.sort((a,b)=>{
+                    this.transactions = baseList.map(mapTx).sort((a,b)=>{
                         const db = this.parseDateFlex(b.date) || new Date(0);
                         const da = this.parseDateFlex(a.date) || new Date(0);
                         return db - da;
@@ -794,7 +808,8 @@
             },
 
             loadReceivables(onlyOverdue=false) {
-                const url = onlyOverdue ? '/api/finance/client-debts?status=pending&overdue=true' : '/api/finance/client-debts?status=pending';
+                // Only show receivables truly overdue if onlyOverdue is true
+                const url = onlyOverdue ? '/api/finance/client-debts?overdue=true' : '/api/finance/client-debts';
                 apiFetch(url)
                     .then(data => {
                         if (data?.success) {

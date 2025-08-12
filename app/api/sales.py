@@ -33,9 +33,14 @@ def create_sale():
     
     if not data or not all(field in data for field in required_fields):
         return jsonify({'success': False, 'message': 'Champs requis manquants'}), 400
-    
+
     if not data['sale_items'] or len(data['sale_items']) == 0:
         return jsonify({'success': False, 'message': 'Au moins un article est requis'}), 400
+
+    # If credit, require due date
+    is_credit = data['paid_amount'] < data['total_amount']
+    if is_credit and not data.get('credit_due_date'):
+        return jsonify({'success': False, 'message': 'Date d\'échéance requise pour les ventes à crédit'}), 400
     
     try:
         conn = db_manager.get_connection()
@@ -74,7 +79,7 @@ def create_sale():
             float(data['paid_amount']),
             data.get('payment_method', 'cash'),
             is_credit,
-            data.get('credit_due_date'),
+            data.get('credit_due_date') if is_credit else None,
             data.get('notes', ''),
             session['user_id']
         ))
@@ -142,7 +147,11 @@ def create_sale():
                 session['user_id'],
                 'pending'
             ))
-        
+
+        # Always set status to 'paid' for fully paid sales (not 'completed')
+        if not is_credit or float(data['paid_amount']) >= float(data['total_amount']):
+            cursor.execute('UPDATE sales SET status = ? WHERE id = ?', ('paid', sale_id))
+
         conn.commit()
         
         # Log the sale
@@ -182,53 +191,63 @@ def get_sales():
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
+        # --- Auto-update overdue credit sales to 'retard' ---
+        from datetime import datetime
+        today = datetime.now().strftime('%Y-%m-%d')
+        cursor.execute("""
+            UPDATE sales
+            SET status='retard'
+            WHERE is_credit=1 AND status='pending' AND credit_due_date IS NOT NULL AND credit_due_date < ?
+        """, (today,))
+        conn.commit()
+
         # Get query parameters
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         customer_name = request.args.get('customer_name')
         is_credit = request.args.get('is_credit')
         limit = int(request.args.get('limit', 50))
-        
+
         # Base query
         query = '''
             SELECT s.*, u.username as created_by_name,
-                   (SELECT COUNT(*) FROM sale_items si WHERE si.sale_id = s.id) as items_count,
+                   (SELECT COALESCE(SUM(si.quantity),0) FROM sale_items si WHERE si.sale_id = s.id) as total_quantity,
                    (SELECT SUM(si.profit_margin) FROM sale_items si WHERE si.sale_id = s.id) as total_profit
             FROM sales s
             LEFT JOIN users u ON s.created_by = u.id
             WHERE 1=1
         '''
         params = []
-        
+
         # Add filters
         if start_date:
             query += ' AND DATE(s.sale_date) >= ?'
             params.append(start_date)
-        
+
         if end_date:
             query += ' AND DATE(s.sale_date) <= ?'
             params.append(end_date)
-            
+
         # No default filter - show all sales if no date specified
-        
+
         if customer_name:
             query += ' AND s.customer_name LIKE ?'
             params.append(f'%{customer_name}%')
-        
+
         if is_credit is not None:
             query += ' AND s.is_credit = ?'
             params.append(1 if is_credit.lower() == 'true' else 0)
-        
+
         query += ' ORDER BY s.created_at DESC LIMIT ?'
         params.append(limit)
-        
+
         cursor.execute(query, params)
         sales = [dict(row) for row in cursor.fetchall()]
         conn.close()
-        
+
         return jsonify({'success': True, 'sales': sales})
-        
+
     except Exception as e:
         logger.error(f"Error fetching sales: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des ventes'}), 500
@@ -323,23 +342,13 @@ def get_sales_stats():
         ''')
         active_customers = cursor.fetchone()
         
-        # Get pending payments primarily from client_debts table
+        # Get pending payments from sales table using status field
         cursor.execute('''
             SELECT COUNT(*) as count
-            FROM client_debts
-            WHERE remaining_amount > 0
+            FROM sales
+            WHERE status != 'paid' AND (is_credit = 1 OR payment_method = 'credit')
         ''')
-        pending_from_debts = cursor.fetchone()
-
-        # Include legacy credit sales that don't yet have a matching debt row
-        cursor.execute('''
-            SELECT COUNT(*) as count
-            FROM sales s
-            WHERE s.is_credit = 1 AND NOT EXISTS (
-                SELECT 1 FROM client_debts cd WHERE cd.sale_id = s.id
-            )
-        ''')
-        legacy_credit_pending = cursor.fetchone()
+        pending_from_sales = cursor.fetchone()
         
         # Get monthly revenue
         cursor.execute('''
@@ -355,7 +364,7 @@ def get_sales_stats():
         stats = {
             'today_sales': float(today_sales['amount'] or 0),
             'active_customers': active_customers['count'],
-            'pending_payments': (pending_from_debts['count'] or 0) + (legacy_credit_pending['count'] or 0),
+            'pending_payments': pending_from_sales['count'] or 0,
             'monthly_revenue': float(monthly_revenue['amount'] or 0)
         }
         
@@ -451,141 +460,142 @@ def delete_sale(sale_id):
         # Start transaction
         cursor.execute('BEGIN TRANSACTION')
 
-        # Reverse stock for each item and record movement
-        for it in items:
-            product_id = it['product_id']
-            qty = int(it['quantity'])
-            unit_price = float(it.get('unit_price', 0) or 0)
-            total_amount = float(it.get('total_price', unit_price * qty))
 
-            # Update stock
-            cursor.execute('SELECT current_stock FROM products WHERE id = ?', (product_id,))
-            prod = cursor.fetchone()
-            if prod is None:
-                conn.rollback()
-                return jsonify({'success': False, 'message': f'Produit {product_id} introuvable pour restauration de stock'}), 404
-            new_stock = (prod[0] or 0) + qty
-            cursor.execute('UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_stock, product_id))
-
-            # Stock movement entry
-            cursor.execute('''
-                INSERT INTO stock_movements (product_id, movement_type, quantity, unit_price, total_amount, reference, notes, created_by)
-                VALUES (?, 'in', ?, ?, ?, ?, ?, ?)
-            ''', (
-                product_id,
-                qty,
-                unit_price,
-                total_amount,
-                f'Annulation vente #{sale_id}',
-                'Restauration du stock suite à suppression de la vente',
-                session['user_id']
-            ))
-
-        # Get sale items (prefer new schema sale_items; gracefully fallback to legacy sale_details)
-        items: list[dict] = []
         try:
-            cursor.execute('''
-                SELECT si.*, p.name as product_name, p.purchase_price
-                FROM sale_items si
-                LEFT JOIN products p ON si.product_id = p.id
-                WHERE si.sale_id = ?
-            ''', (sale_id,))
-            items = [dict(row) for row in cursor.fetchall()]
-        except Exception:
-            # If sale_items table doesn't exist in this DB variant, ignore and fallback
-            items = []
+            conn = db_manager.get_connection()
+            cursor = conn.cursor()
 
-    # Fallback: some legacy sales store lines in sale_details
-        if not items:
+            # Fetch sale and items
+            cursor.execute('SELECT * FROM sales WHERE id = ?', (sale_id,))
+            sale = cursor.fetchone()
+            if not sale:
+                return jsonify({'success': False, 'message': 'Vente non trouvée'}), 404
+
+            cursor.execute('SELECT * FROM sale_items WHERE sale_id = ?', (sale_id,))
+            items = [dict(row) for row in cursor.fetchall()]
+
+            # Start transaction
+            cursor.execute('BEGIN TRANSACTION')
+
+            # Reverse stock for each item and record movement
+            for it in items:
+                product_id = it['product_id']
+                qty = int(it['quantity'])
+                unit_price = float(it.get('unit_price', 0) or 0)
+                total_amount = float(it.get('total_price', unit_price * qty))
+
+                # Update stock
+                cursor.execute('SELECT current_stock FROM products WHERE id = ?', (product_id,))
+                prod = cursor.fetchone()
+                if prod is None:
+                    conn.rollback()
+                    return jsonify({'success': False, 'message': f'Produit {product_id} introuvable pour restauration de stock'}), 404
+                new_stock = (prod[0] or 0) + qty
+                cursor.execute('UPDATE products SET current_stock = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (new_stock, product_id))
+
+                # Stock movement entry
+                cursor.execute('''
+                    INSERT INTO stock_movements (product_id, movement_type, quantity, unit_price, total_amount, reference, notes, created_by)
+                    VALUES (?, 'in', ?, ?, ?, ?, ?, ?)
+                ''', (
+                    product_id,
+                    qty,
+                    unit_price,
+                    total_amount,
+                    f'Annulation vente #{sale_id}',
+                    'Restauration du stock suite à suppression de la vente',
+                    session['user_id']
+                ))
+
+            # Get sale items (prefer new schema sale_items; gracefully fallback to legacy sale_details)
+            items = []
             try:
                 cursor.execute('''
-                    SELECT sd.*, p.name as product_name, p.purchase_price
-                    FROM sale_details sd
-                    LEFT JOIN products p ON sd.product_id = p.id
-                    WHERE sd.sale_id = ?
+                    SELECT si.*, p.name as product_name, p.purchase_price
+                    FROM sale_items si
+                    LEFT JOIN products p ON si.product_id = p.id
+                    WHERE si.sale_id = ?
                 ''', (sale_id,))
-                legacy_rows = cursor.fetchall()
-                items = []
-                for r in legacy_rows:
-                    row = dict(r)
-                    # Normalize expected fields used by the frontend
-                    qty = row.get('quantity')
-                    try:
-                        qty = int(qty) if qty is not None else 0
-                    except Exception:
-                        qty = int(float(qty) if qty is not None else 0)
-                    unit_price = row.get('unit_price')
-                    try:
-                        unit_price = float(unit_price) if unit_price is not None else 0.0
-                    except Exception:
-                        unit_price = 0.0
-                    total_price = row.get('total_price')
-                    try:
-                        total_price = float(total_price) if total_price is not None else unit_price * qty
-                    except Exception:
-                        total_price = unit_price * qty
-                    row['quantity'] = qty
-                    row['unit_price'] = unit_price
-                    row['total_price'] = total_price
-                    # product_name may be None if product was deleted; frontend handles with fallback '#<id>'
-                    items.append(row)
+                items = [dict(row) for row in cursor.fetchall()]
             except Exception:
-                # No legacy table; keep items as-is
+                items = []
+
+            # Fallback: some legacy sales store lines in sale_details
+            if not items:
+                try:
+                    cursor.execute('''
+                        SELECT sd.*, p.name as product_name, p.purchase_price
+                        FROM sale_details sd
+                        LEFT JOIN products p ON sd.product_id = p.id
+                        WHERE sd.sale_id = ?
+                    ''', (sale_id,))
+                    legacy_rows = cursor.fetchall()
+                    items = []
+                    for r in legacy_rows:
+                        row = dict(r)
+                        qty = row.get('quantity')
+                        try:
+                            qty = int(qty) if qty is not None else 0
+                        except Exception:
+                            qty = int(float(qty) if qty is not None else 0)
+                        unit_price = row.get('unit_price')
+                        try:
+                            unit_price = float(unit_price) if unit_price is not None else 0.0
+                        except Exception:
+                            unit_price = 0.0
+                        total_price = row.get('total_price')
+                        try:
+                            total_price = float(total_price) if total_price is not None else unit_price * qty
+                        except Exception:
+                            total_price = unit_price * qty
+                        row['quantity'] = qty
+                        row['unit_price'] = unit_price
+                        row['total_price'] = total_price
+                        items.append(row)
+                except Exception:
+                    pass
+
+            # Final safety: if still no items (legacy aggregated sale without detail rows),
+            # synthesize a single summary line so the UI isn't empty.
+            if not items:
+                try:
+                    unit = float(sale.get('total_amount') or 0)
+                except Exception:
+                    unit = 0.0
+                items = [{
+                    'id': None,
+                    'product_id': None,
+                    'product_name': 'Vente (non détaillée)',
+                    'quantity': 1,
+                    'unit_price': unit,
+                    'total_price': unit
+                }]
+
+            # Delete any associated client debts
+            cursor.execute('DELETE FROM client_debts WHERE sale_id = ?', (sale_id,))
+
+            # Finally delete the sale
+            cursor.execute('DELETE FROM sales WHERE id = ?', (sale_id,))
+
+            conn.commit()
+            conn.close()
+
+            # Log and sync
+            db_manager.log_user_action(
+                session['user_id'],
+                'delete_sale',
+                f'Suppression vente #{sale_id}'
+            )
+            try:
+                db_manager.add_to_sync_queue('sales', sale_id, 'delete', {})
+            except Exception:
                 pass
 
-        # Final safety: if still no items (legacy aggregated sale without detail rows),
-        # synthesize a single summary line so the UI isn't empty.
-        if not items:
-            try:
-                unit = float(sale.get('total_amount') or 0)
-            except Exception:
-                unit = 0.0
-            items = [{
-                'id': None,
-                'product_id': None,
-                'product_name': 'Vente (non détaillée)',
-                'quantity': 1,
-                'unit_price': unit,
-                'total_price': unit
-            }]
+            return jsonify({'success': True, 'message': 'Vente supprimée et stock restauré'})
 
-        # Finally delete the sale
-        cursor.execute('DELETE FROM sales WHERE id = ?', (sale_id,))
-
-        conn.commit()
-        conn.close()
-
-        # Log and sync
-        db_manager.log_user_action(
-            session['user_id'],
-            'delete_sale',
-            f'Suppression vente #{sale_id}'
-        )
-        try:
-            db_manager.add_to_sync_queue('sales', sale_id, 'delete', {})
-        except Exception:
-            pass
-
-        return jsonify({'success': True, 'message': 'Vente supprimée et stock restauré'})
-
-    except Exception as e:
-        logger.error(f"Error deleting sale: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la suppression de la vente'}), 500
-
-@sales_bp.route('/debts', methods=['GET'])
-def get_client_debts():
-    """Get client debts with optional filtering"""
-    auth_check = require_auth()
-    if auth_check:
-        return auth_check
-    
-    try:
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
-        
-        # Get query parameters
-        status = request.args.get('status', 'pending')
-        client_name = request.args.get('client_name')
+        except Exception as e:
+            logger.error(f"Error deleting sale: {e}")
+            return jsonify({'success': False, 'message': 'Erreur lors de la suppression de la vente'}), 500
         overdue_only = request.args.get('overdue_only', 'false').lower() == 'true'
         
         # Base query
@@ -740,7 +750,7 @@ def update_sale_status(sale_id):
             # Update sale
             cursor.execute('''
                 UPDATE sales
-                SET paid_amount = total_amount, is_credit = 0, updated_at = CURRENT_TIMESTAMP
+                SET paid_amount = total_amount, is_credit = 0, status = 'paid', updated_at = CURRENT_TIMESTAMP
                 WHERE id = ?
             ''', (sale_id,))
 
@@ -772,7 +782,8 @@ def update_sale_status(sale_id):
 
     except Exception as e:
         logger.error(f"Error updating sale status: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour du statut de la vente'}), 500
+        # Return error message in response for debugging
+        return jsonify({'success': False, 'message': f'Erreur lors de la mise à jour du statut de la vente: {e}'}), 500
     # Fallback (shouldn't reach here)
     return jsonify({'success': False, 'message': 'Requête invalide'}), 400
 

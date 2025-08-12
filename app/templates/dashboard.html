@@ -224,8 +224,8 @@
                         <h3 class="text-sm font-medium text-red-800">Paiements en Retard</h3>
                         <div class="mt-2 text-sm text-red-700">
                             <p id="pendingDebts">
-                                {% if pending_debts and pending_debts.count %}
-                                    {{ pending_debts.count }} clients ont des paiements en retard (Total: {{ format_currency(pending_debts.total) }})
+                                {% if overdue_debts and overdue_debts.count %}
+                                    {{ overdue_debts.count }} clients ont des paiements en retard (Total: {{ format_currency(overdue_debts.total) }})
                                 {% else %}
                                     0 clients ont des paiements en retard (Total: {{ format_currency(0) }})
                                 {% endif %}
@@ -482,10 +482,10 @@
                 
                 // Update warning section if it exists
                 const pendingDebtsElement = document.getElementById('pendingDebts');
-                if (pendingDebtsElement && stats.pending_debts_count) {
+                if (pendingDebtsElement && stats.overdue_debts_count) {
                     const cur = window.AppConfig?.currentCurrency || 'MRU';
-                    const debtsText = window.formatCurrency ? window.formatCurrency(stats.pending_debts || 0) : `${(stats.pending_debts || 0).toLocaleString()} ${cur}`;
-                    pendingDebtsElement.textContent = `${stats.pending_debts_count} clients ont des paiements en retard (Total: ${debtsText})`;
+                    const debtsText = window.formatCurrency ? window.formatCurrency(stats.overdue_debts || 0) : `${(stats.overdue_debts || 0).toLocaleString()} ${cur}`;
+                    pendingDebtsElement.textContent = `${stats.overdue_debts_count} clients ont des paiements en retard (Total: ${debtsText})`;
                 }
                 
                 // Update top products

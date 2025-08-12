@@ -132,24 +132,47 @@ class DatabaseManager:
                 )
             ''')
             
-            # Sales table (Phase 1.3)
+            # Sales table (Phase 1.3) - add status and credit_due_date columns if not exist
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS sales (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     invoice_number TEXT,
                     customer_id INTEGER,
+                    customer_name TEXT,
+                    customer_phone TEXT,
                     total_amount REAL NOT NULL,
-                    amount_paid REAL NOT NULL,
-                    remaining_amount REAL DEFAULT 0,
+                    paid_amount REAL NOT NULL,
                     payment_method TEXT DEFAULT 'cash',
-                    payment_status TEXT DEFAULT 'paid',
+                    is_credit BOOLEAN DEFAULT 0,
+                    credit_due_date TEXT,
+                    status TEXT DEFAULT 'paid',
                     sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     created_by INTEGER,
                     notes TEXT,
                     is_deleted BOOLEAN DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (customer_id) REFERENCES customers (id)
                 )
             ''')
+
+            # --- MIGRATION: Add missing columns if not present ---
+            cursor.execute('PRAGMA table_info(sales)')
+            sales_cols = [col[1] for col in cursor.fetchall()]
+            if 'status' not in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN status TEXT DEFAULT 'paid'")
+            if 'credit_due_date' not in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN credit_due_date TEXT")
+            if 'is_credit' not in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN is_credit BOOLEAN DEFAULT 0")
+            if 'paid_amount' not in sales_cols and 'amount_paid' in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN paid_amount REAL DEFAULT 0")
+                cursor.execute("UPDATE sales SET paid_amount = amount_paid")
+            if 'customer_name' not in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN customer_name TEXT")
+            if 'customer_phone' not in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN customer_phone TEXT")
+            if 'updated_at' not in sales_cols:
+                cursor.execute("ALTER TABLE sales ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
 
             # Sale details table (for items in each sale)
             cursor.execute('''
@@ -1010,50 +1033,16 @@ class DatabaseManager:
             conn.close()
     
     def get_pending_debts(self):
-        """Get pending credit sales for dashboard"""
+        """Get pending client debts for dashboard (use client_debts table for consistency)"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
         try:
-            # Support DBs without remaining_amount by deriving it and handle legacy paid column
-            cursor.execute('PRAGMA table_info(sales)')
-            sales_cols = [col[1] for col in cursor.fetchall()]
-            if 'remaining_amount' in sales_cols:
-                cursor.execute(
-                    '''
-                    SELECT 
-                        SUM(remaining_amount) as total,
-                        COUNT(*) as count
-                    FROM sales
-                    WHERE remaining_amount > 0
-                    AND is_deleted = 0
-                    '''
-                )
-            else:
-                # Try both possible paid columns with fallback
-                executed = False
-                for paid_col in ('amount_paid', 'paid_amount'):
-                    if paid_col in sales_cols:
-                        try:
-                            cursor.execute(
-                                f'''
-                                SELECT 
-                                    SUM(total_amount - {paid_col}) as total,
-                                    SUM(CASE WHEN total_amount > {paid_col} THEN 1 ELSE 0 END) as count
-                                FROM sales
-                                WHERE (total_amount - {paid_col}) > 0
-                                AND is_deleted = 0
-                                '''
-                            )
-                            executed = True
-                            break
-                        except Exception:
-                            continue
-                if not executed:
-                    return {'total': 0, 'count': 0}
-            
+            cursor.execute('''
+                SELECT SUM(remaining_amount) as total, COUNT(*) as count
+                FROM client_debts
+                WHERE remaining_amount > 0 AND status = 'pending'
+            ''')
             result = cursor.fetchone()
-            
             return {
                 'total': float(result['total']) if result and result['total'] else 0,
                 'count': result['count'] if result else 0
