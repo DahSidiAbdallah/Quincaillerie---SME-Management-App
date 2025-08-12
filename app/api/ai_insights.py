@@ -109,6 +109,21 @@ def get_sales_forecast():
         else:
             # Overall sales forecast
             forecast = sales_forecaster.predict_overall_sales(days_ahead)
+
+        # Standardize forecast fields for frontend consumption
+        try:
+            _cur = (db_manager.get_app_settings().get('currency') or 'MRU')
+        except Exception:
+            _cur = 'MRU'
+        forecast['forecastDays'] = days_ahead
+        total_rev = forecast.get('total_predicted_revenue')
+        if total_rev is not None:
+            forecast['summary'] = (
+                f"Prévision sur {days_ahead} jours: "
+                f"≈{round(total_rev, 0)} {_cur} de revenus attendus"
+            )
+        else:
+            forecast['summary'] = f"Prévision indisponible pour les {days_ahead} prochains jours"
         
         # Store forecast in cache
         conn = db_manager.get_connection()
