@@ -8,6 +8,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from app.app import app
 
 import app.app as app_module
+import app.api.ai_insights as ai_insights
+import app.api.reports as reports
 
 
 
