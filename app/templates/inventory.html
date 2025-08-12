@@ -1477,40 +1477,47 @@
     }
     
     // Product operations
+
+    async function fetchProduct(productId) {
+        const response = await fetch(`/api/inventory/products/${productId}`, {
+            method: 'GET',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store'
+        });
+        const data = await response.json();
+
+        if (!data.success) {
+            throw new Error(data.message || 'Erreur lors du chargement du produit');
+        }
+
+        return data.product;
+    }
+
     async function loadProductData(productId) {
         try {
-            const response = await fetch(`/api/inventory/products/${productId}` , {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store'
-            });
-            const data = await response.json();
-            
-            if (data.success) {
-                const product = data.product;
-                
-                // Fill form fields
-                document.getElementById('productId').value = product.id;
-                document.getElementById('productName').value = product.name;
-                document.getElementById('productCode').value = product.code || '';
-                document.getElementById('productCategory').value = product.category;
-                document.getElementById('productUnit').value = product.unit;
-                document.getElementById('productDescription').value = product.description || '';
-                document.getElementById('purchasePrice').value = product.purchase_price || '';
-                document.getElementById('salePrice').value = product.sale_price;
-                document.getElementById('currentStock').value = product.current_stock;
-                // Prefer reorder_level/min_stock_alert for min stock
-                document.getElementById('minStock').value = (product.reorder_level ?? product.min_stock_alert ?? product.min_stock ?? '');
-                document.getElementById('maxStock').value = product.max_stock || '';
-                document.getElementById('supplier').value = product.supplier || '';
-                document.getElementById('location').value = product.location || '';
-                
-                calculateMargin();
-            }
+            const product = await fetchProduct(productId);
+
+            // Fill form fields
+            document.getElementById('productId').value = product.id;
+            document.getElementById('productName').value = product.name;
+            document.getElementById('productCode').value = product.code || '';
+            document.getElementById('productCategory').value = product.category;
+            document.getElementById('productUnit').value = product.unit;
+            document.getElementById('productDescription').value = product.description || '';
+            document.getElementById('purchasePrice').value = product.purchase_price || '';
+            document.getElementById('salePrice').value = product.sale_price;
+            document.getElementById('currentStock').value = product.current_stock;
+            // Prefer reorder_level/min_stock_alert for min stock
+            document.getElementById('minStock').value = (product.reorder_level ?? product.min_stock_alert ?? product.min_stock ?? '');
+            document.getElementById('maxStock').value = product.max_stock || '';
+            document.getElementById('supplier').value = product.supplier || '';
+            document.getElementById('location').value = product.location || '';
+
+            calculateMargin();
         } catch (error) {
             console.error('Error loading product:', error);
             showNotification('Erreur lors du chargement du produit', 'error');
@@ -1744,26 +1751,26 @@
     }
     
         // Add this function to inventory.html
-    function viewDetails(productId) {
-        // Get product details with extended info
-        fetch(`/api/inventory/products/${productId}/details`, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store'
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const product = data.product;
-                    const movements = data.movements || [];
-                    const sales = data.sales || [];
-                    
-                    // Create and show modal
-                    const modalHtml = `
+    async function viewDetails(productId) {
+        try {
+            const product = await fetchProduct(productId);
+
+            const detailsResponse = await fetch(`/api/inventory/products/${productId}/details`, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                credentials: 'same-origin',
+                cache: 'no-store'
+            });
+            const detailsData = await detailsResponse.json();
+
+            const movements = detailsData.movements || [];
+            const sales = detailsData.sales || [];
+
+            // Create and show modal using unified product mapping
+            const modalHtml = `
                     <div id="productDetailsModal" class="fixed inset-0 flex items-center justify-center z-50">
                         <div class="fixed inset-0 bg-black bg-opacity-50"></div>
                         <div class="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 relative z-10 max-h-[90vh] overflow-auto">
@@ -1775,7 +1782,7 @@
                                     </svg>
                                 </button>
                             </div>
-                            
+
                             <!-- Product Info -->
                             <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div class="space-y-4">
@@ -1785,7 +1792,7 @@
                                             <dl class="divide-y divide-gray-200">
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Code</dt>
-                                                    <dd class="text-sm text-gray-900">${product.sku || 'N/A'}</dd>
+                                                    <dd class="text-sm text-gray-900">${product.code || 'N/A'}</dd>
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Catégorie</dt>
@@ -1797,18 +1804,18 @@
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Prix de vente</dt>
-                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency(product.selling_price || 0) : ((product.selling_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
+                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Marge</dt>
                                                     <dd class="text-sm text-gray-900">
-                                                        ${((product.selling_price - product.purchase_price) / product.purchase_price * 100).toFixed(2)}%
+                                                        ${((product.sale_price - product.purchase_price) / (product.purchase_price || 1) * 100).toFixed(2)}%
                                                     </dd>
                                                 </div>
                                             </dl>
                                         </div>
                                     </div>
-                                    
+
                                     <div>
                                         <h3 class="text-lg font-medium text-gray-900">Stock</h3>
                                         <div class="mt-2 border-t border-gray-200 pt-2">
@@ -1819,7 +1826,7 @@
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Seuil d'alerte</dt>
-                                                    <dd class="text-sm text-gray-900">${product.reorder_level || 0} ${product.unit || ''}</dd>
+                                                    <dd class="text-sm text-gray-900">${(product.reorder_level ?? product.min_stock_alert ?? 0)} ${product.unit || ''}</dd>
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Valeur de stock</dt>
@@ -1828,7 +1835,7 @@
                                             </dl>
                                         </div>
                                     </div>
-                                    
+
                                     <div>
                                         <h3 class="text-lg font-medium text-gray-900">Autre</h3>
                                         <div class="mt-2 border-t border-gray-200 pt-2">
@@ -1845,7 +1852,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <div>
                                     <h3 class="text-lg font-medium text-gray-900 mb-2">Mouvements de Stock</h3>
                                     <div class="overflow-x-auto">
@@ -1859,18 +1866,18 @@
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-gray-200">
-                                                ${movements.length > 0 ? 
+                                                ${movements.length > 0 ?
                                                     movements.map(m => `
                                                     <tr>
                                                         <td class="px-4 py-2 text-sm text-gray-900">
                                                             ${new Date(m.movement_time || m.movement_date || m.created_at || Date.now()).toLocaleDateString()}
                                                         </td>
                                                         <td class="px-4 py-2 text-sm">
-                                                            <span class="px-2 py-1 text-xs font-medium rounded-full 
-                                                            ${m.movement_type === 'in' ? 'bg-green-100 text-green-800' : 
-                                                              m.movement_type === 'out' ? 'bg-red-100 text-red-800' : 
+                                                            <span class="px-2 py-1 text-xs font-medium rounded-full
+                                                            ${m.movement_type === 'in' ? 'bg-green-100 text-green-800' :
+                                                              m.movement_type === 'out' ? 'bg-red-100 text-red-800' :
                                                               'bg-blue-100 text-blue-800'}">
-                                                                ${m.movement_type === 'in' ? 'Entrée' : 
+                                                                ${m.movement_type === 'in' ? 'Entrée' :
                                                                   m.movement_type === 'out' ? 'Sortie' : 'Ajustement'}
                                                             </span>
                                                         </td>
@@ -1881,13 +1888,13 @@
                                                             ${m.notes || '-'}
                                                         </td>
                                                     </tr>
-                                                    `).join('') : 
+                                                    `).join('') :
                                                     '<tr><td colspan="4" class="px-4 py-2 text-sm text-gray-500 text-center">Aucun mouvement enregistré</td></tr>'
                                                 }
                                             </tbody>
                                         </table>
                                     </div>
-                                    
+
                                     <h3 class="text-lg font-medium text-gray-900 mb-2 mt-6">Historique des Ventes</h3>
                                     <div class="overflow-x-auto">
                                         <table class="min-w-full divide-y divide-gray-200">
@@ -1900,7 +1907,7 @@
                                                 </tr>
                                             </thead>
                                             <tbody class="divide-y divide-gray-200">
-                                                ${sales.length > 0 ? 
+                                                ${sales.length > 0 ?
                                                     sales.map(s => `
                                                     <tr>
                                                         <td class="px-4 py-2 text-sm text-gray-900">
@@ -1916,7 +1923,7 @@
                                                             ${window.formatCurrency ? window.formatCurrency(s.total_price || 0) : ((s.total_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
                                                         </td>
                                                     </tr>
-                                                    `).join('') : 
+                                                    `).join('') :
                                                     '<tr><td colspan="4" class="px-4 py-2 text-sm text-gray-500 text-center">Aucune vente enregistrée</td></tr>'
                                                 }
                                             </tbody>
@@ -1924,32 +1931,28 @@
                                     </div>
                                 </div>
                             </div>
-                            
+
                             <div class="mt-6 flex justify-end space-x-3">
-                                <button onclick="closeProductDetailsModal()" 
+                                <button onclick="closeProductDetailsModal()"
                                         class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
                                     Fermer
                                 </button>
-                                <button onclick="editProduct(${productId}); closeProductDetailsModal();" 
+                                <button onclick="editProduct(${productId}); closeProductDetailsModal();"
                                         class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
                                     Modifier
                                 </button>
                             </div>
                         </div>
                     </div>`;
-                    
-                    // Add modal to body
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = modalHtml;
-                    document.body.appendChild(tempDiv.firstElementChild);
-                } else {
-                    showNotification('Erreur lors du chargement des détails du produit', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error loading product details:', error);
-                showNotification('Erreur de connexion', 'error');
-            });
+
+            // Add modal to body
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = modalHtml;
+            document.body.appendChild(tempDiv.firstElementChild);
+        } catch (error) {
+            console.error('Error loading product details:', error);
+            showNotification('Erreur lors du chargement des détails du produit', 'error');
+        }
     }
     
     function closeProductDetailsModal() {
