@@ -261,8 +261,7 @@ def get_product(product_id):
         if not product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
         
-        # Get recent stock movements
-        # Order by available date column
+        # Get all stock movements for this product (not just recent)
         cursor.execute('PRAGMA table_info(stock_movements)')
         sm_cols = {row[1] for row in cursor.fetchall()}
         date_col = 'movement_date' if 'movement_date' in sm_cols else ('created_at' if 'created_at' in sm_cols else 'ROWID')
@@ -271,9 +270,8 @@ def get_product(product_id):
             FROM stock_movements sm
             LEFT JOIN users u ON sm.created_by = u.id
             WHERE sm.product_id = ?
-            ORDER BY sm.{date_col} DESC LIMIT 10
+            ORDER BY sm.{date_col} DESC
         ''', (product_id,))
-        
         movements = [dict(row) for row in cursor.fetchall()]
 
         result = dict(product)
