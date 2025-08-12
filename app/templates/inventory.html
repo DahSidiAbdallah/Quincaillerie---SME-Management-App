@@ -718,32 +718,19 @@
     
     // Local UI helpers for this page (do not override global window.showLoading)
     function showLoading() {
-        try {
-            const loading = document.getElementById('loadingState');
-            const container = document.getElementById('productsContainer');
-            const empty = document.getElementById('emptyState');
-            if (container) container.classList.add('hidden');
-            if (empty) empty.classList.add('hidden');
-            if (loading) loading.classList.remove('hidden');
-        } finally {
-            if (typeof window.showLoading === 'function') {
-                window.showLoading(true);
-            }
-        }
+        const loading = document.getElementById('loadingState');
+        const container = document.getElementById('productsContainer');
+        const empty = document.getElementById('emptyState');
+        if (container) container.classList.add('hidden');
+        if (empty) empty.classList.add('hidden');
+        if (loading) loading.classList.remove('hidden');
     }
 
     function hideLoading() {
-        try {
-            const loading = document.getElementById('loadingState');
-            const container = document.getElementById('productsContainer');
-            if (loading) loading.classList.add('hidden');
-            if (container) container.classList.remove('hidden');
-        } finally {
-            if (typeof window.showLoading === 'function') {
-                // Ensure the global overlay is hidden too
-                window.showLoading(false);
-            }
-        }
+        const loading = document.getElementById('loadingState');
+        const container = document.getElementById('productsContainer');
+        if (loading) loading.classList.add('hidden');
+        if (container) container.classList.remove('hidden');
     }
     
     function showEmptyState() {
