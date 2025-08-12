@@ -6,8 +6,10 @@ import pytest
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app.app import app
+
 import app.app as app_module
-from app.api import ai_insights, reports, inventory
+
+
 
 
 @pytest.fixture
@@ -56,6 +58,7 @@ def test_reports_export_sales_accepts_filters(monkeypatch, client):
     assert 'text/csv' in resp.headers.get('Content-Type', '')
 
 
+
 def test_inventory_products_endpoint(client):
     resp = client.get('/api/inventory/products')
     assert resp.status_code == 200
@@ -84,3 +87,4 @@ def test_finance_charts_endpoint(monkeypatch, client):
     assert data['success'] is True
     assert 'revenue' in data['chart_data']
     assert 'expense' in data['chart_data']
+
