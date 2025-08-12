@@ -275,18 +275,78 @@ def get_product(product_id):
         ''', (product_id,))
         
         movements = [dict(row) for row in cursor.fetchall()]
+
         result = dict(product)
-        # Aliases and defaults for frontend compatibility
+        # Unify all fields for both details and modification forms
         result['code'] = result.get('sku') or ''
+        result['product_code'] = result['code']  # for form compatibility
         result['unit'] = result.get('unit') or 'pièce'
         result['location'] = result.get('location') or ''
+        result['category'] = result.get('category') or ''
+        result['description'] = result.get('description') or ''
+        result['supplier'] = result.get('supplier') or ''
+        result['name'] = result.get('name') or ''
+        result['product_name'] = result['name']  # for form compatibility
+        result['min_stock'] = int(result.get('min_stock') or result.get('min_stock_alert') or result.get('reorder_level') or 0)
+        result['min_stock_alert'] = result['min_stock']
+        result['reorder_level'] = result['min_stock']
+        result['stock_minimum'] = result['min_stock']
+        result['stock_maximum'] = result.get('stock_maximum') or ''
+        result['current_stock'] = int(result.get('current_stock') or 0)
+        result['stock_actuel'] = result['current_stock']
+        result['stock_value'] = float(result.get('stock_value') or 0)
+        result['prix_achat'] = float(result.get('purchase_price') or 0)
+        # Sale price logic
+        sale_price_val = result.get('sale_price')
+        selling_price_val = result.get('selling_price')
+        try:
+            sale_price = float(sale_price_val) if sale_price_val is not None else 0
+        except Exception:
+            sale_price = 0
+        try:
+            selling_price = float(selling_price_val) if selling_price_val is not None else 0
+        except Exception:
+            selling_price = 0
+        if sale_price == 0 and selling_price > 0:
+            sale_price = selling_price
+        result['sale_price'] = sale_price
+        result['selling_price'] = sale_price
+        result['prix_vente'] = sale_price
+        # Margin logic
+        try:
+            purchase_price = float(result.get('purchase_price') or 0)
+            if purchase_price > 0 and sale_price > 0:
+                margin = ((sale_price - purchase_price) / purchase_price) * 100
+                result['margin'] = round(margin, 2)
+                result['marge'] = f"{round(margin, 2)}%"
+            else:
+                result['margin'] = None
+                result['marge'] = "N/A"
+        except Exception:
+            result['margin'] = None
+            result['marge'] = "N/A"
+        # Image
         if result.get('image_url'):
             result['image_path'] = result['image_url']
-        result['sale_price'] = float(result.get('sale_price') or result.get('selling_price') or 0)
-        result['selling_price'] = result['sale_price']
-        result['min_stock_alert'] = int(result.get('reorder_level') or result.get('min_stock_alert') or 0)
+        # Stock movements
         result['recent_movements'] = movements
-        
+        # Fetch sales history for this product
+        try:
+            conn2 = db_manager.get_connection()
+            cursor2 = conn2.cursor()
+            cursor2.execute('''
+                SELECT s.id as sale_id, s.sale_date, si.quantity, si.unit_price, si.total_price
+                FROM sale_items si
+                JOIN sales s ON si.sale_id = s.id
+                WHERE si.product_id = ?
+                ORDER BY s.sale_date DESC LIMIT 20
+            ''', (product_id,))
+            sales_history = [dict(row) for row in cursor2.fetchall()]
+            result['sales_history'] = sales_history
+            conn2.close()
+        except Exception:
+            result['sales_history'] = []
+
         return jsonify({'success': True, 'product': result})
         
     except Exception as e:
