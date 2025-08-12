@@ -382,6 +382,11 @@
                         low_stock: 0,
                         out_of_stock: 0,
                         stock_value: 0
+                    },
+                    financial: {
+                        total_revenue: 0,
+                        total_expenses: 0,
+                        net_profit: 0
                     }
                 },
                 salesChart: null,
@@ -425,96 +430,121 @@
                 loadReportData() {
                     // Get date range based on selected period
                     let dateParams = this.getDateRangeParams();
+                    const tasks = [];
 
-                    // Load sales report with date filtering
-                    apiFetch(`/api/reports/sales-report?start_date=${dateParams.startDate}&end_date=${dateParams.endDate}`)
-                        .then(data => {
-                            if (data.success) {
-                                const stats = data.report.overall_statistics;
-                                // Compute best day from sales_by_period
-                                const periods = data.report.sales_by_period || [];
-                                let bestDay = '-';
-                                if (periods.length > 0) {
-                                    const maxEntry = periods.reduce((prev, curr) =>
-                                        Number(curr.total_revenue) > Number(prev.total_revenue) ? curr : prev
-                                    );
-                                    bestDay = maxEntry.period;
-                                }
-                                this.reportData.sales = {
-                                    total_sales: stats.total_sales || 0,
-                                    revenue: stats.total_revenue || 0,
-                                    average_sale: stats.avg_sale_amount || 0,
-                                    best_day: bestDay,
-                                    top_products: data.report.top_products || []
-                                };
-                                // Update sales data source info
-                                const dataSourceElement = document.getElementById('data-source-info');
-                                if (dataSourceElement && this.activeReport === 'sales') {
-                                    dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${data.report.metadata?.date_range || 'Période personnalisée'}`;
-                                }
-                                // Get and format labels and data for chart
-                                let labels = (data.report.sales_by_period || []).map(p => p.period);
-                                let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
-                                // If no data, show placeholder
-                                if (labels.length === 0) {
-                                    labels = ['Aucune donnée'];
-                                    amounts = [0];
-                                }
-                                // Update chart safely
-                                if (
-                                    this.salesChart &&
-                                    this.salesChart.data &&
-                                    Array.isArray(this.salesChart.data.datasets) &&
-                                    this.salesChart.data.datasets[0]
-                                ) {
-                                    this.salesChart.data.labels = labels;
-                                    this.salesChart.data.datasets[0].data = amounts;
-                                    this.salesChart.data.datasets[0].label = `Ventes (${window.AppConfig?.currentCurrency || 'MRU'}) - ${this.filters.period === 'today' ? 'Aujourd\'hui' : this.filters.period === 'week' ? '7 derniers jours' : this.filters.period === 'month' ? 'Ce mois' : 'Période sélectionnée'}`;
-                                    this.salesChart.update();
-                                } else {
-                                    // If chart is not initialized, re-create it
-                                    this.$nextTick(() => {
-                                        this.initCharts();
-                                    });
-                                }
-                            }
-                        })
-                        .catch(error => {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Erreur lors du chargement du rapport de ventes.', 'error');
-                            }
-                            console.error('Error loading sales report:', error);
-                        });
+                    if (this.activeReport === 'sales') {
+                        tasks.push(
+                            apiFetch(`/api/reports/sales-report?start_date=${dateParams.startDate}&end_date=${dateParams.endDate}`)
+                                .then(data => {
+                                    if (data.success) {
+                                        const stats = data.report.overall_statistics;
+                                        const periods = data.report.sales_by_period || [];
+                                        let bestDay = '-';
+                                        if (periods.length > 0) {
+                                            const maxEntry = periods.reduce((prev, curr) =>
+                                                Number(curr.total_revenue) > Number(prev.total_revenue) ? curr : prev
+                                            );
+                                            bestDay = maxEntry.period;
+                                        }
+                                        this.reportData.sales = {
+                                            total_sales: stats.total_sales || 0,
+                                            revenue: stats.total_revenue || 0,
+                                            average_sale: stats.avg_sale_amount || 0,
+                                            best_day: bestDay,
+                                            top_products: data.report.top_products || []
+                                        };
+                                        const dataSourceElement = document.getElementById('data-source-info');
+                                        if (dataSourceElement) {
+                                            dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${data.report.metadata?.date_range || 'Période personnalisée'}`;
+                                        }
+                                        let labels = (data.report.sales_by_period || []).map(p => p.period);
+                                        let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
+                                        if (labels.length === 0) {
+                                            labels = ['Aucune donnée'];
+                                            amounts = [0];
+                                        }
+                                        if (
+                                            this.salesChart &&
+                                            this.salesChart.data &&
+                                            Array.isArray(this.salesChart.data.datasets) &&
+                                            this.salesChart.data.datasets[0]
+                                        ) {
+                                            this.salesChart.data.labels = labels;
+                                            this.salesChart.data.datasets[0].data = amounts;
+                                            this.salesChart.data.datasets[0].label = `Ventes (${window.AppConfig?.currentCurrency || 'MRU'}) - ${this.filters.period === 'today' ? 'Aujourd\'hui' : this.filters.period === 'week' ? '7 derniers jours' : this.filters.period === 'month' ? 'Ce mois' : 'Période sélectionnée'}`;
+                                            this.salesChart.update();
+                                        } else {
+                                            this.$nextTick(() => { this.initCharts(); });
+                                        }
+                                    }
+                                })
+                                .catch(error => {
+                                    if (typeof window.showNotification === 'function') {
+                                        window.showNotification('Erreur lors du chargement du rapport de ventes.', 'error');
+                                    }
+                                    console.error('Error loading sales report:', error);
+                                })
+                        );
+                    }
 
-                    // Get current inventory data - this should match what's shown on inventory page
-                    apiFetch('/api/inventory/stats')
-                        .then(data => {
-                            if (data.success) {
-                                // Use actual current inventory stats rather than historical data
-                                this.reportData.inventory = {
-                                    total_products: Number(data.stats.total || 0),
-                                    low_stock: Number(data.stats.low_stock || 0),
-                                    out_of_stock: Number((data.stats.total || 0) - (data.stats.in_stock || 0)),
-                                    stock_value: Number(data.stats.total_value || 0)
-                                };
-                                
-                                // Add source info to data freshness indicator
-                                const dataSourceElement = document.getElementById('data-source-info');
-                                if (dataSourceElement) {
-                                    dataSourceElement.textContent = `Données d'inventaire en temps réel - Source: ${data.metadata?.source || 'inventory/stats'}`;
-                                }
-                            }
-                        })
-                        .catch(error => {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Erreur lors du chargement du rapport d\'inventaire.', 'error');
-                            }
-                            console.error('Error loading inventory report:', error);
-                        });
-                    
-                    // Load activities/AI when relevant
-                    if (this.activeReport === 'activities') this.loadActivities();
-                    if (this.activeReport === 'ai_insights') this.loadAI();
+                    if (this.activeReport === 'inventory') {
+                        tasks.push(
+                            apiFetch('/api/inventory/stats')
+                                .then(data => {
+                                    if (data.success) {
+                                        this.reportData.inventory = {
+                                            total_products: Number(data.stats.total || 0),
+                                            low_stock: Number(data.stats.low_stock || 0),
+                                            out_of_stock: Number((data.stats.total || 0) - (data.stats.in_stock || 0)),
+                                            stock_value: Number(data.stats.total_value || 0)
+                                        };
+                                        const dataSourceElement = document.getElementById('data-source-info');
+                                        if (dataSourceElement) {
+                                            dataSourceElement.textContent = `Données d'inventaire en temps réel - Source: ${data.metadata?.source || 'inventory/stats'}`;
+                                        }
+                                    }
+                                })
+                                .catch(error => {
+                                    if (typeof window.showNotification === 'function') {
+                                        window.showNotification('Erreur lors du chargement du rapport d\'inventaire.', 'error');
+                                    }
+                                    console.error('Error loading inventory report:', error);
+                                })
+                        );
+                    }
+
+                    if (this.activeReport === 'financial') {
+                        tasks.push(
+                            apiFetch('/api/finance/financial-summary')
+                                .then(data => {
+                                    if (data.success) {
+                                        const fs = data.financial_summary || {};
+                                        const totalRev = Number(fs.total_revenue || 0);
+                                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses || 0) : (Number(fs.total_business_expenses || 0) + Number(fs.total_personal_expenses || 0));
+                                        this.reportData.financial = {
+                                            total_revenue: totalRev,
+                                            total_expenses: totalExp,
+                                            net_profit: totalRev - totalExp
+                                        };
+                                        const dataSourceElement = document.getElementById('data-source-info');
+                                        if (dataSourceElement) {
+                                            dataSourceElement.textContent = 'Résumé financier cumulatif';
+                                        }
+                                    }
+                                })
+                                .catch(error => {
+                                    if (typeof window.showNotification === 'function') {
+                                        window.showNotification('Erreur lors du chargement du rapport financier.', 'error');
+                                    }
+                                    console.error('Error loading financial report:', error);
+                                })
+                        );
+                    }
+
+                    Promise.all(tasks).finally(() => {
+                        if (this.activeReport === 'activities') this.loadActivities();
+                        if (this.activeReport === 'ai_insights') this.loadAI();
+                    });
                 },
                 loadActivities() {
                         apiFetch('/api/dashboard/activities?limit=50')
@@ -679,23 +709,34 @@
                 
                 exportToExcel() {
                     // Use CSV exports; Excel can open CSV files
-                    if (this.activeReport === 'sales') {
-                        window.open('/api/reports/export/sales', '_blank');
-                    } else if (this.activeReport === 'inventory') {
-                        window.open('/api/reports/export/products', '_blank');
-                    } else {
-                        // Fallback to financial CSV via expenses
-                        window.open('/api/reports/export/expenses', '_blank');
-                    }
+                    this.exportWithFilters();
                 },
-                
+
                 exportToCSV() {
+                    this.exportWithFilters();
+                },
+
+                exportWithFilters() {
+                    const params = new URLSearchParams({
+                        period: this.filters.period,
+                        start_date: this.filters.start_date || '',
+                        end_date: this.filters.end_date || ''
+                    }).toString();
+                    let endpoint;
                     if (this.activeReport === 'sales') {
-                        window.open('/api/reports/export/sales', '_blank');
+                        endpoint = '/api/reports/export/sales';
                     } else if (this.activeReport === 'inventory') {
-                        window.open('/api/reports/export/products', '_blank');
+                        endpoint = '/api/reports/export/products';
                     } else {
-                        window.open('/api/reports/export/expenses', '_blank');
+                        endpoint = '/api/reports/export/expenses';
+                    }
+                    try {
+                        window.open(`${endpoint}?${params}`, '_blank');
+                    } catch (e) {
+                        console.error('Error exporting report', e);
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('Erreur lors de l\'export du rapport.', 'error');
+                        }
                     }
                 },
                 
