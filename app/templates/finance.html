@@ -731,10 +731,11 @@
                     const a = await apiFetch('/api/finance/financial-summary').catch(() => null);
                     let fs = a?.financial_summary || a?.summary || a;
                     if (fs && (fs.total_revenue !== undefined || fs.current_cash_balance !== undefined)) {
-                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses||0) : (Number(fs.total_business_expenses||0)+Number(fs.total_personal_expenses||0));
-                        const net = fs.net_profit !== undefined ? Number(fs.net_profit||0) : (Number(fs.total_profit || fs.total_revenue || 0) - totalExp);
+                        const totalRev = Number(fs.total_revenue || 0);
+                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses || 0) : (Number(fs.total_business_expenses || 0) + Number(fs.total_personal_expenses || 0));
+                        const net = totalRev - totalExp;
                         this.summary = {
-                            total_revenue: fmt(fs.total_revenue || 0),
+                            total_revenue: fmt(totalRev),
                             total_expenses: fmt(totalExp),
                             net_profit: fmt(net),
                             cash_balance: fmt(fs.current_cash_balance || fs.cash_balance || 0)
@@ -1027,6 +1028,10 @@
                 const periodParam = this.chartPeriod;
                 apiFetch(`/api/finance/charts?period=${periodParam}`)
                     .then(data => {
+                        if (!data || data.success === false) {
+                            this.chartError = 'Données de graphique indisponibles';
+                            return;
+                        }
                         // Ensure charts exist before updating
                         if (!this.chartsInitialized || !this.revenueChart || !this.expenseChart) {
                             this.initCharts();

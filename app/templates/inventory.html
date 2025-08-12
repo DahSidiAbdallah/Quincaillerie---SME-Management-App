@@ -887,6 +887,9 @@
             }
             console.log('🔄 Initial setup complete, showing loading state');
 
+            // Always fetch latest products after initial render
+            loadProductsWithAuth();
+
             // Add early safety checks to prevent infinite loading
             setTimeout(() => forceRenderIfEmpty('early-check-2s'), 2000);
             setTimeout(() => forceRenderIfEmpty('early-check-5s'), 5000);
@@ -925,7 +928,7 @@
     function setupEventListeners() {
         // Search input
         document.getElementById('searchInput').addEventListener('input', debounce(handleSearch, 300));
-        
+
         // Filters
         document.getElementById('categoryFilter').addEventListener('change', loadProducts);
         document.getElementById('stockFilter').addEventListener('change', loadProducts);
@@ -936,9 +939,6 @@
         
         // Form submission
         document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
-
-    // Load products on page load (async refresh)
-    loadProductsWithAuth();
     }
     
     // Show login redirect message and redirect to login page
