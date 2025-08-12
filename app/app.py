@@ -1005,68 +1005,120 @@ def finance_charts():
         try:
             # Get period from request
             period = request.args.get('period', 'month')
-            
-            # Determine date range based on period
+
+            # Determine date range and SQLite strftime format
             today = datetime.now()
             if period == 'week':
                 start_date = today - timedelta(days=7)
-                date_format = '%d %b'  # Day Month format
-                labels = [(today - timedelta(days=i)).strftime(date_format) for i in range(7, -1, -1)]
+                # SQLite/strftime token for day-month is '%d-%m'
+                sqlite_fmt = '%d-%m'
+                python_label_fmt = '%d-%m'
+                # 8 days including today for smoother line
+                labels = [(today - timedelta(days=i)).strftime(python_label_fmt) for i in range(7, -1, -1)]
             elif period == 'month':
                 start_date = today - timedelta(days=30)
-                date_format = '%d %b'
-                labels = [(today - timedelta(days=i)).strftime(date_format) for i in range(30, -1, -5)]
-            else:  # year
+                sqlite_fmt = '%d-%m'
+                python_label_fmt = '%d-%m'
+                labels = [(today - timedelta(days=i)).strftime(python_label_fmt) for i in range(30, -1, -1)]
+            elif period == 'year':  # last 12 months
                 start_date = today - timedelta(days=365)
-                date_format = '%b %Y'  # Month Year format
+                # SQLite/strftime token for month-year is '%m-%Y'
+                sqlite_fmt = '%m-%Y'
+                python_label_fmt = '%m-%Y'
                 labels = []
-                for i in range(12):
-                    month_date = today - timedelta(days=30 * (11 - i))
-                    labels.append(month_date.strftime(date_format))
+                for i in range(11, -1, -1):
+                    month_date = today - timedelta(days=30 * i)
+                    labels.append(month_date.strftime(python_label_fmt))
+            else:  # all time (aggregate by year)
+                start_date = None
+                sqlite_fmt = '%Y'
+                python_label_fmt = '%Y'
+                # Gather distinct years present in sales/expenses
+                conn = db_manager.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT strftime('%Y', sale_date) AS y FROM sales WHERE is_deleted = 0 ORDER BY y")
+                years_sales = [row['y'] for row in cursor.fetchall() if row['y']]
+                cursor.execute("SELECT DISTINCT strftime('%Y', expense_date) AS y FROM expenses WHERE is_deleted = 0 ORDER BY y")
+                years_exp = [row['y'] for row in cursor.fetchall() if row['y']]
+                years = sorted({*years_sales, *years_exp})
+                labels = years
             
             # Get revenue data
             conn = db_manager.get_connection()
             cursor = conn.cursor()
             
             # For revenue data
-            cursor.execute('''
-                SELECT 
-                    strftime(?, sale_date) as period,
-                    SUM(total_amount) as amount
-                FROM sales
-                WHERE sale_date >= ?
-                AND is_deleted = 0
-                GROUP BY period
-                ORDER BY sale_date
-            ''', (date_format, start_date.strftime('%Y-%m-%d')))
+            if start_date:
+                cursor.execute('''
+                    SELECT 
+                        strftime(?, sale_date) as period,
+                        SUM(total_amount) as amount
+                    FROM sales
+                    WHERE DATE(sale_date) >= DATE(?)
+                    AND is_deleted = 0
+                    GROUP BY period
+                    ORDER BY MIN(DATE(sale_date))
+                ''', (sqlite_fmt, start_date.strftime('%Y-%m-%d')))
+            else:
+                cursor.execute('''
+                    SELECT 
+                        strftime(?, sale_date) as period,
+                        SUM(total_amount) as amount
+                    FROM sales
+                    WHERE is_deleted = 0
+                    GROUP BY period
+                    ORDER BY period
+                ''', (sqlite_fmt,))
             
             revenue_data = {row['period']: float(row['amount']) for row in cursor.fetchall()}
             
             # For expense data
-            cursor.execute('''
-                SELECT 
-                    strftime(?, expense_date) as period,
-                    SUM(amount) as amount
-                FROM expenses
-                WHERE expense_date >= ?
-                AND is_deleted = 0
-                GROUP BY period
-                ORDER BY expense_date
-            ''', (date_format, start_date.strftime('%Y-%m-%d')))
+            if start_date:
+                cursor.execute('''
+                    SELECT 
+                        strftime(?, expense_date) as period,
+                        SUM(amount) as amount
+                    FROM expenses
+                    WHERE DATE(expense_date) >= DATE(?)
+                    AND is_deleted = 0
+                    GROUP BY period
+                    ORDER BY MIN(DATE(expense_date))
+                ''', (sqlite_fmt, start_date.strftime('%Y-%m-%d')))
+            else:
+                cursor.execute('''
+                    SELECT 
+                        strftime(?, expense_date) as period,
+                        SUM(amount) as amount
+                    FROM expenses
+                    WHERE is_deleted = 0
+                    GROUP BY period
+                    ORDER BY period
+                ''', (sqlite_fmt,))
             
             expense_data = {row['period']: float(row['amount']) for row in cursor.fetchall()}
             
-            # For expense categories
-            cursor.execute('''
-                SELECT 
-                    category,
-                    SUM(amount) as amount
-                FROM expenses
-                WHERE expense_date >= ?
-                AND is_deleted = 0
-                GROUP BY category
-                ORDER BY amount DESC
-            ''', (start_date.strftime('%Y-%m-%d'),))
+            # For expense categories (prefer subcategory; fallback to category)
+            if start_date:
+                cursor.execute('''
+                    SELECT 
+                        COALESCE(NULLIF(subcategory, ''), category) as category,
+                        SUM(amount) as amount
+                    FROM expenses
+                    WHERE DATE(expense_date) >= DATE(?)
+                    AND is_deleted = 0
+                    GROUP BY category
+                    ORDER BY amount DESC
+                ''', (start_date.strftime('%Y-%m-%d'),))
+            else:
+                cursor.execute('''
+                    SELECT 
+                        COALESCE(NULLIF(subcategory, ''), category) as category,
+                        SUM(amount) as amount
+                    FROM expenses
+                    WHERE is_deleted = 0
+                    GROUP BY category
+                    ORDER BY amount DESC
+                ''')
             
             expense_categories = []
             expense_amounts = []
@@ -1075,13 +1127,13 @@ def finance_charts():
                 expense_categories.append(row['category'])
                 expense_amounts.append(float(row['amount']))
             
-            # Prepare revenue and expense datasets
+            # Prepare revenue and expense datasets (ensure non-null)
+            labels = [str(l) for l in (labels or [])]
             revenue_values = []
             expense_values = []
-            
             for label in labels:
-                revenue_values.append(revenue_data.get(label, 0))
-                expense_values.append(expense_data.get(label, 0))
+                revenue_values.append(float(revenue_data.get(label, 0) or 0))
+                expense_values.append(float(expense_data.get(label, 0) or 0))
             
             # Return chart data
             chart_data = {
@@ -1094,7 +1146,7 @@ def finance_charts():
                     'data': expense_amounts
                 }
             }
-            
+
             return jsonify({'success': True, 'chart_data': chart_data})
         except Exception as e:
             logger.error(f"Error fetching chart data: {e}")

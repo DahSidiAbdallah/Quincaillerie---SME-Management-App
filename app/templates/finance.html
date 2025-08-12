@@ -4,6 +4,7 @@
 
 {% block extra_head %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -33,7 +34,10 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Revenus Total</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.total_revenue">0 {{ current_currency }}</p>
+                        <template x-if="isLoadingSummary">
+                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        </template>
+                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.total_revenue">0 {{ current_currency }}</p>
             <!-- Removed fake delta to avoid misleading metrics -->
                     </div>
                 </div>
@@ -46,7 +50,10 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Dépenses Total</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.total_expenses">0 {{ current_currency }}</p>
+                        <template x-if="isLoadingSummary">
+                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        </template>
+                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.total_expenses">0 {{ current_currency }}</p>
             <!-- Removed fake delta to avoid misleading metrics -->
                     </div>
                 </div>
@@ -59,7 +66,10 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Bénéfice Net</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.net_profit">0 {{ current_currency }}</p>
+                        <template x-if="isLoadingSummary">
+                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        </template>
+                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.net_profit">0 {{ current_currency }}</p>
             <!-- Removed fake delta to avoid misleading metrics -->
                     </div>
                 </div>
@@ -72,7 +82,10 @@
                     </div>
                     <div class="ml-4 flex-1">
                         <h3 class="text-sm font-medium text-gray-500">Solde Caisse</h3>
-                        <p class="text-2xl font-bold text-gray-900" x-text="summary.cash_balance">0 {{ current_currency }}</p>
+                        <template x-if="isLoadingSummary">
+                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
+                        </template>
+                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.cash_balance">0 {{ current_currency }}</p>
                         <p class="text-sm text-gray-500">Dernière MAJ: Aujourd'hui</p>
                     </div>
                 </div>
@@ -216,7 +229,7 @@
                                 <i class="fas fa-spinner fa-spin mr-2"></i>Chargement des transactions...
                             </td>
                         </tr>
-                        <template x-for="transaction in filteredTransactions" :key="transaction.id">
+                        <template x-for="transaction in filteredTransactions" :key="(transaction.origin||'tx') + '-' + transaction.id">
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date)"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.description || transaction.source || '-' "></td>
@@ -238,12 +251,14 @@
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.subcategory || transaction.category"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <button @click="editTransaction(transaction)" class="text-blue-600 hover:text-blue-900 mr-3">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button @click="deleteTransaction(transaction)" class="text-red-600 hover:text-red-900">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    <div class="flex items-center gap-3">
+                                        <button :disabled="transaction.origin==='sale'" @click="editTransaction(transaction)" :class="transaction.origin==='sale' ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'" title="" :title="transaction.origin==='sale' ? 'Les ventes ne sont pas modifiables ici' : 'Modifier'">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button :disabled="transaction.origin==='sale'" @click="deleteTransaction(transaction)" :class="transaction.origin==='sale' ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'" :title="transaction.origin==='sale' ? 'Supprimer une vente n\'est pas possible ici' : 'Supprimer'">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         </template>
@@ -383,383 +398,427 @@
 {% block extra_scripts %}
     <script>
     function financeManager() {
-            return {
-        activeTab: 'summary',
-                summary: {
-                    total_revenue: '0 ' + (window.AppConfig?.currentCurrency || 'MRU'),
-                    total_expenses: '0 ' + (window.AppConfig?.currentCurrency || 'MRU'),
-                    net_profit: '0 ' + (window.AppConfig?.currentCurrency || 'MRU'),
-                    cash_balance: '0 ' + (window.AppConfig?.currentCurrency || 'MRU')
-                },
-                transactions: [],
-        receivables: [],
-        receivablesTotal: 0,
-                // Used as expense subcategories; backend categories are 'business'|'personal'
-                categories: ['Achats', 'Salaires', 'Loyer', 'Électricité', 'Maintenance', 'Marketing', 'Divers'],
-                showTransactionModal: false,
-                showEditModal: false,
-                newTransaction: {
-                    type: 'income',
-                    amount: '',
-                    description: '',
-                    category: ''
-                },
-                editData: { id: null, type: 'income', amount: 0, description: '', category: '' },
-                searchTerm: '',
-                filterType: '',
-                chartPeriod: 'all',
-                revenueChart: null,
-                expenseChart: null,
-                isLoadingSummary: true,
-                isLoadingTransactions: true,
-                isLoadingCharts: true,
-                toasts: [],
-                totalIncome: 0,
-                totalExpense: 0,
-                // Helpers
-                parseDateFlex(s) {
-                    if (!s) return null;
-                    // Native parse first (handles ISO like 2025-08-09 or 2025-08-09T12:00:00Z)
-                    let d = new Date(s);
-                    if (!isNaN(d)) return d;
-                    // Try "YYYY-MM-DD HH:MM:SS" by slicing date part
-                    if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) {
-                        const part = s.slice(0, 10);
-                        const d3 = new Date(part);
-                        if (!isNaN(d3)) return d3;
-                    }
-                    // Try DD/MM/YYYY or DD-MM-YYYY
-                    const m = /^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})/.exec(String(s));
-                    if (m) {
-                        const dd = parseInt(m[1], 10), mm = parseInt(m[2], 10) - 1, yy = parseInt(m[3].length === 2 ? ('20' + m[3]) : m[3], 10);
-                        const d2 = new Date(yy, mm, dd);
-                        return isNaN(d2) ? null : d2;
-                    }
-                    return null;
-                },
-                toYMD(d) { return d ? d.toISOString().split('T')[0] : ''; },
-                setTab(tab) {
-                    this.activeTab = tab;
-                    try {
-                        const u = new URL(window.location);
-                        if (tab === 'receivables') {
-                            u.searchParams.set('tab', 'receivables');
-                            u.searchParams.set('filter', 'overdue');
-                            this.loadReceivables(true);
-                        } else {
-                            // default summary view
-                            u.searchParams.delete('tab');
-                            u.searchParams.delete('filter');
-                        }
-                        window.history.replaceState(null, '', u.toString());
-                    } catch (e) { /* no-op */ }
-                },
-                
-                init() {
-                    // Route-based tab handling (e.g., ?tab=receivables&filter=overdue)
-                    const params = new URLSearchParams(window.location.search);
-                    const tab = params.get('tab');
-                    const filter = params.get('filter');
-                    const period = params.get('period');
-                    if (period && ['week','month','year','all'].includes(period)) {
-                        this.chartPeriod = period;
-                    }
-                    if (tab === 'receivables') {
-                        this.activeTab = 'receivables';
-                        this.loadReceivables(filter === 'overdue');
-                    }
+        return {
+            // State
+            activeTab: 'summary',
+            summary: {
+                total_revenue: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
+                total_expenses: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
+                net_profit: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
+                cash_balance: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU')
+            },
+            transactions: [],
+            receivables: [],
+            receivablesTotal: 0,
+            // Used as expense subcategories; backend categories are 'business'|'personal'
+            categories: ['Achats', 'Salaires', 'Loyer', 'Électricité', 'Maintenance', 'Marketing', 'Divers'],
+            showTransactionModal: false,
+            showEditModal: false,
+            newTransaction: { type: 'income', amount: '', description: '', category: '' },
+            editData: { id: null, type: 'income', amount: 0, description: '', category: '' },
+            searchTerm: '',
+            filterType: '',
+            chartPeriod: 'month',
+            revenueChart: null,
+            expenseChart: null,
+            // Loading flags
+            isLoadingSummary: true,
+            isLoadingTransactions: true,
+            isLoadingCharts: true,
+            toasts: [],
+            totalIncome: 0,
+            totalExpense: 0,
 
-                    this.loadData();
-            this.$nextTick(() => {
+            // Init lifecycle
+            init() {
+                // Handle deep links
+                const params = new URLSearchParams(window.location.search);
+                const tab = params.get('tab');
+                const filter = params.get('filter');
+                const period = params.get('period');
+                if (period && ['week','month','year','all'].includes(period)) this.chartPeriod = period;
+                if (tab === 'receivables') {
+                    this.activeTab = 'receivables';
+                    this.loadReceivables(filter === 'overdue');
+                }
+
+                // Bootstrap data in parallel
+                Promise.allSettled([
+                    this.loadSummary(),
+                    this.loadTransactions(),
+                ]).finally(() => {
+                    // Charts after first paint
+                    this.$nextTick(() => {
                         if (window.Chart) {
-                this.initCharts();
+                            this.initCharts();
                         } else {
                             const s = document.createElement('script');
                             s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-                s.onload = () => this.initCharts();
+                            s.onload = () => this.initCharts();
                             document.head.appendChild(s);
                         }
                     });
-                },
-                loadReceivables(onlyOverdue=false) {
-                    const url = onlyOverdue ? '/api/finance/client-debts?status=pending&overdue=true' : '/api/finance/client-debts?status=pending';
-                    apiFetch(url)
-                        .then(data => {
-                            if (data?.success) {
-                                this.receivables = data.debts || [];
-                                this.receivablesTotal = Number(data.total_remaining || 0);
-                            } else if (data && Array.isArray(data)) {
-                                this.receivables = data;
-                                this.receivablesTotal = this.receivables.reduce((s, d) => s + Number(d.remaining_amount||0), 0);
-                            }
-                        })
-                        .catch(err => console.error('Error loading receivables', err));
-                },
-                
-                refreshPeriod() {
-                    this.loadData(true);
-                    this.updateCharts();
-                },
-                loadData(applyPeriod=false) {
-                    // Load financial summary
-                        this.isLoadingSummary = true; // Load financial summary (use blueprint numeric endpoint)
-                        apiFetch('/api/finance/financial-summary')
-                        .then(data => {
-                            const cur = (window.AppConfig?.currentCurrency || 'MRU');
-                            const formatCur = (v) => window.formatCurrency ? window.formatCurrency(Number(v||0)) : (Number(v||0).toFixed(2) + ' ' + cur);
-                            const fs = data?.summary || data?.financial_summary || data;
-                            if (fs && (fs.total_revenue !== undefined || fs.current_cash_balance !== undefined || fs.total_business_expenses !== undefined || fs.total_expenses !== undefined)) {
-                                const totalExp = fs.total_expenses !== undefined
-                                    ? Number(fs.total_expenses || 0)
-                                    : (Number(fs.total_business_expenses||0) + Number(fs.total_personal_expenses||0));
-                                const net = fs.net_profit !== undefined
-                                    ? Number(fs.net_profit || 0)
-                                    : (Number(fs.total_profit || fs.total_revenue || 0) - totalExp);
-                                this.summary = {
-                                    total_revenue: formatCur(fs.total_revenue || 0),
-                                    total_expenses: formatCur(totalExp),
-                                    net_profit: formatCur(net),
-                                    cash_balance: formatCur(fs.current_cash_balance || fs.cash_balance || 0)
-                                };
-                            } else if (data && (data.success === false)) {
-                                this.showToast('error', data.message || 'Erreur de chargement du résumé');
-                            }
-                            this.isLoadingSummary = false;
-                        })
-                        .catch(error => { console.error('Error loading summary:', error); this.isLoadingSummary = false; this.showToast('error', 'Erreur de chargement du résumé'); });
-                    
+                });
+            },
 
-                    // Load transactions history using unified endpoint
-                    this.isLoadingTransactions = true;
-                    apiFetch('/api/finance/transactions')
+            // URL tab setter
+            setTab(tab) {
+                this.activeTab = tab;
+                try {
+                    const u = new URL(window.location);
+                    if (tab === 'receivables') {
+                        u.searchParams.set('tab', 'receivables');
+                        u.searchParams.set('filter', 'overdue');
+                        this.loadReceivables(true);
+                    } else {
+                        u.searchParams.delete('tab');
+                        u.searchParams.delete('filter');
+                    }
+                    window.history.replaceState(null, '', u.toString());
+                } catch (e) {}
+            },
+
+            // Data loaders
+            async loadSummary() {
+                this.isLoadingSummary = true;
+                const cur = (window.AppConfig?.currentCurrency || 'MRU');
+                const fmt = (v) => window.formatCurrency ? window.formatCurrency(Number(v||0)) : (Number(v||0).toFixed(2) + ' ' + cur);
+                try {
+                    // Prefer comprehensive blueprint summary (numeric)
+                    const a = await apiFetch('/api/finance/financial-summary').catch(() => null);
+                    let fs = a?.financial_summary || a?.summary || a;
+                    if (fs && (fs.total_revenue !== undefined || fs.current_cash_balance !== undefined)) {
+                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses||0) : (Number(fs.total_business_expenses||0)+Number(fs.total_personal_expenses||0));
+                        const net = fs.net_profit !== undefined ? Number(fs.net_profit||0) : (Number(fs.total_profit || fs.total_revenue || 0) - totalExp);
+                        this.summary = {
+                            total_revenue: fmt(fs.total_revenue || 0),
+                            total_expenses: fmt(totalExp),
+                            net_profit: fmt(net),
+                            cash_balance: fmt(fs.current_cash_balance || fs.cash_balance || 0)
+                        };
+                    } else {
+                        // Fallback to app summary (already formatted strings)
+                        const b = await apiFetch('/api/finance/summary').catch(() => null);
+                        const s = b?.summary || b;
+                        if (s && (s.total_revenue || s.cash_balance)) {
+                            this.summary = {
+                                total_revenue: s.total_revenue || fmt(0),
+                                total_expenses: s.total_expenses || fmt(0),
+                                net_profit: s.net_profit || fmt(0),
+                                cash_balance: s.cash_balance || fmt(0)
+                            };
+                        }
+                    }
+                } catch (e) {
+                    console.error('Summary load failed', e);
+                    this.showToast('error', 'Erreur de chargement du résumé');
+                } finally {
+                    this.isLoadingSummary = false;
+                }
+            },
+
+            async loadTransactions() {
+                this.isLoadingTransactions = true;
+                try {
+                    const res = await apiFetch('/api/finance/transactions').catch(() => ({ transactions: [] }));
+                    const baseList = (res?.transactions && Array.isArray(res.transactions)) ? res.transactions : (Array.isArray(res) ? res : []);
+
+                    // Try to include capital entries explicitly (app route may omit them)
+                    const caps = await apiFetch('/api/finance/capital').catch(() => ({ capital_entries: [] }));
+                    const capsList = Array.isArray(caps?.capital_entries) ? caps.capital_entries : (Array.isArray(caps) ? caps : []);
+
+                    const mapTx = (t, originHint=null) => ({
+                        id: t.id,
+                        date: t.date || t.entry_date || t.expense_date || t.sale_date,
+                        amount: Number(t.amount || t.total_amount || 0),
+                        description: t.description || t.source || t.details || (t.category==='capital' ? 'Apport de capital' : ''),
+                        type: t.type || (t.category === 'income' ? 'income' : (originHint==='capital' ? 'income' : 'expense')),
+                        category: t.category || originHint || '',
+                        subcategory: t.subcategory || '',
+                        origin: originHint || (t.category==='capital' ? 'capital' : (t.type==='income' ? 'sale' : 'expense'))
+                    });
+
+                    const merged = [];
+                    const seen = new Set();
+                    baseList.forEach(t => {
+                        const tx = mapTx(t, (t.type==='income' ? 'sale' : 'expense'));
+                        const key = `${tx.origin}:${tx.id}`;
+                        if (!seen.has(key)) { seen.add(key); merged.push(tx); }
+                    });
+                    capsList.forEach(c => {
+                        const tx = mapTx({ id: c.id, entry_date: c.entry_date, amount: c.amount, source: c.source, category: 'capital' }, 'capital');
+                        const key = `${tx.origin}:${tx.id}`;
+                        if (!seen.has(key)) { seen.add(key); merged.push(tx); }
+                    });
+
+                    // Sort by date desc
+                    this.transactions = merged.sort((a,b)=>{
+                        const db = this.parseDateFlex(b.date) || new Date(0);
+                        const da = this.parseDateFlex(a.date) || new Date(0);
+                        return db - da;
+                    });
+
+                    // Totals
+                    this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+Number(x.amount||0),0);
+                    this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+Number(x.amount||0),0);
+                } catch (e) {
+                    console.error('Transactions load failed', e);
+                    this.showToast('error', 'Erreur de chargement des transactions');
+                } finally {
+                    this.isLoadingTransactions = false;
+                }
+            },
+
+            loadReceivables(onlyOverdue=false) {
+                const url = onlyOverdue ? '/api/finance/client-debts?status=pending&overdue=true' : '/api/finance/client-debts?status=pending';
+                apiFetch(url)
                     .then(data => {
-                        const list = data?.transactions || (Array.isArray(data) ? data : []);
-                        this.transactions = list.map(t => ({
-                            id: t.id,
-                            date: t.date || t.entry_date || t.expense_date || t.sale_date,
-                            amount: t.amount,
-                            description: t.description || t.source || t.details || '',
-                            type: t.type || (t.category === 'income' ? 'income' : 'expense'),
-                            category: t.category || ''
-                        })).sort((a,b)=> {
-                            const db = this.parseDateFlex(b.date || b.created_at);
-                            const da = this.parseDateFlex(a.date || a.created_at);
-                            const nb = db ? db.getTime() : 0;
-                            const na = da ? da.getTime() : 0;
-                            return nb - na;
-
-                        });
-                        // Totals
-                        this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+x.amount,0);
-                        this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+x.amount,0);
-                        this.isLoadingTransactions = false;
+                        if (data?.success) {
+                            this.receivables = data.debts || [];
+                            this.receivablesTotal = Number(data.total_remaining || 0);
+                        } else if (data && Array.isArray(data)) {
+                            this.receivables = data;
+                            this.receivablesTotal = this.receivables.reduce((s, d) => s + Number(d.remaining_amount||0), 0);
+                        }
                     })
-                    .catch(error => { console.error('Error loading transactions:', error); this.isLoadingTransactions = false; this.showToast('error', 'Erreur de chargement des transactions'); });
-                },
-                
-                get filteredTransactions() {
-                    return this.transactions.filter(transaction => {
-                        const term = (this.searchTerm || '').toLowerCase();
-                        const desc = (transaction.description || transaction.source || '').toLowerCase();
-                        const matchesSearch = !term || desc.includes(term);
-                        const matchesType = !this.filterType || transaction.type === this.filterType;
-                        return matchesSearch && matchesType;
-                    });
-                },
-                
-                initCharts() {
-                    const rev = document.getElementById('revenueChart');
-                    const exp = document.getElementById('expenseChart');
-                    if (!rev || !exp || !window.Chart) return;
-                    const revenueCtx = rev.getContext('2d');
-                    const expenseCtx = exp.getContext('2d');
+                    .catch(err => console.error('Error loading receivables', err));
+            },
 
-                    this.revenueChart = new Chart(revenueCtx, {
-                        type: 'line',
-                        data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4 }] },
-                        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
-                    });
+            refreshPeriod() {
+                // Refresh summary, transactions, and charts
+                this.loadSummary();
+                this.loadTransactions();
+                this.updateCharts();
+                if (this.activeTab === 'receivables') {
+                    this.loadReceivables(true);
+                }
+            },
 
-                    this.expenseChart = new Chart(expenseCtx, {
-                        type: 'doughnut',
-                        data: { labels: [], datasets: [{ data: [], backgroundColor: ['rgb(239, 68, 68)','rgb(245, 158, 11)','rgb(34, 197, 94)','rgb(168, 85, 247)','rgb(107, 114, 128)'] }] },
-                        options: { responsive: true, maintainAspectRatio: false }
-                    });
+            // Derived
+            get filteredTransactions() {
+                return this.transactions.filter(transaction => {
+                    const term = (this.searchTerm || '').toLowerCase();
+                    const desc = (transaction.description || transaction.source || '').toLowerCase();
+                    const matchesSearch = !term || desc.includes(term);
+                    const matchesType = !this.filterType || transaction.type === this.filterType;
+                    return matchesSearch && matchesType;
+                });
+            },
 
-                    // Load chart data initially using selected period (including 'all')
-                    this.updateCharts();
-                    // Align transactions with initial period
-                    this.loadData(true);
-                },
-                
-                updateCharts() {
-                    this.isLoadingCharts = true;
-                    // Persist selected period in URL (no reload)
-                    try {
-                        const u = new URL(window.location);
-                        u.searchParams.set('period', this.chartPeriod);
-                        window.history.replaceState(null, '', u.toString());
-                    } catch (e) { /* no-op */ }
-                    const periodParam = this.chartPeriod === 'all' ? 'year' : this.chartPeriod;
-                    apiFetch(`/api/finance/charts?period=${periodParam}`)
-                        .then(data => {
-                            const chart = data?.chart_data || data || {};
-                            const rev = chart.revenue || {};
-                            this.revenueChart.data.labels = (rev.labels || []);
-                            this.revenueChart.data.datasets[0].data = (rev.data || []).map(v => Number(v || 0));
-                            this.revenueChart.update();
-                            const exp = chart.expense || {};
-                            this.expenseChart.data.labels = (exp.categories || []);
-                            this.expenseChart.data.datasets[0].data = (exp.data || []).map(v => Number(v || 0));
-                            this.expenseChart.update();
-                        })
-                        .catch(err => { console.error('Error updating charts:', err); })
-                        .finally(() => { this.isLoadingCharts = false; });
-                },
-                
-                createTransaction() {
-                    const today = new Date().toISOString().split('T')[0];
-                    const isIncome = this.newTransaction.type === 'income';
-                    const url = isIncome ? '/api/finance/capital' : '/api/finance/expenses';
+            // Charts
+            initCharts() {
+                const rev = document.getElementById('revenueChart');
+                const exp = document.getElementById('expenseChart');
+                if (!rev || !exp || !window.Chart) return;
+                const revenueCtx = rev.getContext('2d');
+                const expenseCtx = exp.getContext('2d');
 
-                    const payload = isIncome ? {
-                        amount: this.newTransaction.amount,
-                        source: this.newTransaction.description,
-                        entry_date: today
-                    } : {
-                        amount: this.newTransaction.amount,
-                        // Map UI category to backend schema
-                        category: 'business',
-                        subcategory: this.newTransaction.category || 'Divers',
-                        description: this.newTransaction.description,
-                        expense_date: today
-                    };
+                this.revenueChart = new Chart(revenueCtx, {
+                    type: 'line',
+                    data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
+                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: true } } }
+                });
 
-                    apiFetch(url, {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(payload)
+                this.expenseChart = new Chart(expenseCtx, {
+                    type: 'doughnut',
+                    data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
+                });
+
+                this.updateCharts();
+            },
+
+            updateCharts() {
+                this.isLoadingCharts = true;
+                try {
+                    const u = new URL(window.location);
+                    u.searchParams.set('period', this.chartPeriod);
+                    window.history.replaceState(null, '', u.toString());
+                } catch (e) {}
+                const periodParam = this.chartPeriod; // backend now supports 'all'
+                apiFetch(`/api/finance/charts?period=${periodParam}`)
+                    .then(data => {
+                        const chart = data?.chart_data || data || {};
+                        const rev = chart.revenue || {};
+                        const rLabels = Array.isArray(rev.labels) ? rev.labels : [];
+                        const rData = Array.isArray(rev.data) ? rev.data.map(v=>Number(v||0)) : [];
+                        // Graceful empty handling
+                        this.revenueChart.data.labels = rLabels;
+                        this.revenueChart.data.datasets[0].data = rData;
+                        if (this.revenueChart.data.labels.length === 0) {
+                            // minimal placeholder to avoid blank canvas
+                            this.revenueChart.data.labels = [''];
+                            this.revenueChart.data.datasets[0].data = [0];
+                        }
+                        this.revenueChart.update();
+                        const exp = chart.expense || {};
+                        const eLabels = Array.isArray(exp.categories) ? exp.categories : [];
+                        const eData = Array.isArray(exp.data) ? exp.data.map(v=>Number(v||0)) : [];
+                        this.expenseChart.data.labels = eLabels.length ? eLabels : ['Aucune dépense'];
+                        this.expenseChart.data.datasets[0].data = eLabels.length ? eData : [0];
+                        // Dynamic color palette sized to labels
+                        const colors = eLabels.length
+                            ? eLabels.map((_,i)=>`hsl(${(i*53)%360} 85% 55%)`)
+                            : ['#9CA3AF'];
+                        this.expenseChart.data.datasets[0].backgroundColor = colors;
+                        this.expenseChart.update();
                     })
-                        .then(data => {
-                            if (data.success) {
-                                this.loadData();
-                                this.showTransactionModal = false;
-                                this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
-                                this.showToast('success', 'Transaction créée avec succès');
-                            } else {
-                                this.showToast('error', data.message || 'Erreur lors de la création');
-                            }
-                        })
-                        .catch(err => { console.error('Error creating transaction:', err); this.showToast('error', 'Erreur lors de la création'); });
-                },
-                
-                editTransaction(transaction) {
-                    this.editData = {
-                        id: transaction.id,
-                        type: transaction.type,
-                        amount: Number(transaction.amount || 0),
-                        description: transaction.description || '',
-                        category: transaction.subcategory || transaction.category || ''
-                    };
-                    this.showEditModal = true;
-                },
+                    .catch(err => { console.error('Error updating charts:', err); })
+                    .finally(() => { this.isLoadingCharts = false; });
+            },
 
-                updateTransaction() {
-                    if (!this.editData.id) return;
-                    const isIncome = this.editData.type === 'income';
-                    const url = isIncome ? `/api/finance/capital/${this.editData.id}` : `/api/finance/expenses/${this.editData.id}`;
-                    const body = isIncome
-                        ? { amount: Number(this.editData.amount || 0), source: this.editData.description }
-                        : { amount: Number(this.editData.amount || 0), description: this.editData.description, subcategory: this.editData.category };
-                    apiFetch(url, {
-                        method: 'PUT',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(body)
+            // CRUD
+            createTransaction() {
+                if (this._creating) return; // prevent double submits
+                const today = new Date().toISOString().split('T')[0];
+                const isIncome = this.newTransaction.type === 'income';
+                const url = isIncome ? '/api/finance/capital' : '/api/finance/expenses';
+                // Basic validation
+                const amt = Number(this.newTransaction.amount);
+                if (!amt || amt <= 0) { this.showToast('warning', 'Montant invalide'); return; }
+                if (!this.newTransaction.description) { this.showToast('warning', 'Description requise'); return; }
+                const payload = isIncome ? {
+                    amount: this.newTransaction.amount,
+                    source: this.newTransaction.description,
+                    entry_date: today
+                } : {
+                    amount: this.newTransaction.amount,
+                    category: 'business',
+                    subcategory: this.newTransaction.category || 'Divers',
+                    description: this.newTransaction.description,
+                    expense_date: today
+                };
+                this._creating = true;
+                apiFetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) })
+                    .then(data => {
+                        if (data.success) {
+                            // Refresh everything to reflect new entry
+                            this.loadTransactions();
+                            this.loadSummary();
+                            this.updateCharts();
+                            this.showTransactionModal = false;
+                            this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
+                            this.showToast('success', 'Transaction créée avec succès');
+                        } else {
+                            this.showToast('error', data.message || 'Erreur lors de la création');
+                        }
                     })
-                    .then(data=>{
+                    .catch(err => { console.error('Error creating transaction:', err); this.showToast('error', 'Erreur lors de la création'); })
+                    .finally(() => { this._creating = false; });
+            },
+
+            editTransaction(transaction) {
+                if (transaction.origin === 'sale') return; // Not editable here
+                this.editData = {
+                    id: transaction.id,
+                    type: transaction.type,
+                    amount: Number(transaction.amount || 0),
+                    description: transaction.description || '',
+                    category: transaction.subcategory || transaction.category || ''
+                };
+                this.showEditModal = true;
+            },
+
+            updateTransaction() {
+                if (!this.editData.id) return;
+                const isIncome = this.editData.type === 'income';
+                const url = isIncome ? `/api/finance/capital/${this.editData.id}` : `/api/finance/expenses/${this.editData.id}`;
+                const body = isIncome
+                    ? { amount: Number(this.editData.amount || 0), source: this.editData.description }
+                    : { amount: Number(this.editData.amount || 0), description: this.editData.description, subcategory: this.editData.category };
+                apiFetch(url, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })
+            .then(data=>{
                         if (data.success) {
                             this.showEditModal = false;
-                            this.loadData();
+                this.loadTransactions();
+                this.loadSummary();
+                this.updateCharts();
                             this.showToast('success', 'Transaction mise à jour');
                         } else {
                             this.showToast('error', data.message || 'Erreur lors de la mise à jour');
                         }
                     })
                     .catch(err=>{ console.error('Error updating transaction:', err); this.showToast('error', 'Erreur lors de la mise à jour'); });
-                },
-                
-                deleteTransaction(transaction) {
-                    if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction?')) return;
+            },
 
-                    const url = transaction.type === 'income'
-                        ? `/api/finance/capital/${transaction.id}`
-                        : `/api/finance/expenses/${transaction.id}`;
+            deleteTransaction(transaction) {
+                if (transaction.origin === 'sale') return; // Not deletable here
+                if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction?')) return;
+                const url = transaction.type === 'income' ? `/api/finance/capital/${transaction.id}` : `/api/finance/expenses/${transaction.id}`;
+                apiFetch(url, { method: 'DELETE' })
+            .then(data => {
+                        if (data.success) {
+                            this.transactions = this.transactions.filter(t => !(t.id === transaction.id && t.origin === transaction.origin));
+                // Recompute totals immediately
+                this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+Number(x.amount||0),0);
+                this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+Number(x.amount||0),0);
+                            this.loadSummary();
+                this.updateCharts();
+                            this.showToast('success', 'Transaction supprimée');
+                        } else {
+                            this.showToast('error', data.message || 'Erreur lors de la suppression');
+                        }
+                    })
+                    .catch(err => { console.error('Error deleting transaction:', err); this.showToast('error', 'Erreur lors de la suppression'); });
+            },
 
-                    apiFetch(url, { method: 'DELETE' })
-                        .then(data => {
-                            if (data.success) {
-                                this.transactions = this.transactions.filter(t => t.id !== transaction.id);
-                                this.showToast('success', 'Transaction supprimée');
-                            } else {
-                                this.showToast('error', data.message || 'Erreur lors de la suppression');
-                            }
-                        })
-                        .catch(err => { console.error('Error deleting transaction:', err); this.showToast('error', 'Erreur lors de la suppression'); });
-                },
-                
-                generateFinanceReport() {
-                    // Respect current chart period for report time window
-                    const params = new URLSearchParams();
-                    const now = Date.now();
-                    if (this.chartPeriod === 'week') {
-                        params.append('start_date', new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]);
-                    } else if (this.chartPeriod === 'month') {
-                        params.append('start_date', new Date(now - 30*24*60*60*1000).toISOString().split('T')[0]);
-                    } else if (this.chartPeriod === 'year') {
-                        params.append('start_date', new Date(now - 365*24*60*60*1000).toISOString().split('T')[0]);
-                    }
-                    window.open(`/api/reports/financial-report?${params.toString()}`, '_blank');
-                },
-                
-                backupData() {
-                    // Requires admin; backend will enforce permissions
-                    apiFetch('/api/admin/backups', { method: 'POST' })
-                        .then(data => {
-                            if (data.success) {
-                                this.showToast('success', 'Sauvegarde créée avec succès');
-                            } else {
-                                this.showToast('error', data.message || 'Échec de la sauvegarde (droits admin requis)');
-                            }
-                        })
-                        .catch(err => { console.error('Backup error:', err); this.showToast('error', 'Erreur lors de la sauvegarde'); });
-                },
-                
-                formatDate(dateString) {
-                    if (!dateString) return '-';
-                    const d = this.parseDateFlex(dateString);
-                    if (!d || isNaN(d.getTime())) return '-';
-                    try {
-                        return d.toLocaleDateString('fr-FR');
-                    } catch (e) {
-                        return this.toYMD(d);
-                    }
-                },
-                formatCurrencyPlain(v){
-                    const cur = (window.AppConfig?.currentCurrency || 'MRU');
-                    const num = Number(v||0);
-                    const parts = num.toFixed(2).split('.');
-                    const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-                    return `${intPart},${parts[1]} ${cur}`;
-                },
-                showToast(type, message) {
-                    const id = Date.now() + Math.random();
-                    this.toasts.push({ id, type, message });
-                    setTimeout(() => {
-                        this.toasts = this.toasts.filter(t => t.id !== id);
-                    }, 3000);
+            generateFinanceReport() {
+                const params = new URLSearchParams();
+                const now = Date.now();
+                if (this.chartPeriod === 'week') params.append('start_date', new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]);
+                else if (this.chartPeriod === 'month') params.append('start_date', new Date(now - 30*24*60*60*1000).toISOString().split('T')[0]);
+                else if (this.chartPeriod === 'year') params.append('start_date', new Date(now - 365*24*60*60*1000).toISOString().split('T')[0]);
+                window.open(`/api/reports/financial-report?${params.toString()}`, '_blank');
+            },
+
+            backupData() {
+                apiFetch('/api/admin/backups', { method: 'POST' })
+                    .then(data => {
+                        if (data.success) this.showToast('success', 'Sauvegarde créée avec succès');
+                        else this.showToast('error', data.message || 'Échec de la sauvegarde (droits admin requis)');
+                    })
+                    .catch(err => { console.error('Backup error:', err); this.showToast('error', 'Erreur lors de la sauvegarde'); });
+            },
+
+            // Utils
+            parseDateFlex(s) {
+                if (!s) return null;
+                let d = new Date(s);
+                if (!isNaN(d)) return d;
+                if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) {
+                    const part = s.slice(0, 10);
+                    const d3 = new Date(part);
+                    if (!isNaN(d3)) return d3;
                 }
+                const m = /^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})/.exec(String(s));
+                if (m) {
+                    const dd = parseInt(m[1], 10), mm = parseInt(m[2], 10) - 1, yy = parseInt(m[3].length === 2 ? ('20' + m[3]) : m[3], 10);
+                    const d2 = new Date(yy, mm, dd);
+                    return isNaN(d2) ? null : d2;
+                }
+                return null;
+            },
+            toYMD(d) { return d ? d.toISOString().split('T')[0] : ''; },
+            formatDate(dateString) {
+                if (!dateString) return '-';
+                const d = this.parseDateFlex(dateString);
+                if (!d || isNaN(d.getTime())) return '-';
+                try { return d.toLocaleDateString('fr-FR'); } catch (e) { return this.toYMD(d); }
+            },
+            formatCurrencyPlain(v){
+                const cur = (window.AppConfig?.currentCurrency || 'MRU');
+                const num = Number(v||0);
+                const parts = num.toFixed(2).split('.');
+                const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+                return `${intPart},${parts[1]} ${cur}`;
+            },
+            showToast(type, message) {
+                const id = Date.now() + Math.random();
+                this.toasts.push({ id, type, message });
+                setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3000);
             }
         }
+    }
         
         function changeLanguage(lang) {
             window.location.href = `/set-language/${lang}`;
