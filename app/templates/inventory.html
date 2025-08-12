@@ -1753,9 +1753,8 @@
         // Add this function to inventory.html
     async function viewDetails(productId) {
         try {
-            const product = await fetchProduct(productId);
-
-            const detailsResponse = await fetch(`/api/inventory/products/${productId}/details`, {
+            // Fetch unified product details
+            const response = await fetch(`/api/inventory/products/${productId}`, {
                 method: 'GET',
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
@@ -1764,10 +1763,11 @@
                 credentials: 'same-origin',
                 cache: 'no-store'
             });
-            const detailsData = await detailsResponse.json();
-
-            const movements = detailsData.movements || [];
-            const sales = detailsData.sales || [];
+            const data = await response.json();
+            if (!data.success) throw new Error('API error');
+            const product = data.product;
+            const movements = product.recent_movements || [];
+            const sales = product.sales_history || [];
 
             // Create and show modal using unified product mapping
             const modalHtml = `
