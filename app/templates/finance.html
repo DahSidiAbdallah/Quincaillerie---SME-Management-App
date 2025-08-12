@@ -104,9 +104,18 @@
                         <option value="year">12 derniers mois</option>
                         <option value="all">Tout le temps</option>
                     </select>
+                       <button @click="exportChart('revenue')" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm" aria-label="Exporter le graphique des revenus">
+                           <i class="fas fa-download mr-1"></i>Exporter
+                       </button>
                 </div>
                 <div class="h-64 relative">
-                    <div x-show="isLoadingCharts" class="absolute inset-0 flex items-center justify-center text-gray-500">
+                    <template x-if="chartError">
+                        <div class="absolute inset-0 flex items-center justify-center text-red-600 bg-red-50 z-10">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            <span x-text="chartError"></span>
+                        </div>
+                    </template>
+                    <div x-show="isLoadingCharts && !chartError" class="absolute inset-0 flex items-center justify-center text-gray-500">
                         <i class="fas fa-spinner fa-spin mr-2"></i>Chargement du graphique...
                     </div>
                     <canvas id="revenueChart"></canvas>
@@ -116,8 +125,22 @@
             <!-- Expense Breakdown -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Répartition des Dépenses</h3>
+                   <div class="flex gap-2 mb-2">
+                       <button @click="exportChart('expense')" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm" aria-label="Exporter le graphique des dépenses">
+                           <i class="fas fa-download mr-1"></i>Exporter Image
+                       </button>
+                       <button @click="exportExpenseCSV()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm" aria-label="Exporter les données des dépenses">
+                           <i class="fas fa-file-csv mr-1"></i>Exporter CSV
+                       </button>
+                   </div>
                 <div class="h-64 relative">
-                    <div x-show="isLoadingCharts" class="absolute inset-0 flex items-center justify-center text-gray-500">
+                    <template x-if="chartError">
+                        <div class="absolute inset-0 flex items-center justify-center text-red-600 bg-red-50 z-10">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            <span x-text="chartError"></span>
+                        </div>
+                    </template>
+                    <div x-show="isLoadingCharts && !chartError" class="absolute inset-0 flex items-center justify-center text-gray-500">
                         <i class="fas fa-spinner fa-spin mr-2"></i>Chargement du graphique...
                     </div>
                     <canvas id="expenseChart"></canvas>
@@ -135,13 +158,15 @@
                 <i class="fas fa-minus mr-2"></i>
                 Nouvelle Dépense
             </button>
-            <button @click="generateFinanceReport()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <button @click="generateFinanceReport()" :disabled="isGeneratingReport" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
                 <i class="fas fa-file-excel mr-2"></i>
-                Rapport Financier
+                <span>Rapport Financier</span>
+                <span x-show="isGeneratingReport" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
             </button>
-            <button @click="backupData()" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <button @click="backupData()" :disabled="isBackingUp" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
                 <i class="fas fa-save mr-2"></i>
-                Sauvegarde
+                <span>Sauvegarde</span>
+                <span x-show="isBackingUp" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
             </button>
         </div>
 
@@ -149,14 +174,17 @@
         <div x-show="activeTab==='receivables'" class="bg-white shadow rounded-lg overflow-hidden mb-8">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900">Créances Clients (en retard)</h3>
-                <div>
+                <div class="flex gap-2">
                     <button @click="loadReceivables(true)" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
+                    <button @click="exportReceivablesCSV()" class="text-sm text-gray-700 bg-gray-200 hover:bg-gray-300 rounded px-2 py-1"><i class="fas fa-file-csv mr-1"></i>Exporter CSV</button>
+                    <button @click="markSelectedReceivablesPaid()" :disabled="selectedReceivables.length===0" class="text-sm text-green-700 bg-green-100 hover:bg-green-200 rounded px-2 py-1 disabled:opacity-50"><i class="fas fa-check mr-1"></i>Marquer comme payé</button>
                 </div>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
+                            <th class="px-2 py-3"><input type="checkbox" :checked="allReceivablesSelected" @change="toggleAllReceivables($event)"></th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant dû</th>
                             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Échéance</th>
@@ -164,26 +192,34 @@
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        <template x-for="d in receivables" :key="d.id">
+                        <template x-for="d in paginatedReceivables" :key="d.id">
                             <tr>
+                                <td class="px-2 py-4"><input type="checkbox" :value="d.id" :checked="selectedReceivables.includes(d.id)" @change="toggleReceivableSelection(d.id)"></td>
                                 <td class="px-6 py-4 text-sm text-gray-900" x-text="d.client_name"></td>
                                 <td class="px-6 py-4 text-sm text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(d.remaining_amount) : (Number(d.remaining_amount||0).toFixed(2)+' '+(window.AppConfig?.currentCurrency||'MRU'))"></td>
                                 <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDate(d.due_date)"></td>
                                 <td class="px-6 py-4 text-sm" :class="(d.days_overdue||0)>0 ? 'text-red-600 font-semibold' : 'text-gray-500'" x-text="d.days_overdue||0"></td>
                             </tr>
                         </template>
-                        <tr x-show="receivables.length===0">
-                            <td colspan="4" class="px-6 py-4 text-center text-gray-500">Aucune créance en retard</td>
+                        <tr x-show="paginatedReceivables.length===0">
+                            <td colspan="5" class="px-6 py-4 text-center text-gray-500">Aucune créance en retard</td>
                         </tr>
                     </tbody>
                     <tfoot class="bg-gray-50">
                         <tr>
+                            <td></td>
                             <td class="px-6 py-3 text-right text-sm font-medium" colspan="1">Total</td>
                             <td class="px-6 py-3 text-sm font-semibold" x-text="window.formatCurrency ? window.formatCurrency(receivablesTotal) : (Number(receivablesTotal||0).toFixed(2)+' '+(window.AppConfig?.currentCurrency||'MRU'))"></td>
                             <td colspan="2"></td>
                         </tr>
                     </tfoot>
                 </table>
+            </div>
+            <!-- Pagination Controls -->
+            <div class="flex justify-end items-center gap-2 px-6 py-2">
+                <button @click="prevReceivablesPage()" :disabled="receivablesPage===1" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&lt;</button>
+                <span class="text-sm">Page <span x-text="receivablesPage"></span> / <span x-text="receivablesTotalPages"></span></span>
+                <button @click="nextReceivablesPage()" :disabled="receivablesPage===receivablesTotalPages" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&gt;</button>
             </div>
         </div>
 
@@ -192,14 +228,17 @@
             <div class="px-6 py-4 border-b border-gray-200">
                 <div class="flex justify-between items-center">
                     <h3 class="text-lg font-medium text-gray-900">Transactions Récentes</h3>
-                    <div class="flex space-x-2">
+                    <div class="flex flex-wrap gap-2 items-center">
                         <input type="text" x-model="searchTerm" placeholder="Rechercher..." class="border border-gray-300 rounded-md px-3 py-2 text-sm">
                         <select x-model="filterType" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
                             <option value="">Tous types</option>
                             <option value="income">Revenus</option>
                             <option value="expense">Dépenses</option>
                         </select>
+                        <input type="date" x-model="filterStartDate" class="border border-gray-300 rounded-md px-2 py-2 text-sm" aria-label="Date début">
+                        <input type="date" x-model="filterEndDate" class="border border-gray-300 rounded-md px-2 py-2 text-sm" aria-label="Date fin">
                         <button @click="refreshPeriod();" class="border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">Rafraîchir</button>
+                        <button @click="exportTransactionsCSV()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-md text-sm" aria-label="Exporter les transactions"><i class="fas fa-file-csv mr-1"></i>Exporter CSV</button>
                     </div>
                 </div>
             </div>
@@ -215,12 +254,15 @@
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paiement</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
@@ -229,7 +271,7 @@
                                 <i class="fas fa-spinner fa-spin mr-2"></i>Chargement des transactions...
                             </td>
                         </tr>
-                        <template x-for="transaction in filteredTransactions" :key="(transaction.origin||'tx') + '-' + transaction.id">
+                        <template x-for="transaction in paginatedTransactions" :key="(transaction.origin||'tx') + '-' + transaction.id">
                             <tr class="hover:bg-gray-50">
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date)"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.description || transaction.source || '-' "></td>
@@ -247,9 +289,12 @@
                                         'text-green-600': transaction.type === 'income',
                                         'text-red-600': transaction.type === 'expense'
                                     }">
-                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(Number(transaction.amount||0)) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))"></span>
+                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(Number(transaction.amount||0)) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))" ></span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.subcategory || transaction.category"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.client_name || '-' "></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.payment_method || '-' "></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.payment_status || '-' "></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div class="flex items-center gap-3">
                                         <button :disabled="transaction.origin==='sale'" @click="editTransaction(transaction)" :class="transaction.origin==='sale' ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'" title="" :title="transaction.origin==='sale' ? 'Les ventes ne sont pas modifiables ici' : 'Modifier'">
@@ -273,6 +318,12 @@
                         </tr>
                     </tbody>
                 </table>
+            </div>
+            <!-- Pagination Controls -->
+            <div class="flex justify-end items-center gap-2 px-6 py-2">
+                <button @click="prevTransactionsPage()" :disabled="transactionsPage===1" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&lt;</button>
+                <span class="text-sm">Page <span x-text="transactionsPage"></span> / <span x-text="transactionsTotalPages"></span></span>
+                <button @click="nextTransactionsPage()" :disabled="transactionsPage===transactionsTotalPages" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&gt;</button>
             </div>
         </div>
 
@@ -309,12 +360,33 @@
                         
                         <div class="mb-4">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
-                            <select x-model="newTransaction.category" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                                <option value="">Sélectionner une catégorie</option>
+                            <div class="flex gap-2 mb-2">
+                                <select x-model="newTransaction.category" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                    <option value="">Sélectionner une catégorie</option>
+                                    <template x-for="category in categories" :key="category">
+                                        <option :value="category" x-text="category"></option>
+                                    </template>
+                                </select>
+                                <input type="text" x-model="newCategory" placeholder="Nouvelle catégorie" class="border border-gray-300 rounded-md px-2 py-2 text-sm">
+                                <button type="button" @click="addCategory()" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">Ajouter</button>
+                            </div>
+                            <div class="flex flex-wrap gap-2 mt-1">
                                 <template x-for="category in categories" :key="category">
-                                    <option :value="category" x-text="category"></option>
+                                    <span class="inline-flex items-center bg-gray-200 rounded px-2 py-1 text-xs">
+                                        <span x-text="category"></span>
+                                        <button type="button" @click="removeCategory(category)" class="ml-1 text-red-500 hover:text-red-700" title="Supprimer">&times;</button>
+                                    </span>
                                 </template>
-                            </select>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Justificatif (reçu, facture, etc.)</label>
+                            <input type="file" @change="handleAttachment($event, 'new')" accept="image/*,application/pdf" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <template x-if="newTransaction.attachmentPreview">
+                                <div class="mt-2">
+                                    <img :src="newTransaction.attachmentPreview" alt="Aperçu pièce jointe" class="max-h-32 border rounded shadow">
+                                </div>
+                            </template>
                         </div>
                         
                         <div class="flex justify-end space-x-3">
@@ -357,12 +429,33 @@
                         </div>
                         <div class="mb-4" x-show="editData.type === 'expense'">
                             <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
-                            <select x-model="editData.category" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                                <option value="">Sélectionner une catégorie</option>
+                            <div class="flex gap-2 mb-2">
+                                <select x-model="editData.category" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                    <option value="">Sélectionner une catégorie</option>
+                                    <template x-for="category in categories" :key="category">
+                                        <option :value="category" x-text="category"></option>
+                                    </template>
+                                </select>
+                                <input type="text" x-model="newCategory" placeholder="Nouvelle catégorie" class="border border-gray-300 rounded-md px-2 py-2 text-sm">
+                                <button type="button" @click="addCategory()" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">Ajouter</button>
+                            </div>
+                            <div class="flex flex-wrap gap-2 mt-1">
                                 <template x-for="category in categories" :key="category">
-                                    <option :value="category" x-text="category"></option>
+                                    <span class="inline-flex items-center bg-gray-200 rounded px-2 py-1 text-xs">
+                                        <span x-text="category"></span>
+                                        <button type="button" @click="removeCategory(category)" class="ml-1 text-red-500 hover:text-red-700" title="Supprimer">&times;</button>
+                                    </span>
                                 </template>
-                            </select>
+                            </div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Justificatif (reçu, facture, etc.)</label>
+                            <input type="file" @change="handleAttachment($event, 'edit')" accept="image/*,application/pdf" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                            <template x-if="editData.attachmentPreview">
+                                <div class="mt-2">
+                                    <img :src="editData.attachmentPreview" alt="Aperçu pièce jointe" class="max-h-32 border rounded shadow">
+                                </div>
+                            </template>
                         </div>
                         <div class="flex justify-end space-x-3">
                             <button type="button" @click="showEditModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
@@ -380,17 +473,34 @@
     <div class="fixed top-4 right-4 space-y-2 z-[60]">
         <template x-for="t in toasts" :key="t.id">
             <div class="px-4 py-3 rounded shadow text-white"
-                 :class="{'bg-green-600': t.type==='success', 'bg-red-600': t.type==='error', 'bg-yellow-600': t.type==='warning'}">
+                 :class="{'bg-green-600': t.type==='success', 'bg-red-600': t.type==='error', 'bg-yellow-600': t.type==='warning', 'bg-blue-600': t.type==='info'}">
                 <div class="flex items-center">
                     <i class="fas mr-2" :class="{
                         'fa-check-circle': t.type==='success',
                         'fa-exclamation-triangle': t.type==='warning',
-                        'fa-times-circle': t.type==='error'
+                        'fa-times-circle': t.type==='error',
+                        'fa-info-circle': t.type==='info'
                     }"></i>
                     <span x-text="t.message"></span>
                 </div>
             </div>
         </template>
+        <button @click="showLog = !showLog" class="mt-2 px-3 py-1 bg-gray-700 text-white rounded text-xs">Voir l'historique</button>
+        <div x-show="showLog" class="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white text-gray-800 rounded shadow-lg z-50 border border-gray-200">
+            <div class="p-2 font-bold border-b">Historique des notifications</div>
+            <template x-for="t in notificationLog" :key="t.id">
+                <div class="px-3 py-2 border-b last:border-b-0 flex items-center gap-2">
+                    <i class="fas" :class="{
+                        'fa-check-circle text-green-600': t.type==='success',
+                        'fa-exclamation-triangle text-yellow-600': t.type==='warning',
+                        'fa-times-circle text-red-600': t.type==='error',
+                        'fa-info-circle text-blue-600': t.type==='info'
+                    }"></i>
+                    <span x-text="t.message"></span>
+                    <span class="ml-auto text-xs text-gray-400" x-text="new Date(t.id).toLocaleTimeString('fr-FR')"></span>
+                </div>
+            </template>
+        </div>
     </div>
     </main>
 {% endblock %}
@@ -400,6 +510,8 @@
     function financeManager() {
         return {
             // State
+            chartsInitialized: false,
+            chartError: null,
             activeTab: 'summary',
             summary: {
                 total_revenue: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
@@ -412,12 +524,106 @@
             receivablesTotal: 0,
             // Used as expense subcategories; backend categories are 'business'|'personal'
             categories: ['Achats', 'Salaires', 'Loyer', 'Électricité', 'Maintenance', 'Marketing', 'Divers'],
+            newCategory: '',
+            addCategory() {
+                const cat = (this.newCategory || '').trim();
+                if (cat && !this.categories.includes(cat)) {
+                    this.categories.push(cat);
+                    this.newCategory = '';
+                    this.showToast('success', 'Catégorie ajoutée');
+                }
+            },
+            removeCategory(cat) {
+                this.categories = this.categories.filter(c => c !== cat);
+                if (this.newTransaction.category === cat) this.newTransaction.category = '';
+                if (this.editData.category === cat) this.editData.category = '';
+                this.showToast('success', 'Catégorie supprimée');
+            },
+            handleAttachment(event, mode) {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (mode === 'new') {
+                        this.newTransaction.attachment = file;
+                        this.newTransaction.attachmentPreview = e.target.result;
+                    } else if (mode === 'edit') {
+                        this.editData.attachment = file;
+                        this.editData.attachmentPreview = e.target.result;
+                    }
+                };
+                reader.readAsDataURL(file);
+            },
+            // Receivables selection and pagination
+            selectedReceivables: [],
+            receivablesPage: 1,
+            receivablesPageSize: 10,
+            get paginatedReceivables() {
+                const start = (this.receivablesPage - 1) * this.receivablesPageSize;
+                return this.receivables.slice(start, start + this.receivablesPageSize);
+            },
+            get receivablesTotalPages() {
+                return Math.max(1, Math.ceil(this.receivables.length / this.receivablesPageSize));
+            },
+            get allReceivablesSelected() {
+                return this.paginatedReceivables.length > 0 && this.paginatedReceivables.every(r => this.selectedReceivables.includes(r.id));
+            },
+            toggleReceivableSelection(id) {
+                if (this.selectedReceivables.includes(id)) {
+                    this.selectedReceivables = this.selectedReceivables.filter(x => x !== id);
+                } else {
+                    this.selectedReceivables.push(id);
+                }
+            },
+            toggleAllReceivables(e) {
+                if (e.target.checked) {
+                    const ids = this.paginatedReceivables.map(r => r.id);
+                    this.selectedReceivables = Array.from(new Set([...this.selectedReceivables, ...ids]));
+                } else {
+                    const ids = this.paginatedReceivables.map(r => r.id);
+                    this.selectedReceivables = this.selectedReceivables.filter(id => !ids.includes(id));
+                }
+            },
+            prevReceivablesPage() {
+                if (this.receivablesPage > 1) this.receivablesPage--;
+            },
+            nextReceivablesPage() {
+                if (this.receivablesPage < this.receivablesTotalPages) this.receivablesPage++;
+            },
+            exportReceivablesCSV() {
+                if (!this.receivables.length) { this.showToast('error', 'Aucune créance à exporter'); return; }
+                let csv = 'Client,Montant dû,Échéance,Jours de retard\n';
+                this.receivables.forEach(d => {
+                    csv += `"${d.client_name}",${d.remaining_amount},"${this.formatDate(d.due_date)}",${d.days_overdue||0}\n`;
+                });
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'creances.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('success', 'Créances exportées en CSV');
+            },
+            markSelectedReceivablesPaid() {
+                if (!this.selectedReceivables.length) return;
+                // Simulate API call for marking as paid
+                this.receivables = this.receivables.filter(r => !this.selectedReceivables.includes(r.id));
+                this.selectedReceivables = [];
+                this.showToast('success', 'Créances marquées comme payées');
+            },
             showTransactionModal: false,
             showEditModal: false,
             newTransaction: { type: 'income', amount: '', description: '', category: '' },
             editData: { id: null, type: 'income', amount: 0, description: '', category: '' },
             searchTerm: '',
             filterType: '',
+            filterStartDate: '',
+            filterEndDate: '',
+            transactionsPage: 1,
+            transactionsPageSize: 10,
             chartPeriod: 'month',
             revenueChart: null,
             expenseChart: null,
@@ -425,7 +631,11 @@
             isLoadingSummary: true,
             isLoadingTransactions: true,
             isLoadingCharts: true,
+            isGeneratingReport: false,
+            isBackingUp: false,
             toasts: [],
+            notificationLog: [],
+            showLog: false,
             totalIncome: 0,
             totalExpense: 0,
 
@@ -527,21 +737,35 @@
                     const caps = await apiFetch('/api/finance/capital').catch(() => ({ capital_entries: [] }));
                     const capsList = Array.isArray(caps?.capital_entries) ? caps.capital_entries : (Array.isArray(caps) ? caps : []);
 
-                    const mapTx = (t, originHint=null) => ({
-                        id: t.id,
-                        date: t.date || t.entry_date || t.expense_date || t.sale_date,
-                        amount: Number(t.amount || t.total_amount || 0),
-                        description: t.description || t.source || t.details || (t.category==='capital' ? 'Apport de capital' : ''),
-                        type: t.type || (t.category === 'income' ? 'income' : (originHint==='capital' ? 'income' : 'expense')),
-                        category: t.category || originHint || '',
-                        subcategory: t.subcategory || '',
-                        origin: originHint || (t.category==='capital' ? 'capital' : (t.type==='income' ? 'sale' : 'expense'))
-                    });
+                    // Map backend fields to frontend expected fields
+                    const mapTx = (t, originHint=null) => {
+                        // Support both old and new API fields
+                        let type = t.type;
+                        if (type === 'revenu') type = 'income';
+                        if (type === 'expense') type = 'expense';
+                        let amount = t.amount;
+                        if (t.montant !== undefined) amount = t.montant;
+                        let category = t.category;
+                        if (t.categorie !== undefined) category = t.categorie;
+                        return {
+                            id: t.id || t.sale_id || t.expense_id,
+                            date: t.date || t.entry_date || t.expense_date || t.sale_date,
+                            amount: Number(amount || t.total_amount || 0),
+                            description: t.description || t.source || t.details || (category==='capital' ? 'Apport de capital' : ''),
+                            type: type || (category === 'income' ? 'income' : (originHint==='capital' ? 'income' : 'expense')),
+                            category: category || originHint || '',
+                            subcategory: t.subcategory || '',
+                            client_name: t.client_name || '',
+                            payment_method: t.payment_method || '',
+                            payment_status: t.payment_status || '',
+                            origin: originHint || (category==='capital' ? 'capital' : (type==='income' ? 'sale' : 'expense'))
+                        };
+                    };
 
                     const merged = [];
                     const seen = new Set();
                     baseList.forEach(t => {
-                        const tx = mapTx(t, (t.type==='income' ? 'sale' : 'expense'));
+                        const tx = mapTx(t, (t.type==='revenu' || t.type==='income' ? 'sale' : 'expense'));
                         const key = `${tx.origin}:${tx.id}`;
                         if (!seen.has(key)) { seen.add(key); merged.push(tx); }
                     });
@@ -601,69 +825,230 @@
                     const desc = (transaction.description || transaction.source || '').toLowerCase();
                     const matchesSearch = !term || desc.includes(term);
                     const matchesType = !this.filterType || transaction.type === this.filterType;
-                    return matchesSearch && matchesType;
+                    let matchesDate = true;
+                    if (this.filterStartDate) {
+                        const txDate = this.toYMD(this.parseDateFlex(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date));
+                        matchesDate = matchesDate && txDate >= this.filterStartDate;
+                    }
+                    if (this.filterEndDate) {
+                        const txDate = this.toYMD(this.parseDateFlex(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date));
+                        matchesDate = matchesDate && txDate <= this.filterEndDate;
+                    }
+                    return matchesSearch && matchesType && matchesDate;
                 });
             },
+            get paginatedTransactions() {
+                const start = (this.transactionsPage - 1) * this.transactionsPageSize;
+                return this.filteredTransactions.slice(start, start + this.transactionsPageSize);
+            },
+            get transactionsTotalPages() {
+                return Math.max(1, Math.ceil(this.filteredTransactions.length / this.transactionsPageSize));
+            },
+            prevTransactionsPage() {
+                if (this.transactionsPage > 1) this.transactionsPage--;
+            },
+            nextTransactionsPage() {
+                if (this.transactionsPage < this.transactionsTotalPages) this.transactionsPage++;
+            },
 
+            exportTransactionsCSV() {
+                if (!this.filteredTransactions.length) { this.showToast('error', 'Aucune transaction à exporter'); return; }
+                var csv = 'Date,Description,Type,Montant,Catégorie\n';
+                var self = this;
+                this.filteredTransactions.forEach(function(t) {
+                    var date = self.formatDate(t.date || t.created_at || t.expense_date || t.entry_date);
+                    var desc = t.description || t.source || '-';
+                    var type = t.type;
+                    var amount = t.amount;
+                    var cat = t.subcategory || t.category;
+                    csv += '"' + date + '","' + desc + '",' + type + ',' + amount + ',"' + cat + '"\n';
+                });
+                var blob = new Blob([csv], { type: 'text/csv' });
+                var url = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url;
+                a.download = 'transactions.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('success', 'Transactions exportées en CSV');
+            },
             // Charts
             initCharts() {
+                this.chartsInitialized = false;
+                // Remove and recreate canvases to fully reset Chart.js
+                const revOld = document.getElementById('revenueChart');
+                const expOld = document.getElementById('expenseChart');
+                if (this.revenueChart && typeof this.revenueChart.destroy === 'function') {
+                    this.revenueChart.destroy();
+                }
+                if (this.expenseChart && typeof this.expenseChart.destroy === 'function') {
+                    this.expenseChart.destroy();
+                }
+                if (revOld) {
+                    const newRev = revOld.cloneNode(false);
+                    revOld.parentNode.replaceChild(newRev, revOld);
+                }
+                if (expOld) {
+                    const newExp = expOld.cloneNode(false);
+                    expOld.parentNode.replaceChild(newExp, expOld);
+                }
                 const rev = document.getElementById('revenueChart');
                 const exp = document.getElementById('expenseChart');
                 if (!rev || !exp || !window.Chart) return;
                 const revenueCtx = rev.getContext('2d');
                 const expenseCtx = exp.getContext('2d');
 
+                // Enhanced tooltips and drill-down for revenue chart
                 this.revenueChart = new Chart(revenueCtx, {
                     type: 'line',
                     data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
-                    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: true } } }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: { y: { beginAtZero: true } },
+                        plugins: {
+                            legend: { display: true },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `Revenus: ${context.parsed.y.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
+                                    }
+                                }
+                            }
+                        },
+                        onClick: (e, elements) => {
+                            if (elements && elements.length > 0) {
+                                const idx = elements[0].index;
+                                const label = this.revenueChart.data.labels[idx];
+                                this.showToast('info', `Détail pour: ${label}`);
+                                // Optionally, trigger a modal or filter transactions by this period
+                            }
+                        }
+                    }
                 });
 
+                // Enhanced tooltips and drill-down for expense chart
                 this.expenseChart = new Chart(expenseCtx, {
                     type: 'doughnut',
                     data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
-                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } }
-                });
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        boxWidth: 24,
+                                        font: { size: 16, weight: 'bold' },
+                                        color: (ctx) => {
+                                            const label = ctx.chart.data.labels[ctx.index];
+                                            // Highlight if currently filtered
+                                            return (this.searchTerm === label && this.filterType === 'expense') ? '#1d4ed8' : '#374151';
+                                        },
+                                        padding: 20,
+                                        generateLabels: (chart) => {
+                                            const defaultLabels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+                                            // Add aria-label for accessibility
+                                            return defaultLabels.map(l => ({
+                                                ...l,
+                                                ariaLabel: `Catégorie ${l.text}` + ((this.searchTerm === l.text && this.filterType === 'expense') ? ' (filtrée)' : ''),
+                                                fontColor: (this.searchTerm === l.text && this.filterType === 'expense') ? '#1d4ed8' : '#374151',
+                                                fillStyle: l.fillStyle
+                                            }));
+                                        }
+                                    },
+                                    onClick: (e, legendItem, legend) => {
+                                        // Click-to-filter by category
+                                        const category = legend.chart.data.labels[legendItem.index];
+                                        if (category && category !== 'Aucune dépense') {
+                                            if (this.searchTerm === category && this.filterType === 'expense') {
+                                                // Unfilter if already filtered
+                                                this.searchTerm = '';
+                                                this.filterType = '';
+                                                this.showToast('info', 'Filtre de catégorie retiré');
+                                            } else {
+                                                this.filterType = 'expense';
+                                                this.searchTerm = category;
+                                                this.showToast('info', `Filtré par catégorie: ${category}`);
+                                            }
+                                        }
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            const label = context.label || '';
+                                            const value = context.parsed || 0;
+                                            return `${label}: ${value.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
+                                        }
+                                    }
+                                }
+                            },
+                            onClick: (e, elements) => {
+                                if (elements && elements.length > 0) {
+                                    const idx = elements[0].index;
+                                    const label = this.expenseChart.data.labels[idx];
+                                    this.filterType = 'expense';
+                                    this.searchTerm = label;
+                                    this.showToast('info', `Filtré par catégorie: ${label}`);
+                                }
+                            }
+                        }
+                    });
 
-                this.updateCharts();
+                this.chartsInitialized = true;
             },
 
             updateCharts() {
                 this.isLoadingCharts = true;
+                this.chartError = null;
                 try {
                     const u = new URL(window.location);
                     u.searchParams.set('period', this.chartPeriod);
                     window.history.replaceState(null, '', u.toString());
                 } catch (e) {}
-                const periodParam = this.chartPeriod; // backend now supports 'all'
+                const periodParam = this.chartPeriod;
                 apiFetch(`/api/finance/charts?period=${periodParam}`)
                     .then(data => {
+                        // Ensure charts exist before updating
+                        if (!this.chartsInitialized || !this.revenueChart || !this.expenseChart) {
+                            this.initCharts();
+                            // After re-init, do not update immediately to avoid recursion/stack overflow
+                            this.isLoadingCharts = false;
+                            return;
+                        }
                         const chart = data?.chart_data || data || {};
                         const rev = chart.revenue || {};
                         const rLabels = Array.isArray(rev.labels) ? rev.labels : [];
                         const rData = Array.isArray(rev.data) ? rev.data.map(v=>Number(v||0)) : [];
-                        // Graceful empty handling
                         this.revenueChart.data.labels = rLabels;
                         this.revenueChart.data.datasets[0].data = rData;
                         if (this.revenueChart.data.labels.length === 0) {
-                            // minimal placeholder to avoid blank canvas
                             this.revenueChart.data.labels = [''];
                             this.revenueChart.data.datasets[0].data = [0];
                         }
-                        this.revenueChart.update();
+                        if (typeof this.revenueChart.update === 'function') {
+                            this.revenueChart.update();
+                        }
                         const exp = chart.expense || {};
                         const eLabels = Array.isArray(exp.categories) ? exp.categories : [];
                         const eData = Array.isArray(exp.data) ? exp.data.map(v=>Number(v||0)) : [];
                         this.expenseChart.data.labels = eLabels.length ? eLabels : ['Aucune dépense'];
                         this.expenseChart.data.datasets[0].data = eLabels.length ? eData : [0];
-                        // Dynamic color palette sized to labels
                         const colors = eLabels.length
                             ? eLabels.map((_,i)=>`hsl(${(i*53)%360} 85% 55%)`)
                             : ['#9CA3AF'];
                         this.expenseChart.data.datasets[0].backgroundColor = colors;
-                        this.expenseChart.update();
+                        if (typeof this.expenseChart.update === 'function') {
+                            this.expenseChart.update();
+                        }
                     })
-                    .catch(err => { console.error('Error updating charts:', err); })
+                    .catch(err => {
+                        console.error('Error updating charts:', err);
+                        this.chartError = 'Erreur de chargement des graphiques.';
+                    })
                     .finally(() => { this.isLoadingCharts = false; });
             },
 
@@ -768,16 +1153,25 @@
                 if (this.chartPeriod === 'week') params.append('start_date', new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]);
                 else if (this.chartPeriod === 'month') params.append('start_date', new Date(now - 30*24*60*60*1000).toISOString().split('T')[0]);
                 else if (this.chartPeriod === 'year') params.append('start_date', new Date(now - 365*24*60*60*1000).toISOString().split('T')[0]);
-                window.open(`/api/reports/financial-report?${params.toString()}`, '_blank');
+                this.isGeneratingReport = true;
+                this.showToast('info', 'Génération du rapport en cours...');
+                setTimeout(() => {
+                    window.open(`/api/reports/financial-report?${params.toString()}`, '_blank');
+                    this.isGeneratingReport = false;
+                    this.showToast('success', 'Rapport généré (voir nouvel onglet)');
+                }, 1200);
             },
 
             backupData() {
+                this.isBackingUp = true;
+                this.showToast('info', 'Sauvegarde en cours...');
                 apiFetch('/api/admin/backups', { method: 'POST' })
                     .then(data => {
                         if (data.success) this.showToast('success', 'Sauvegarde créée avec succès');
                         else this.showToast('error', data.message || 'Échec de la sauvegarde (droits admin requis)');
                     })
-                    .catch(err => { console.error('Backup error:', err); this.showToast('error', 'Erreur lors de la sauvegarde'); });
+                    .catch(err => { console.error('Backup error:', err); this.showToast('error', 'Erreur lors de la sauvegarde'); })
+                    .finally(() => { this.isBackingUp = false; });
             },
 
             // Utils
@@ -812,10 +1206,60 @@
                 const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
                 return `${intPart},${parts[1]} ${cur}`;
             },
+
             showToast(type, message) {
                 const id = Date.now() + Math.random();
-                this.toasts.push({ id, type, message });
+                const toast = { id, type, message };
+                this.toasts.push(toast);
+                this.notificationLog.unshift(toast);
+                if (this.notificationLog.length > 100) this.notificationLog.pop();
                 setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3000);
+            },
+            exportExpenseCSV() {
+                if (!this.expenseChart) {
+                    this.showToast('error', 'Graphique non disponible');
+                    return;
+                }
+                const labels = this.expenseChart.data.labels;
+                const data = this.expenseChart.data.datasets[0].data;
+                let csv = 'Catégorie,Montant\n';
+                for (let i = 0; i < labels.length; i++) {
+                    csv += '"' + labels[i] + '",' + data[i] + '\n';
+                }
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'depenses.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                this.showToast('success', 'Données exportées en CSV');
+            },
+
+               exportChart(type) {
+                   let chart = null;
+                   let filename = '';
+                   if (type === 'revenue') {
+                       chart = this.revenueChart;
+                       filename = 'revenus.png';
+                   } else if (type === 'expense') {
+                       chart = this.expenseChart;
+                       filename = 'depenses.png';
+                   }
+                   if (chart) {
+                       const url = chart.toBase64Image();
+                       const a = document.createElement('a');
+                       a.href = url;
+                       a.download = filename;
+                       document.body.appendChild(a);
+                       a.click();
+                       document.body.removeChild(a);
+                       this.showToast('success', 'Graphique exporté');
+                   } else {
+                       this.showToast('error', 'Graphique non disponible');
+                   }
             }
         }
     }
@@ -824,7 +1268,14 @@
             window.location.href = `/set-language/${lang}`;
         }
     </script>
+    <!-- Mobile tweaks: make tables horizontally scrollable and buttons full width on small screens -->
     <style>
         [x-cloak] { display: none !important; }
+        @media (max-width: 640px) {
+            .overflow-x-auto { padding-bottom: 1rem; }
+            table { font-size: 0.95rem; }
+            .flex.flex-wrap.gap-4.mb-6 > button { width: 100%; margin-bottom: 0.5rem; }
+            .grid, .grid > div { min-width: 0; }
+        }
     </style>
 {% endblock %}

@@ -749,7 +749,7 @@ def sales_list():
                 FROM sales s
                 LEFT JOIN users u ON s.created_by = u.id
                 LEFT JOIN customers c ON s.customer_id = c.id
-                WHERE s.is_deleted = 0
+                
             '''
             params = []
             
@@ -954,37 +954,42 @@ def finance_transactions():
             conn = db_manager.get_connection()
             cursor = conn.cursor()
             
-            # Combine income and expenses for a complete transaction list
+            # Combine product-level sales and expenses for a complete transaction list
             cursor.execute('''
                 SELECT 
-                    'income' as type,
-                    s.id,
+                    'revenu' as type,
+                    s.id as sale_id,
                     s.sale_date as date,
-                    'Vente #' || s.id as description,
-                    s.total_amount as amount,
-                    'Ventes' as category
+                    p.name as description,
+                    (si.quantity * si.unit_price) as montant,
+                    'ventes' as categorie,
+                    c.name as client_name,
+                    s.payment_method,
+                    s.payment_status
                 FROM sales s
+                JOIN sale_items si ON s.id = si.sale_id
+                JOIN products p ON si.product_id = p.id
+                LEFT JOIN customers c ON s.customer_id = c.id
                 WHERE s.is_deleted = 0
-                UNION
+                UNION ALL
                 SELECT 
                     'expense' as type,
-                    e.id,
+                    e.id as expense_id,
                     e.expense_date as date,
                     e.description,
-                    e.amount,
-                    e.category
+                    e.amount as montant,
+                    e.category as categorie,
+                    NULL as client_name,
+                    NULL as payment_method,
+                    NULL as payment_status
                 FROM expenses e
-                WHERE e.is_deleted = 0
                 ORDER BY date DESC
-                LIMIT 100
             ''')
-            
             # Convert rows to dictionaries
             transactions = []
             for row in cursor.fetchall():
                 transaction = dict(row)
                 transactions.append(transaction)
-            
             return jsonify({'success': True, 'transactions': transactions})
         except Exception as e:
             logger.error(f"Error fetching transactions: {e}")
@@ -1065,7 +1070,7 @@ def finance_charts():
                         strftime(?, sale_date) as period,
                         SUM(total_amount) as amount
                     FROM sales
-                    WHERE is_deleted = 0
+                
                     GROUP BY period
                     ORDER BY period
                 ''', (sqlite_fmt,))
@@ -1080,7 +1085,7 @@ def finance_charts():
                         SUM(amount) as amount
                     FROM expenses
                     WHERE DATE(expense_date) >= DATE(?)
-                    AND is_deleted = 0
+                    
                     GROUP BY period
                     ORDER BY MIN(DATE(expense_date))
                 ''', (sqlite_fmt, start_date.strftime('%Y-%m-%d')))

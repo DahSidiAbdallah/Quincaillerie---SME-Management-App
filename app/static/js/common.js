@@ -25,11 +25,14 @@ function apiFetch(url, options = {}) {
     return fetch(url, options)
         .then(response => {
             if (response.status === 401) {
-                // Redirect to login on auth failure
                 window.location.href = '/login';
                 throw new Error('Not authenticated');
             }
-            return response;
+            if (!response.ok) {
+                throw new Error('API error: ' + response.status);
+            }
+            // Always parse JSON
+            return response.json();
         })
         .catch(error => {
             console.error('API fetch error:', error);
