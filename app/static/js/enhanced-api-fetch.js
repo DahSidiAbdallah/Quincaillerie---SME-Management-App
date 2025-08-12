@@ -141,59 +141,14 @@ window.enhancedApiFetch = function(url, options = {}, attemptNum = 0) {
  * @param {string} [type='success'] - Type of toast (success, error, warning, info)
  * @param {number} [duration=3000] - Duration in milliseconds
  */
+
+// Unified notification system: use window.showNotification from base.html
 window.showApiToast = function(message, type = 'success', duration = 3000) {
-  // Create toast element if it doesn't exist
-  let toast = document.getElementById('api-toast');
-  if (!toast) {
-    toast = document.createElement('div');
-    toast.id = 'api-toast';
-    toast.style.cssText = `
-      position: fixed;
-      bottom: 20px;
-      left: 20px;
-      padding: 12px 16px;
-      border-radius: 6px;
-      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-      font-size: 14px;
-      z-index: 9999;
-      transition: opacity 0.3s ease, transform 0.3s ease;
-      opacity: 0;
-      transform: translateY(20px);
-    `;
-    document.body.appendChild(toast);
+  if (typeof window.showNotification === 'function') {
+    window.showNotification(message, type);
+  } else {
+    alert(message); // fallback
   }
-  
-  // Set toast style based on type
-  const colors = {
-    success: { bg: '#10b981', text: '#ffffff' },
-    error: { bg: '#ef4444', text: '#ffffff' },
-    warning: { bg: '#f59e0b', text: '#ffffff' },
-    info: { bg: '#3b82f6', text: '#ffffff' }
-  };
-  
-  const style = colors[type] || colors.info;
-  toast.style.backgroundColor = style.bg;
-  toast.style.color = style.text;
-  
-  // Set message
-  toast.textContent = message;
-  
-  // Show toast
-  setTimeout(() => {
-    toast.style.opacity = '1';
-    toast.style.transform = 'translateY(0)';
-  }, 10);
-  
-  // Hide toast after duration
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(20px)';
-    
-    // Remove toast after animation completes
-    setTimeout(() => {
-      toast.remove();
-    }, 300);
-  }, duration);
 };
 
 // If a global apiFetch already exists, wrap it to preserve behavior, else set enhanced

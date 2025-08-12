@@ -173,8 +173,11 @@
             <!-- Sales Chart -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Évolution des Ventes</h3>
-                <div class="h-80">
+                <div class="h-80 relative">
                     <canvas id="salesChart"></canvas>
+                    <div x-show="reportData.sales && reportData.sales.total_sales === 0" class="absolute inset-0 flex items-center justify-center text-gray-400 text-lg bg-white bg-opacity-80">
+                        Aucune donnée à afficher
+                    </div>
                 </div>
             </div>
 
@@ -194,12 +197,15 @@
                         <tbody class="bg-white divide-y divide-gray-200">
                             <template x-for="product in reportData.sales.top_products" :key="product.id">
                                 <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="product.name"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.quantity"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.formatCurrency ? window.formatCurrency(product.revenue) : (product.revenue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.percentage + '%'"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="product.name || '-' "></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.quantity ?? 0"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.formatCurrency ? window.formatCurrency(product.revenue) : ((product.revenue ?? 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="(product.percentage ?? 0) + '%'" ></td>
                                 </tr>
                             </template>
+                            <tr x-show="!reportData.sales.top_products || reportData.sales.top_products.length === 0">
+                                <td colspan="4" class="text-center text-gray-400 py-4">Aucune donnée à afficher</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -232,7 +238,7 @@
                             </div>
                         </div>
                     </template>
-                    <div x-show="activities.length===0" class="text-center text-gray-500 py-8">Aucune activité trouvée</div>
+                    <div x-show="!activities || activities.length===0" class="text-center text-gray-500 py-8">Aucune activité trouvée</div>
                 </div>
             </div>
         </div>
@@ -272,7 +278,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Total Produits</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.total_products">0</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.total_products ?? 0">0</p>
                         </div>
                     </div>
                 </div>
@@ -284,7 +290,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Stock Faible</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.low_stock">0</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.low_stock ?? 0">0</p>
                         </div>
                     </div>
                 </div>
@@ -296,7 +302,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Rupture Stock</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.out_of_stock">0</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.out_of_stock ?? 0">0</p>
                         </div>
                     </div>
                 </div>
@@ -308,7 +314,7 @@
                         </div>
                         <div class="ml-4">
                             <h3 class="text-sm font-medium text-gray-500">Valeur Stock</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.inventory.stock_value) : (reportData.inventory.stock_value + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
+                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.inventory.stock_value ?? 0) : ((reportData.inventory.stock_value ?? 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
                         </div>
                     </div>
                 </div>
@@ -403,9 +409,18 @@
                 },
                 
                 setActiveReport(type) {
-                    this.activeReport = type;
-                    this.loadReportData();
-                },
+    if (this.salesChart && typeof this.salesChart.destroy === 'function') {
+        this.salesChart.destroy();
+        this.salesChart = null;
+    }
+    this.activeReport = type;
+    this.loadReportData();
+    if (type === 'sales') {
+        this.$nextTick(() => {
+            this.initCharts();
+        });
+    }
+},
                 
                 loadReportData() {
                     // Get date range based on selected period
@@ -445,16 +460,31 @@
                                     labels = ['Aucune donnée'];
                                     amounts = [0];
                                 }
-                                // Update chart
-                                if (this.salesChart) {
+                                // Update chart safely
+                                if (
+                                    this.salesChart &&
+                                    this.salesChart.data &&
+                                    Array.isArray(this.salesChart.data.datasets) &&
+                                    this.salesChart.data.datasets[0]
+                                ) {
                                     this.salesChart.data.labels = labels;
                                     this.salesChart.data.datasets[0].data = amounts;
                                     this.salesChart.data.datasets[0].label = `Ventes (${window.AppConfig?.currentCurrency || 'MRU'}) - ${this.filters.period === 'today' ? 'Aujourd\'hui' : this.filters.period === 'week' ? '7 derniers jours' : this.filters.period === 'month' ? 'Ce mois' : 'Période sélectionnée'}`;
                                     this.salesChart.update();
+                                } else {
+                                    // If chart is not initialized, re-create it
+                                    this.$nextTick(() => {
+                                        this.initCharts();
+                                    });
                                 }
                             }
                         })
-                        .catch(error => console.error('Error loading sales report:', error));
+                        .catch(error => {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Erreur lors du chargement du rapport de ventes.', 'error');
+                            }
+                            console.error('Error loading sales report:', error);
+                        });
 
                     // Get current inventory data - this should match what's shown on inventory page
                     apiFetch('/api/inventory/stats')
@@ -475,36 +505,71 @@
                                 }
                             }
                         })
-                        .catch(error => console.error('Error loading inventory report:', error));
+                        .catch(error => {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Erreur lors du chargement du rapport d\'inventaire.', 'error');
+                            }
+                            console.error('Error loading inventory report:', error);
+                        });
                     
                     // Load activities/AI when relevant
                     if (this.activeReport === 'activities') this.loadActivities();
                     if (this.activeReport === 'ai_insights') this.loadAI();
                 },
                 loadActivities() {
-                    apiFetch('/api/dashboard/activities?limit=50')
-                        .then(data => { if (data?.success) this.activities = data.activities || []; })
-                        .catch(err => console.error('Error loading activities', err));
+                        apiFetch('/api/dashboard/activities?limit=50')
+                            .then(data => {
+                                if (data?.success) {
+                                    this.activities = data.activities || [];
+                                } else {
+                                    this.activities = [];
+                                    if (typeof window.showNotification === 'function') {
+                                        window.showNotification('Aucune activité trouvée ou erreur lors du chargement.', 'warning');
+                                    }
+                                }
+                            })
+                            .catch(err => {
+                                this.activities = [];
+                                if (typeof window.showNotification === 'function') {
+                                    window.showNotification('Erreur lors du chargement des activités.', 'error');
+                                }
+                                console.error('Error loading activities', err);
+                            });
                 },
                 loadAI() {
                     // Summary
                     apiFetch('/api/ai/summary-assistant?period=week')
                         .then(d => { if (d?.success) this.ai.summary = d.summary?.text || ''; })
-                        .catch(()=>{});
+                        .catch(()=>{
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Erreur lors du chargement du résumé IA.', 'error');
+                            }
+                        });
                     // Restock count
                     apiFetch('/api/ai/restock-suggestions')
                         .then(d => { if (d?.success) this.ai.restockCount = (d.suggestions||[]).length; })
-                        .catch(()=>{});
+                        .catch(()=>{
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Erreur lors du chargement des suggestions de réapprovisionnement.', 'error');
+                            }
+                        });
                     // Pricing count
                     apiFetch('/api/ai/price-suggestions')
                         .then(d => { if (d?.success) this.ai.pricingCount = (d.suggestions||[]).length; })
-                        .catch(()=>{});
+                        .catch(()=>{
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Erreur lors du chargement des suggestions de prix.', 'error');
+                            }
+                        });
                 },
                 
                 initCharts() {
                     // Sales Chart
                     const salesCtx = document.getElementById('salesChart');
                     if (salesCtx) {
+                        if (this.salesChart && typeof this.salesChart.destroy === 'function') {
+            this.salesChart.destroy();
+        }
                         this.salesChart = new Chart(salesCtx.getContext('2d'), {
                             type: 'line',
                             data: {
@@ -601,7 +666,9 @@
                 },
                 
                 generateReport() {
-                    alert(`Génération du rapport ${this.activeReport} pour la période ${this.filters.period}...`);
+                    if (typeof window.showNotification === 'function') {
+                        window.showNotification(`Génération du rapport ${this.activeReport} pour la période ${this.filters.period}...`, 'info');
+                    }
                     this.loadReportData();
                 },
                 
@@ -633,7 +700,9 @@
                 },
                 
                 scheduleReport() {
-                    alert('Programmation du rapport...');
+                    if (typeof window.showNotification === 'function') {
+                        window.showNotification('Programmation du rapport...', 'info');
+                    }
                 }
             }
         }

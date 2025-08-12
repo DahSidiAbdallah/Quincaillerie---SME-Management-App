@@ -69,6 +69,7 @@ def update_customer(customer_id):
     try:
         success = db_manager.update_customer(customer_id, name, phone, email, address)
         if success:
+            db_manager.log_user_action(session['user_id'], 'update_client', f'Mise à jour client ID {customer_id} ({name})')
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Client non trouvé ou aucune modification'}), 404
     except Exception as e:
@@ -85,6 +86,7 @@ def delete_customer(customer_id):
     try:
         success = db_manager.delete_customer(customer_id)
         if success:
+            db_manager.log_user_action(session['user_id'], 'delete_client', f'Suppression client ID {customer_id}')
             return jsonify({'success': True})
         return jsonify({'success': False, 'error': 'Client non trouvé'}), 404
     except Exception as e:
@@ -109,6 +111,8 @@ def add_customer():
         return jsonify({'success': False, 'error': 'Nom requis'}), 400
     try:
         customer_id = db_manager.create_customer(name, phone, email, address)
+        if customer_id:
+            db_manager.log_user_action(session['user_id'], 'create_client', f'Création client: {name}')
         return jsonify({'success': True, 'customer_id': customer_id})
     except Exception as e:
         logger.error(f"Error creating customer: {e}")

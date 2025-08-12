@@ -557,5 +557,48 @@
     </button>
     
     {% block extra_scripts %}{% endblock %}
+    </body>
+    <script>
+    // --- Global Session Timeout Warning ---
+    (function() {
+        // Try to get session timeout from AppConfig or fallback to 30 min
+        let timeoutMinutes = (window.AppConfig && window.AppConfig.sessionTimeoutMinutes) || 30;
+        // If backend injects a JS variable for session timeout, use it
+        if (typeof window.sessionTimeoutMinutes === 'number') {
+            timeoutMinutes = window.sessionTimeoutMinutes;
+        }
+        // Convert to ms
+        const timeoutMs = timeoutMinutes * 60 * 1000;
+        const warningMs = 10000; // 10 seconds before expiry
+        let warningTimer = null, logoutTimer = null;
+
+        function clearTimers() {
+            if (warningTimer) clearTimeout(warningTimer);
+            if (logoutTimer) clearTimeout(logoutTimer);
+        }
+
+        function startSessionTimers() {
+            clearTimers();
+            // Warn 10s before expiry
+            warningTimer = setTimeout(() => {
+                window.showNotification('Votre session va expirer dans 10 secondes. Vous serez déconnecté(e) bientôt.', 'warning');
+            }, timeoutMs - warningMs);
+            // Auto-logout at expiry (optional, comment if not wanted)
+            logoutTimer = setTimeout(() => {
+                window.showNotification('Session expirée. Déconnexion...', 'error');
+                setTimeout(() => { window.handleLogout && window.handleLogout(); }, 2000);
+            }, timeoutMs);
+        }
+
+        // Listen for user activity to reset timers
+        ['click','keydown','mousemove','touchstart'].forEach(evt => {
+            window.addEventListener(evt, startSessionTimers, {passive:true});
+        });
+
+        // Start timers on page load
+        startSessionTimers();
+    })();
+    </script>
+    </html>
 </body>
 </html>
