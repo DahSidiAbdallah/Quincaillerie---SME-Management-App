@@ -1454,20 +1454,21 @@
     }
     
     // Modal management
-    function openProductModal(productId = null) {
+    async function openProductModal(productId = null) {
         const modal = document.getElementById('productModal');
         const title = document.getElementById('modalTitle');
         const form = document.getElementById('productForm');
-        
+
+        form.reset();
+        document.getElementById('productId').value = '';
+
         if (productId) {
             title.textContent = 'Modifier le Produit';
-            loadProductData(productId);
+            await loadProductData(productId);
         } else {
             title.textContent = 'Ajouter un Produit';
-            form.reset();
-            document.getElementById('productId').value = '';
         }
-        
+
         modal.classList.remove('hidden');
     }
     

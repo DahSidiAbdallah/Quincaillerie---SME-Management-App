@@ -241,17 +241,21 @@ def get_product(product_id):
         cursor.execute("PRAGMA table_info(products)")
         product_cols = {row[1] for row in cursor.fetchall()}
         active_clause = " AND p.is_active = 1" if 'is_active' in product_cols else ""
-        cursor.execute(f'''
-            SELECT 
-                p.*, 
-                p.selling_price AS sale_price,
-                p.reorder_level AS min_stock_alert,
-                u.username as created_by_name,
-                (p.purchase_price * p.current_stock) as stock_value
+        # Build flexible select clause to handle schema variations
+        select_parts = [
+            'p.*',
+            'u.username as created_by_name',
+            '(p.purchase_price * p.current_stock) as stock_value'
+        ]
+        cursor.execute(
+            f"""
+            SELECT {', '.join(select_parts)}
             FROM products p
             LEFT JOIN users u ON p.created_by = u.id
             WHERE p.id = ?{active_clause}
-        ''', (product_id,))
+            """,
+            (product_id,)
+        )
         
         product = cursor.fetchone()
         if not product:
@@ -279,8 +283,8 @@ def get_product(product_id):
         if result.get('image_url'):
             result['image_path'] = result['image_url']
         result['sale_price'] = float(result.get('sale_price') or result.get('selling_price') or 0)
-        result['selling_price'] = float(result.get('selling_price') or result.get('sale_price') or 0)
-        result['min_stock_alert'] = int(result.get('min_stock_alert') or result.get('reorder_level') or 0)
+        result['selling_price'] = result['sale_price']
+        result['min_stock_alert'] = int(result.get('reorder_level') or result.get('min_stock_alert') or 0)
         result['recent_movements'] = movements
         
         return jsonify({'success': True, 'product': result})
@@ -321,35 +325,39 @@ def update_product(product_id):
         old_product = cursor.fetchone()
         if not old_product:
             return jsonify({'success': False, 'message': 'Produit non trouvé'}), 404
-        
+
         old_product = dict(old_product)
-        
+
         # Build update query dynamically
         update_fields = []
         values = []
-        
+
+        # Determine schema-specific column names
+        sale_price_col = 'sale_price' if 'sale_price' in _pcols else 'selling_price'
+        reorder_col = 'reorder_level' if 'reorder_level' in _pcols else 'min_stock_alert'
+
         # Map known synonyms to schema keys
         mapping = {
-            'sale_price': 'selling_price',
-            'selling_price': 'selling_price',
-            'min_stock': 'reorder_level',
-            'min_stock_alert': 'reorder_level',
-            'reorder_level': 'reorder_level',
+            'sale_price': sale_price_col,
+            'selling_price': sale_price_col,
+            'min_stock': reorder_col,
+            'min_stock_alert': reorder_col,
+            'reorder_level': reorder_col,
             'code': 'sku',
             'sku': 'sku'
         }
         # Allowed direct fields
         allowed = {'name', 'description', 'purchase_price', 'category', 'supplier', 'barcode'}
-        updatable_fields = set(allowed) | set(mapping.values()) | set(mapping.keys())
-        
+        updatable_fields = set(allowed) | set(mapping.keys())
+
         for field in data.keys():
             if field not in updatable_fields:
                 continue
             target = mapping.get(field, field)
             update_fields.append(f'{target} = ?')
-            if target in ['purchase_price', 'selling_price']:
+            if target in {'purchase_price', sale_price_col}:
                 values.append(float(data[field]))
-            elif target == 'reorder_level':
+            elif target == reorder_col:
                 values.append(int(data[field]))
             else:
                 values.append(data[field])
