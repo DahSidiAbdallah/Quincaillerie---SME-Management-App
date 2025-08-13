@@ -430,7 +430,6 @@
                     
                     // Load users data
                     apiFetch('/api/auth/users')
-                        .then(r => r.json())
                         .then(data => { 
                             if (data.success) { 
                                 this.users = data.users || []; 
