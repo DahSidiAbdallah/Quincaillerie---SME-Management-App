@@ -1008,12 +1008,14 @@
                                     padding: 20,
                                     generateLabels: (chart) => {
                                         const defaultLabels = (Chart.defaults.plugins.legend.labels.generateLabels && Chart.defaults.plugins.legend.labels.generateLabels(chart)) || [];
+
                                         return defaultLabels
                                             .filter(Boolean)
                                             .map(l => ({
                                                 ...l,
                                                 ariaLabel: `Catégorie ${l.text}` + ((this.searchTerm === l.text && this.filterType === 'expense') ? ' (filtrée)' : ''),
                                             }));
+
                                     }
                                 },
                                 onClick: (e, legendItem, legend) => {
