@@ -949,70 +949,73 @@
                 this.expenseChart = new Chart(expenseCtx, {
                     type: 'doughnut',
                     data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    position: 'bottom',
-                                    labels: {
-                                        boxWidth: 24,
-                                        font: { size: 16, weight: 'bold' },
-                                        color: (ctx) => {
-                                            const label = ctx.chart.data.labels[ctx.index];
-                                            // Highlight if currently filtered
-                                            return (this.searchTerm === label && this.filterType === 'expense') ? '#1d4ed8' : '#374151';
-                                        },
-                                        padding: 20,
-                                        generateLabels: (chart) => {
-                                            const defaultLabels = Chart.defaults.plugins.legend.labels.generateLabels(chart);
-                                            // Add aria-label for accessibility
-                                            return defaultLabels.map(l => ({
-                                                ...l,
-                                                ariaLabel: `Catégorie ${l.text}` + ((this.searchTerm === l.text && this.filterType === 'expense') ? ' (filtrée)' : ''),
-                                                fontColor: (this.searchTerm === l.text && this.filterType === 'expense') ? '#1d4ed8' : '#374151',
-                                                fillStyle: l.fillStyle
-                                            }));
-                                        }
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 24,
+                                    font: { size: 16, weight: 'bold' },
+                                    color: (ctx) => {
+                                        if (!ctx || !ctx.chart || !ctx.chart.data || !Array.isArray(ctx.chart.data.labels)) return '#374151';
+                                        const idx = ctx.index;
+                                        const label = ctx.chart.data.labels[idx] || '';
+                                        return (this.searchTerm === label && this.filterType === 'expense') ? '#1d4ed8' : '#374151';
                                     },
-                                    onClick: (e, legendItem, legend) => {
-                                        // Click-to-filter by category
-                                        const category = legend.chart.data.labels[legendItem.index];
-                                        if (category && category !== 'Aucune dépense') {
-                                            if (this.searchTerm === category && this.filterType === 'expense') {
-                                                // Unfilter if already filtered
-                                                this.searchTerm = '';
-                                                this.filterType = '';
-                                                this.showToast('info', 'Filtre de catégorie retiré');
-                                            } else {
-                                                this.filterType = 'expense';
-                                                this.searchTerm = category;
-                                                this.showToast('info', `Filtré par catégorie: ${category}`);
-                                            }
-                                        }
+                                    padding: 20,
+                                    generateLabels: (chart) => {
+                                        const defaultLabels = (Chart.defaults.plugins.legend.labels.generateLabels && Chart.defaults.plugins.legend.labels.generateLabels(chart)) || [];
+                                        return defaultLabels.map(l => {
+                                            const labelText = l && l.text ? l.text : '';
+                                            return {
+                                                ...l,
+                                                ariaLabel: `Catégorie ${labelText}` + ((this.searchTerm === labelText && this.filterType === 'expense') ? ' (filtrée)' : ''),
+                                                fontColor: (this.searchTerm === labelText && this.filterType === 'expense') ? '#1d4ed8' : '#374151',
+                                                fillStyle: l && l.fillStyle ? l.fillStyle : '#9CA3AF',
+                                                disabled: l && typeof l.disabled !== 'undefined' ? l.disabled : false
+                                            };
+                                        });
                                     }
                                 },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const label = context.label || '';
-                                            const value = context.parsed || 0;
-                                            return `${label}: ${value.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
+                                onClick: (e, legendItem, legend) => {
+                                    const labelsArr = legend && legend.chart && legend.chart.data && Array.isArray(legend.chart.data.labels) ? legend.chart.data.labels : [];
+                                    const category = labelsArr[legendItem.index] || '';
+                                    if (category && category !== 'Aucune dépense') {
+                                        if (this.searchTerm === category && this.filterType === 'expense') {
+                                            this.searchTerm = '';
+                                            this.filterType = '';
+                                            this.showToast('info', 'Filtre de catégorie retiré');
+                                        } else {
+                                            this.filterType = 'expense';
+                                            this.searchTerm = category;
+                                            this.showToast('info', `Filtré par catégorie: ${category}`);
                                         }
                                     }
                                 }
                             },
-                            onClick: (e, elements) => {
-                                if (elements && elements.length > 0) {
-                                    const idx = elements[0].index;
-                                    const label = this.expenseChart.data.labels[idx];
-                                    this.filterType = 'expense';
-                                    this.searchTerm = label;
-                                    this.showToast('info', `Filtré par catégorie: ${label}`);
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context && context.label ? context.label : '';
+                                        const value = context && context.parsed ? context.parsed : 0;
+                                        return `${label}: ${value.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
+                                    }
                                 }
                             }
+                        },
+                        onClick: (e, elements) => {
+                            if (elements && elements.length > 0) {
+                                const idx = elements[0].index;
+                                const label = this.expenseChart.data.labels[idx];
+                                this.filterType = 'expense';
+                                this.searchTerm = label;
+                                this.showToast('info', `Filtré par catégorie: ${label}`);
+                            }
                         }
-                    });
+                    }
+                });
 
                 this.chartsInitialized = true;
             },
@@ -1040,27 +1043,32 @@
                             return;
                         }
                         const chart = data?.chart_data || data || {};
+                        // Defensive: Revenue
                         const rev = chart.revenue || {};
                         const rLabels = Array.isArray(rev.labels) ? rev.labels : [];
                         const rData = Array.isArray(rev.data) ? rev.data.map(v=>Number(v||0)) : [];
-                        this.revenueChart.data.labels = rLabels;
-                        this.revenueChart.data.datasets[0].data = rData;
-                        if (this.revenueChart.data.labels.length === 0) {
-                            this.revenueChart.data.labels = [''];
-                            this.revenueChart.data.datasets[0].data = [0];
+                        this.revenueChart.data.labels = rLabels.length ? rLabels : ['Aucune donnée'];
+                        if (this.revenueChart.data.datasets && this.revenueChart.data.datasets[0]) {
+                            this.revenueChart.data.datasets[0].data = rData.length ? rData : [0];
+                        } else {
+                            this.revenueChart.data.datasets = [{ label: 'Revenus', data: [0] }];
                         }
                         if (typeof this.revenueChart.update === 'function') {
                             this.revenueChart.update();
                         }
+                        // Defensive: Expense
                         const exp = chart.expense || {};
                         const eLabels = Array.isArray(exp.categories) ? exp.categories : [];
                         const eData = Array.isArray(exp.data) ? exp.data.map(v=>Number(v||0)) : [];
                         this.expenseChart.data.labels = eLabels.length ? eLabels : ['Aucune dépense'];
-                        this.expenseChart.data.datasets[0].data = eLabels.length ? eData : [0];
-                        const colors = eLabels.length
-                            ? eLabels.map((_,i)=>`hsl(${(i*53)%360} 85% 55%)`)
-                            : ['#9CA3AF'];
-                        this.expenseChart.data.datasets[0].backgroundColor = colors;
+                        if (this.expenseChart.data.datasets && this.expenseChart.data.datasets[0]) {
+                            this.expenseChart.data.datasets[0].data = eLabels.length ? eData : [0];
+                            this.expenseChart.data.datasets[0].backgroundColor = eLabels.length
+                                ? eLabels.map((_,i)=>`hsl(${(i*53)%360} 85% 55%)`)
+                                : ['#9CA3AF'];
+                        } else {
+                            this.expenseChart.data.datasets = [{ data: [0], backgroundColor: ['#9CA3AF'] }];
+                        }
                         if (typeof this.expenseChart.update === 'function') {
                             this.expenseChart.update();
                         }
