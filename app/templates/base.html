@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Quincaillerie Management{% endblock %}</title>
+    <title>{% block title %}SME Management{% endblock %}</title>
     
     <!-- PWA Manifest and Meta Tags -->
     <link rel="manifest" href="{{ url_for('serve_manifest_file') }}">
@@ -437,7 +437,7 @@
         <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center">
                 <div class="flex items-center space-x-4">
-                    <span class="text-sm">© {{ current_year }} Quincaillerie Management v{{ app_version }}</span>
+                    <span class="text-sm">© {{ current_year }} SME Management v{{ app_version }}</span>
                     <span id="connectionStatus" class="text-xs bg-gray-700 px-2 py-1 rounded">
                         <span id="statusDot" class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1"></span>
                         <span id="statusText">En ligne</span>
