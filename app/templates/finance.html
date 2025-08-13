@@ -1008,23 +1008,12 @@
                                     padding: 20,
                                     generateLabels: (chart) => {
                                         const defaultLabels = (Chart.defaults.plugins.legend.labels.generateLabels && Chart.defaults.plugins.legend.labels.generateLabels(chart)) || [];
-                                        return defaultLabels.map(l => {
-                                            const labelText = l && l.text ? l.text : '';
-                                            // Build a new object, omitting 'disabled'
-                                            return {
-                                                text: l && l.text ? l.text : '',
-                                                datasetIndex: l && typeof l.datasetIndex !== 'undefined' ? l.datasetIndex : undefined,
-                                                index: l && typeof l.index !== 'undefined' ? l.index : undefined,
-                                                fillStyle: l && l.fillStyle ? l.fillStyle : '#9CA3AF',
-                                                strokeStyle: l && l.strokeStyle ? l.strokeStyle : undefined,
-                                                lineWidth: l && l.lineWidth ? l.lineWidth : undefined,
-                                                hidden: l && typeof l.hidden !== 'undefined' ? l.hidden : false,
-                                                pointStyle: l && l.pointStyle ? l.pointStyle : undefined,
-                                                rotation: l && l.rotation ? l.rotation : undefined,
-                                                ariaLabel: `Catégorie ${labelText}` + ((this.searchTerm === labelText && this.filterType === 'expense') ? ' (filtrée)' : ''),
-                                                fontColor: (this.searchTerm === labelText && this.filterType === 'expense') ? '#1d4ed8' : '#374151',
-                                            };
-                                        });
+                                        return defaultLabels
+                                            .filter(Boolean)
+                                            .map(l => ({
+                                                ...l,
+                                                ariaLabel: `Catégorie ${l.text}` + ((this.searchTerm === l.text && this.filterType === 'expense') ? ' (filtrée)' : ''),
+                                            }));
                                     }
                                 },
                                 onClick: (e, legendItem, legend) => {
