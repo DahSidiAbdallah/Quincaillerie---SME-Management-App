@@ -733,13 +733,19 @@
                 ]).finally(() => {
                     // Charts after first paint
                     this.$nextTick(() => {
-                        if (window.Chart) {
-                            this.initCharts();
-                        } else {
+                        // Always ensure we have the pinned 4.4.x build; previous pages may have loaded 4.5.x
+                        const needsPinnedChart =
+                            !window.Chart ||
+                            !window.Chart.version ||
+                            !window.Chart.version.startsWith('4.4.');
+
+                        if (needsPinnedChart) {
                             const s = document.createElement('script');
                             s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js';
                             s.onload = () => this.initCharts();
                             document.head.appendChild(s);
+                        } else {
+                            this.initCharts();
                         }
                     });
                 });
@@ -937,11 +943,14 @@
                 // Remove and recreate canvases to fully reset Chart.js
                 const revOld = document.getElementById('revenueChart');
                 const expOld = document.getElementById('expenseChart');
+                // Destroy old charts if they exist
                 if (this.revenueChart && typeof this.revenueChart.destroy === 'function') {
                     this.revenueChart.destroy();
+                    this.revenueChart = null;
                 }
                 if (this.expenseChart && typeof this.expenseChart.destroy === 'function') {
                     this.expenseChart.destroy();
+                    this.expenseChart = null;
                 }
                 if (revOld) {
                     const newRev = revOld.cloneNode(false);
@@ -953,11 +962,13 @@
                 }
                 const rev = document.getElementById('revenueChart');
                 const exp = document.getElementById('expenseChart');
-                if (!rev || !exp || !window.Chart) return;
+                if (!rev || !exp || !window.Chart) {
+                    this.chartError = 'Erreur: Les éléments canvas pour les graphiques ne sont pas présents dans le DOM.';
+                    return;
+                }
                 const revenueCtx = rev.getContext('2d');
                 const expenseCtx = exp.getContext('2d');
-
-                // Enhanced tooltips and drill-down for revenue chart
+                // Create new charts
                 this.revenueChart = new Chart(revenueCtx, {
                     type: 'line',
                     data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
@@ -980,13 +991,10 @@
                                 const idx = elements[0].index;
                                 const label = this.revenueChart.data.labels[idx];
                                 this.showToast('info', `Détail pour: ${label}`);
-                                // Optionally, trigger a modal or filter transactions by this period
                             }
                         }
                     }
                 });
-
-                // Enhanced tooltips and drill-down for expense chart
                 this.expenseChart = new Chart(expenseCtx, {
                     type: 'doughnut',
                     data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
@@ -1000,7 +1008,6 @@
                                     boxWidth: 24,
                                     font: { size: 16, weight: 'bold' },
                                     padding: 20,
-                                    // Use default color and generateLabels
                                 },
                                 onClick: (e, legendItem, legend) => {
                                     const labels = legend.chart?.data?.labels || [];
@@ -1030,12 +1037,7 @@
                         },
                     }
                 });
-
                 this.chartsInitialized = true;
-                // Prevent double update if already updating
-                if (!this.isLoadingCharts) {
-                    this.updateCharts();
-                }
             },
 
             updateCharts() {
@@ -1054,18 +1056,17 @@
                             this.chartError = 'Données de graphique indisponibles';
                             this.showToast && this.showToast('error', 'API: Données de graphique indisponibles');
                             console.warn('[updateCharts] API returned no data or success=false', data);
+                            this.isLoadingCharts = false;
                             return;
                         }
                         // Ensure charts exist before updating
                         if (!this.chartsInitialized || !this.revenueChart || !this.expenseChart) {
-                            this.chartError = 'Charts not initialized';
-                            this.showToast && this.showToast('error', 'Charts not initialized');
-                            console.warn('[updateCharts] charts not initialized', this.chartsInitialized, this.revenueChart, this.expenseChart);
+                            this.chartError = 'Erreur: Les graphiques ne sont pas initialisés.';
                             this.isLoadingCharts = false;
                             return;
                         }
+                        // Defensive: check chart data structure
                         const chart = data?.chart_data || data || {};
-                        // Defensive: Revenue
                         const rev = chart.revenue || {};
                         const rLabels = Array.isArray(rev.labels) ? rev.labels : [];
                         const rData = Array.isArray(rev.data) ? rev.data.map(v=>Number(v||0)) : [];
@@ -1102,13 +1103,14 @@
                         }
                         this.showToast && this.showToast('success', 'Charts updated successfully');
                         console.log('[updateCharts] charts updated successfully');
+                        this.isLoadingCharts = false;
                     })
                     .catch(err => {
                         console.error('Error updating charts:', err);
                         this.chartError = 'Erreur de chargement des graphiques.';
                         this.showToast && this.showToast('error', 'Erreur JS lors de la mise à jour des graphiques: ' + (err && err.message ? err.message : err));
-                    })
-                    .finally(() => { this.isLoadingCharts = false; });
+                        this.isLoadingCharts = false;
+                    });
             },
 
             // CRUD
