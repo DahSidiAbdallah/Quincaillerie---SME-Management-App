@@ -703,27 +703,35 @@ function salesManager() {
             }
         },
         printInvoice(sale) {
-            // If view modal is open, print its content; otherwise open it first
+            // Print the full modal with all classes/styles for a perfect match
             const doPrint = () => {
-                const content = document.getElementById('invoice-print-area');
-                if(!content){ this.showToast('warning','Aucun contenu à imprimer'); return; }
+                // Find the modal container (not just the inner content)
+                const modal = document.querySelector('div[x-show="showViewSaleModal"] > div');
+                if(!modal){ this.showToast('warning','Aucun contenu à imprimer'); return; }
                 const w = window.open('', 'PRINT', 'height=650,width=900,top=100,left=150');
                 if(!w){ this.showToast('error','Impossible d\'ouvrir la fenêtre d\'impression'); return; }
-                w.document.write('<html><head><title>Facture</title>');
-                w.document.write('<link rel="stylesheet" href="/static/css/tailwind.css" />');
+                w.document.write('<!DOCTYPE html><html><head><title>Facture</title>');
+                // Tailwind CSS (use link rel=stylesheet for print reliability)
+                w.document.write('<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">');
+                // Font Awesome
+                w.document.write('<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />');
+                // Print-specific style to center and remove background overlay
+                w.document.write('<style>body{background:white!important;} .fixed,.inset-0,.bg-gray-600,.bg-opacity-50{all:unset!important;} </style>');
                 w.document.write('</head><body>');
-                w.document.write(content.innerHTML);
+                w.document.write('<div style="margin:2rem auto;max-width:800px;">'+modal.outerHTML+'</div>');
                 w.document.write('</body></html>');
                 w.document.close();
                 w.focus();
-                w.print();
-                w.close();
+                setTimeout(function(){
+                    w.print();
+                    w.close();
+                }, 350);
             };
             if(this.viewSaleData && this.viewSaleData.id === sale.id && this.showViewSaleModal){
-                this.$nextTick(() => { doPrint(); });
+                setTimeout(() => { doPrint(); }, 200);
             } else {
                 this.viewSale(sale);
-                this.$nextTick(() => { doPrint(); });
+                setTimeout(() => { doPrint(); }, 400);
             }
         },
     generateReport() { window.open('/api/reports/sales-report', '_blank'); },
