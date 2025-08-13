@@ -166,6 +166,10 @@
             <button @click="backupData()" :disabled="isBackingUp" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
                 <i class="fas fa-save mr-2"></i>
                 <span>Sauvegarde</span>
+            <button @click="diagnoseCharts()" class="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-stethoscope mr-2"></i>
+                Diagnostiquer Graphiques
+            </button>
                 <span x-show="isBackingUp" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
             </button>
         </div>
@@ -521,6 +525,43 @@
     function financeManager() {
         return {
             // State
+            diagnoseCharts() {
+                let result = [];
+                // Check Alpine.js
+                result.push('Alpine.js: ' + (window.Alpine ? 'OK' : 'NOT FOUND'));
+                // Check Chart.js
+                result.push('Chart.js: ' + (window.Chart ? 'OK' : 'NOT FOUND'));
+                // Check apiFetch
+                result.push('apiFetch: ' + (typeof window.apiFetch === 'function' ? 'OK' : 'NOT FOUND'));
+                // Check chart containers
+                result.push('revenueChart canvas: ' + (document.getElementById('revenueChart') ? 'OK' : 'NOT FOUND'));
+                result.push('expenseChart canvas: ' + (document.getElementById('expenseChart') ? 'OK' : 'NOT FOUND'));
+                // Test API
+                result.push('Testing /api/finance/charts...');
+                apiFetch('/api/finance/charts?period=' + (this.chartPeriod || 'week'))
+                  .then(data => {
+                    if (data && data.chart_data) {
+                        result.push('API: OK, received chart_data');
+                        if (data.chart_data.revenue && Array.isArray(data.chart_data.revenue.data)) {
+                            result.push('Revenue data: ' + data.chart_data.revenue.data.length + ' points');
+                        } else {
+                            result.push('Revenue data: MISSING');
+                        }
+                        if (data.chart_data.expense && Array.isArray(data.chart_data.expense.data)) {
+                            result.push('Expense data: ' + data.chart_data.expense.data.length + ' points');
+                        } else {
+                            result.push('Expense data: MISSING');
+                        }
+                    } else {
+                        result.push('API: ERROR or missing chart_data');
+                    }
+                    alert(result.join('\n'));
+                  })
+                  .catch(e => {
+                    result.push('API: ERROR - ' + (e && e.message ? e.message : e));
+                    alert(result.join('\n'));
+                  });
+            },
             chartsInitialized: false,
             chartError: null,
             activeTab: 'summary',
@@ -961,7 +1002,7 @@
                                     color: (ctx) => {
                                         if (!ctx || !ctx.chart || !ctx.chart.data || !Array.isArray(ctx.chart.data.labels)) return '#374151';
                                         const idx = ctx.index;
-                                        const label = ctx.chart.data.labels[idx] || '';
+                                        const label = (ctx.chart.data.labels && ctx.chart.data.labels[idx]) ? ctx.chart.data.labels[idx] : '';
                                         return (this.searchTerm === label && this.filterType === 'expense') ? '#1d4ed8' : '#374151';
                                     },
                                     padding: 20,
@@ -969,12 +1010,19 @@
                                         const defaultLabels = (Chart.defaults.plugins.legend.labels.generateLabels && Chart.defaults.plugins.legend.labels.generateLabels(chart)) || [];
                                         return defaultLabels.map(l => {
                                             const labelText = l && l.text ? l.text : '';
+                                            // Build a new object, omitting 'disabled'
                                             return {
-                                                ...l,
+                                                text: l && l.text ? l.text : '',
+                                                datasetIndex: l && typeof l.datasetIndex !== 'undefined' ? l.datasetIndex : undefined,
+                                                index: l && typeof l.index !== 'undefined' ? l.index : undefined,
+                                                fillStyle: l && l.fillStyle ? l.fillStyle : '#9CA3AF',
+                                                strokeStyle: l && l.strokeStyle ? l.strokeStyle : undefined,
+                                                lineWidth: l && l.lineWidth ? l.lineWidth : undefined,
+                                                hidden: l && typeof l.hidden !== 'undefined' ? l.hidden : false,
+                                                pointStyle: l && l.pointStyle ? l.pointStyle : undefined,
+                                                rotation: l && l.rotation ? l.rotation : undefined,
                                                 ariaLabel: `Catégorie ${labelText}` + ((this.searchTerm === labelText && this.filterType === 'expense') ? ' (filtrée)' : ''),
                                                 fontColor: (this.searchTerm === labelText && this.filterType === 'expense') ? '#1d4ed8' : '#374151',
-                                                fillStyle: l && l.fillStyle ? l.fillStyle : '#9CA3AF',
-                                                disabled: l && typeof l.disabled !== 'undefined' ? l.disabled : false
                                             };
                                         });
                                     }
@@ -1018,13 +1066,16 @@
                 });
 
                 this.chartsInitialized = true;
-                // Fetch initial data for the newly created charts
-                this.updateCharts();
+                // Prevent double update if already updating
+                if (!this.isLoadingCharts) {
+                    this.updateCharts();
+                }
             },
 
             updateCharts() {
                 this.isLoadingCharts = true;
                 this.chartError = null;
+                console.log('[updateCharts] called, chartsInitialized:', this.chartsInitialized, 'revenueChart:', !!this.revenueChart, 'expenseChart:', !!this.expenseChart);
                 try {
                     const u = new URL(window.location);
                     u.searchParams.set('period', this.chartPeriod);
@@ -1035,12 +1086,15 @@
                     .then(data => {
                         if (!data || data.success === false) {
                             this.chartError = 'Données de graphique indisponibles';
+                            this.showToast && this.showToast('error', 'API: Données de graphique indisponibles');
+                            console.warn('[updateCharts] API returned no data or success=false', data);
                             return;
                         }
                         // Ensure charts exist before updating
                         if (!this.chartsInitialized || !this.revenueChart || !this.expenseChart) {
-                            this.initCharts();
-                            // After re-init, do not update immediately to avoid recursion/stack overflow
+                            this.chartError = 'Charts not initialized';
+                            this.showToast && this.showToast('error', 'Charts not initialized');
+                            console.warn('[updateCharts] charts not initialized', this.chartsInitialized, this.revenueChart, this.expenseChart);
                             this.isLoadingCharts = false;
                             return;
                         }
@@ -1057,6 +1111,9 @@
                         }
                         if (typeof this.revenueChart.update === 'function') {
                             this.revenueChart.update();
+                        } else {
+                            this.showToast && this.showToast('error', 'revenueChart.update() missing');
+                            console.warn('[updateCharts] revenueChart.update() missing');
                         }
                         // Defensive: Expense
                         const exp = chart.expense || {};
@@ -1073,11 +1130,17 @@
                         }
                         if (typeof this.expenseChart.update === 'function') {
                             this.expenseChart.update();
+                        } else {
+                            this.showToast && this.showToast('error', 'expenseChart.update() missing');
+                            console.warn('[updateCharts] expenseChart.update() missing');
                         }
+                        this.showToast && this.showToast('success', 'Charts updated successfully');
+                        console.log('[updateCharts] charts updated successfully');
                     })
                     .catch(err => {
                         console.error('Error updating charts:', err);
                         this.chartError = 'Erreur de chargement des graphiques.';
+                        this.showToast && this.showToast('error', 'Erreur JS lors de la mise à jour des graphiques: ' + (err && err.message ? err.message : err));
                     })
                     .finally(() => { this.isLoadingCharts = false; });
             },
