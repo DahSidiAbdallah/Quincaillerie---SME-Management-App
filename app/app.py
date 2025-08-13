@@ -166,15 +166,18 @@ def inject_globals():
     # Determine current currency from settings if possible
     current_currency = 'MRU'
     ai_enabled = True
+    store_name = 'Quincaillerie'
     try:
         if db_manager is not None:
             settings = db_manager.get_app_settings()
             current_currency = (settings.get('currency') or 'MRU').upper()
             # Gate AI features with settings flag (default True if missing)
             ai_enabled = bool(settings.get('ai_features_enabled', True))
+            store_name = settings.get('store_name', 'Quincaillerie')
     except Exception as _e:
         current_currency = 'MRU'
         ai_enabled = True
+        store_name = 'Quincaillerie'
 
     # Simple money formatter for templates
     def format_currency(value):
@@ -195,8 +198,9 @@ def inject_globals():
         'current_year': datetime.now().year,
         'is_minimal_mode': not MODULES_AVAILABLE,
         'current_currency': current_currency,
-    'format_currency': format_currency,
-    'ai_features_enabled': ai_enabled
+        'format_currency': format_currency,
+        'ai_features_enabled': ai_enabled,
+        'store_name': store_name
     }
 
 # Main Routes

@@ -7,15 +7,15 @@
 <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 <script src="{{ url_for('static', filename='js/alpine-admin-extensions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/alpine-realtime-patch.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin-diagnostics.js') }}" defer></script>
+
 {% endblock %}
 
 {% block content %}
 <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="adminManager()" x-init="init()" x-admin-fix>
         <!-- Page Header -->
         <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900">Panneau d'Administration</h1>
-            <p class="text-gray-600 mt-2">Gérez les utilisateurs, paramètres système et configuration</p>
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Panneau d'Administration</h1>
+            <p class="text-gray-600 dark:text-gray-300 mt-2">Gérez les utilisateurs, paramètres système et configuration</p>
         </div>
 
         <!-- Logs -->
@@ -40,32 +40,32 @@
             </div>
         </div>
 
-        <!-- Admin Menu Tabs -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="border-b border-gray-200">
+    <!-- Admin Menu Tabs -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow mb-8">
+            <div class="border-b border-gray-200 dark:border-slate-700">
                 <nav class="-mb-px flex space-x-8 px-6">
                     <button @click="switchTab('users')" 
-                            :class="activeTab === 'users' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            :class="activeTab === 'users' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-users mr-2"></i>Utilisateurs
                     </button>
                     <button @click="switchTab('settings')" 
-                            :class="activeTab === 'settings' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            :class="activeTab === 'settings' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-cog mr-2"></i>Paramètres
                     </button>
                     <button @click="switchTab('backup')" 
-                            :class="activeTab === 'backup' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            :class="activeTab === 'backup' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-database mr-2"></i>Sauvegarde
                     </button>
                     <button @click="switchTab('logs')" 
-                            :class="activeTab === 'logs' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            :class="activeTab === 'logs' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-list-alt mr-2"></i>Journaux
                     </button>
                     <button @click="switchTab('system')" 
-                            :class="activeTab === 'system' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                            :class="activeTab === 'system' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
                             class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
                         <i class="fas fa-server mr-2"></i>Système
                     </button>
