@@ -505,12 +505,29 @@ def export_report(report_type):
                 WHERE DATE(expense_date) BETWEEN ? AND ?
                 ORDER BY expense_date DESC
             ''', (start_date, end_date))
-            headers = ['Date', 'Catégorie', 'Sous-catégorie', 'Description', 
+            headers = ['Date', 'Catégorie', 'Sous-catégorie', 'Description',
                       'Montant', 'Reçu', 'Créé par']
-            
+
+        elif report_type == 'customers':
+            cursor.execute('''
+                SELECT id, name, phone, email, address, created_at
+                FROM customers
+                WHERE is_active = 1
+                ORDER BY name
+            ''')
+            headers = ['ID', 'Nom', 'Téléphone', 'Email', 'Adresse', 'Créé le']
+
+        elif report_type == 'ai_insights':
+            cursor.execute('''
+                SELECT prediction_type, product_id, prediction_data, confidence_score, prediction_date
+                FROM ai_predictions
+                ORDER BY prediction_date DESC
+            ''')
+            headers = ['Type', 'ID Produit', 'Données', 'Confiance', 'Date']
+
         elif report_type == 'debts':
             cursor.execute('''
-                SELECT 'Client' as type, client_name as name, total_amount, 
+                SELECT 'Client' as type, client_name as name, total_amount,
                        paid_amount, remaining_amount, due_date, status
                 FROM client_debts
                 UNION ALL

@@ -195,7 +195,7 @@
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
-                            <template x-for="product in reportData.sales.top_products" :key="product.id">
+                            <template x-for="(product, idx) in reportData.sales.top_products" :key="idx">
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="product.name || '-' "></td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.quantity ?? 0"></td>
@@ -405,26 +405,26 @@
                     this.filters.start_date = now.toISOString().split('T')[0];
                     this.filters.end_date = now.toISOString().split('T')[0];
                     
-                    this.loadReportData();
-                    if (this.activeReport === 'activities') this.loadActivities();
-                    if (this.activeReport === 'ai_insights') this.loadAI();
-                    this.$nextTick(() => {
-                        this.initCharts();
+                    this.loadReportData().then(() => {
+                        if (this.activeReport === 'sales') {
+                            this.initCharts();
+                        }
+                        if (this.activeReport === 'activities') this.loadActivities();
+                        if (this.activeReport === 'ai_insights') this.loadAI();
                     });
                 },
-                
+
                 setActiveReport(type) {
     if (this.salesChart && typeof this.salesChart.destroy === 'function') {
         this.salesChart.destroy();
         this.salesChart = null;
     }
     this.activeReport = type;
-    this.loadReportData();
-    if (type === 'sales') {
-        this.$nextTick(() => {
+    this.loadReportData().then(() => {
+        if (type === 'sales') {
             this.initCharts();
-        });
-    }
+        }
+    });
 },
                 
                 loadReportData() {
@@ -541,7 +541,7 @@
                         );
                     }
 
-                    Promise.all(tasks).finally(() => {
+                    return Promise.all(tasks).finally(() => {
                         if (this.activeReport === 'activities') this.loadActivities();
                         if (this.activeReport === 'ai_insights') this.loadAI();
                     });
@@ -723,12 +723,24 @@
                         end_date: this.filters.end_date || ''
                     }).toString();
                     let endpoint;
-                    if (this.activeReport === 'sales') {
-                        endpoint = '/api/reports/export/sales';
-                    } else if (this.activeReport === 'inventory') {
-                        endpoint = '/api/reports/export/products';
-                    } else {
-                        endpoint = '/api/reports/export/expenses';
+                    switch (this.activeReport) {
+                        case 'sales':
+                            endpoint = '/api/reports/export/sales';
+                            break;
+                        case 'inventory':
+                            endpoint = '/api/reports/export/products';
+                            break;
+                        case 'financial':
+                            endpoint = '/api/reports/export/expenses';
+                            break;
+                        case 'customers':
+                            endpoint = '/api/reports/export/customers';
+                            break;
+                        case 'ai_insights':
+                            endpoint = '/api/reports/export/ai_insights';
+                            break;
+                        default:
+                            endpoint = '/api/reports/export/sales';
                     }
                     try {
                         window.open(`${endpoint}?${params}`, '_blank');
