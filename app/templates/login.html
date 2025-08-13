@@ -118,10 +118,12 @@
         <div class="mt-6 text-center">
             <div class="inline-flex rounded-md shadow-sm" role="group">
                 {% for lang_code, lang_name in supported_languages.items() %}
+                {% if lang_code != 'en' %}
                 <button onclick="changeLanguage('{{ lang_code }}')" 
                    class="px-4 py-2 text-sm font-medium {{ 'bg-gray-800 text-white' if lang_code == current_language else 'bg-white text-gray-700 hover:bg-gray-50' }} border border-gray-200 {{ 'rounded-l-lg' if loop.first else 'rounded-r-lg' if loop.last else '' }} {{ '' if loop.first else '-ml-px' }}">
                     {{ lang_name }}
                 </button>
+                {% endif %}
                 {% endfor %}
             </div>
         </div>

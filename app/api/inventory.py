@@ -836,16 +836,17 @@ def get_low_stock_items():
 
 # Add these new API endpoints to your inventory.py file
 
+
 @inventory_bp.route('/products/<int:product_id>/details', methods=['GET'])
 def get_product_details(product_id):
     """Get detailed product info including stock movements and sales"""
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
+
     conn = db_manager.get_connection()
     cursor = conn.cursor()
-    
+
     try:
         # Determine product columns for robust filtering
         cursor.execute("PRAGMA table_info(products)")
@@ -854,11 +855,11 @@ def get_product_details(product_id):
             cursor.execute('SELECT * FROM products WHERE id = ? AND is_active = 1', (product_id,))
         else:
             cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
-        
+
         product = cursor.fetchone()
         if not product:
             return jsonify({'success': False, 'message': 'Product not found'})
-        
+
         # Get stock movements (handle schema variants)
         cursor.execute('PRAGMA table_info(stock_movements)')
         sm_cols = {row[1] for row in cursor.fetchall()}
@@ -868,20 +869,22 @@ def get_product_details(product_id):
         has_created_at = 'created_at' in sm_cols
         date_expr = 'movement_date' if has_movement_date else ('created_at' if has_created_at else 'ROWID')
 
-        select_cols = ['id', 'movement_type', 'quantity']
+
+        select_cols = [
+            'id', 'movement_type', 'quantity', 'unit_price', 'total_amount', 'reference', 'notes', f'{date_expr} as movement_time'
+        ]
         if has_ref_id:
             select_cols.append('reference_id')
         if has_ref_type:
             select_cols.append('reference_type')
-        select_cols.extend(['notes', date_expr + ' as movement_time'])
-        sql = f"SELECT {', '.join(select_cols)} FROM stock_movements WHERE product_id = ? ORDER BY {date_expr} DESC LIMIT 50"
+        sql = f"SELECT {', '.join(select_cols)} FROM stock_movements WHERE product_id = ? ORDER BY {date_expr} DESC"
         cursor.execute(sql, (product_id,))
-        
+
         movements = []
         for row in cursor.fetchall():
             movements.append(dict(row))
-        
-    # Get sales history
+
+        # Get sales history
         cursor.execute('''
             SELECT 
                 sd.quantity, sd.unit_price, sd.total_price,
@@ -890,20 +893,19 @@ def get_product_details(product_id):
             JOIN sales s ON sd.sale_id = s.id
             WHERE sd.product_id = ? AND s.is_deleted = 0
             ORDER BY s.sale_date DESC
-            LIMIT 50
         ''', (product_id,))
-        
+
         sales = []
         for row in cursor.fetchall():
             sales.append(dict(row))
-        
+
         return jsonify({
             'success': True,
             'product': dict(product),
             'movements': movements,
             'sales': sales
         })
-    
+
     except Exception as e:
         logger.error(f"Error getting product details: {e}")
         return jsonify({'success': False, 'message': f"Error: {str(e)}"})

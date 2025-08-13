@@ -1766,6 +1766,7 @@
             const data = await response.json();
             if (!data.success) throw new Error('API error');
             const product = data.product;
+            // Show all stock movements (Entrée, Sortie, Ajustement)
             const movements = product.recent_movements || [];
             const sales = product.sales_history || [];
 
