@@ -957,7 +957,8 @@
                 const expenseCtx = expCanvas.getContext('2d');
 
                 // Create new charts
-                this.revenueChart = new Chart(revenueCtx, {
+                // Use Alpine.raw to keep chart instances out of reactivity proxies
+                this.revenueChart = Alpine.raw(new Chart(revenueCtx, {
                     type: 'line',
                     data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
                     options: {
@@ -982,8 +983,8 @@
                             }
                         }
                     }
-                });
-                this.expenseChart = new Chart(expenseCtx, {
+                }));
+                this.expenseChart = Alpine.raw(new Chart(expenseCtx, {
                     type: 'doughnut',
                     data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
                     options: {
@@ -1024,7 +1025,7 @@
                             },
                         },
                     }
-                });
+                }));
                 this.chartsInitialized = true;
                 // Do NOT call updateCharts() here to avoid infinite recursion/stack overflow
             },
