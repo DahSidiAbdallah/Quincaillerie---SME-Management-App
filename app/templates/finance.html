@@ -738,13 +738,17 @@
                             !window.Chart.version ||
                             !window.Chart.version.startsWith('4.4.');
 
+                        const afterInit = () => {
+                            this.initCharts();
+                            this.updateCharts();
+                        };
                         if (needsPinnedChart) {
                             const s = document.createElement('script');
                             s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js';
-                            s.onload = () => this.initCharts();
+                            s.onload = afterInit;
                             document.head.appendChild(s);
                         } else {
-                            this.initCharts();
+                            afterInit();
                         }
                     });
                 });
@@ -1022,7 +1026,7 @@
                     }
                 });
                 this.chartsInitialized = true;
-                this.updateCharts();
+                // Do NOT call updateCharts() here to avoid infinite recursion/stack overflow
             },
 
             updateCharts() {
