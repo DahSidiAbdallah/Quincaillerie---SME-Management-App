@@ -4,7 +4,7 @@
 
 {% block extra_head %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -737,7 +737,7 @@
                             this.initCharts();
                         } else {
                             const s = document.createElement('script');
-                            s.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                            s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js';
                             s.onload = () => this.initCharts();
                             document.head.appendChild(s);
                         }
@@ -999,36 +999,12 @@
                                 labels: {
                                     boxWidth: 24,
                                     font: { size: 16, weight: 'bold' },
-                                    color: (ctx) => {
-                                        if (!ctx || !ctx.chart || !ctx.chart.data || !Array.isArray(ctx.chart.data.labels)) return '#374151';
-                                        const idx = ctx.index;
-                                        const label = (ctx.chart.data.labels && ctx.chart.data.labels[idx]) ? ctx.chart.data.labels[idx] : '';
-                                        return (this.searchTerm === label && this.filterType === 'expense') ? '#1d4ed8' : '#374151';
-                                    },
                                     padding: 20,
-                                    generateLabels: (chart) => {
-                                        const defaultLabels = (Chart.defaults.plugins.legend.labels.generateLabels && Chart.defaults.plugins.legend.labels.generateLabels(chart)) || [];
-                                        return defaultLabels
-                                            .filter(Boolean)
-                                            .map(l => ({
-                                                text: l && l.text ? l.text : '',
-                                                datasetIndex: l && typeof l.datasetIndex !== 'undefined' ? l.datasetIndex : undefined,
-                                                index: l && typeof l.index !== 'undefined' ? l.index : undefined,
-                                                fillStyle: l && l.fillStyle ? l.fillStyle : '#9CA3AF',
-                                                strokeStyle: l && l.strokeStyle ? l.strokeStyle : undefined,
-                                                lineWidth: l && l.lineWidth ? l.lineWidth : undefined,
-                                                hidden: l && typeof l.hidden !== 'undefined' ? l.hidden : false,
-                                                pointStyle: l && l.pointStyle ? l.pointStyle : undefined,
-                                                rotation: l && l.rotation ? l.rotation : undefined,
-                                                ariaLabel: `Catégorie ${l.text}` + ((this.searchTerm === l.text && this.filterType === 'expense') ? ' (filtrée)' : ''),
-                                                fontColor: (this.searchTerm === l.text && this.filterType === 'expense') ? '#1d4ed8' : '#374151',
-                                            }));
-
-                                    }
+                                    // Use default color and generateLabels
                                 },
                                 onClick: (e, legendItem, legend) => {
-                                    const labelsArr = legend && legend.chart && legend.chart.data && Array.isArray(legend.chart.data.labels) ? legend.chart.data.labels : [];
-                                    const category = labelsArr[legendItem.index] || '';
+                                    const labels = legend.chart?.data?.labels || [];
+                                    const category = labels[legendItem.index] ?? '';
                                     if (category && category !== 'Aucune dépense') {
                                         if (this.searchTerm === category && this.filterType === 'expense') {
                                             this.searchTerm = '';
@@ -1044,23 +1020,14 @@
                             },
                             tooltip: {
                                 callbacks: {
-                                    label: function(context) {
-                                        const label = context && context.label ? context.label : '';
-                                        const value = context && context.parsed ? context.parsed : 0;
-                                        return `${label}: ${value.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
-                                    }
-                                }
-                            }
+                                    label: (context) => {
+                                        const label = context.label ?? '';
+                                        const value = context.parsed ?? 0;
+                                        return `${label}: ${value.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${window.AppConfig?.currentCurrency || 'MRU'}`;
+                                    },
+                                },
+                            },
                         },
-                        onClick: (e, elements) => {
-                            if (elements && elements.length > 0) {
-                                const idx = elements[0].index;
-                                const label = this.expenseChart.data.labels[idx];
-                                this.filterType = 'expense';
-                                this.searchTerm = label;
-                                this.showToast('info', `Filtré par catégorie: ${label}`);
-                            }
-                        }
                     }
                 });
 
