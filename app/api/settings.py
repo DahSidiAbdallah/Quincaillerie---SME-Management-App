@@ -233,12 +233,18 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
 
                 conn = db_manager.get_connection()
                 cursor = conn.cursor()
+                # Always ensure a row exists for this user_id, and update photo_path
                 cursor.execute('SELECT id FROM user_profiles WHERE user_id = ?', (user_id,))
-                exists = cursor.fetchone() is not None
-                if exists:
+                row = cursor.fetchone()
+                if row:
                     cursor.execute('UPDATE user_profiles SET photo_path = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?', (stored_photo_path, user_id))
                 else:
-                    cursor.execute('INSERT INTO user_profiles (user_id, photo_path) VALUES (?, ?)', (user_id, stored_photo_path))
+                    # Try to get user info from users table for better defaults
+                    cursor.execute('SELECT username, email FROM users WHERE id = ?', (user_id,))
+                    user_row = cursor.fetchone()
+                    username = user_row[0] if user_row else ''
+                    email = user_row[1] if user_row else ''
+                    cursor.execute('INSERT INTO user_profiles (user_id, first_name, last_name, email, photo_path) VALUES (?, ?, ?, ?, ?)', (user_id, username, '', email, stored_photo_path))
                 conn.commit(); conn.close()
 
                 db_manager.log_user_action(user_id, 'upload_photo', 'Mise à jour photo profil')
@@ -267,12 +273,19 @@ def init_settings_routes(app, db_manager, MODULES_AVAILABLE, SUPPORTED_LANGUAGES
                     return jsonify({'success': False, 'error': 'User not authenticated'})
                 
                 # Prepare profile data
+                # Only update photo_path if provided and not empty, otherwise keep existing
+                conn = db_manager.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT photo_path FROM user_profiles WHERE user_id = ?', (user_id,))
+                row = cursor.fetchone()
+                existing_photo_path = row['photo_path'] if row and row['photo_path'] else ''
+
                 profile_data = {
                     'first_name': data.get('first_name', ''),
                     'last_name': data.get('last_name', ''),
                     'email': data.get('email', ''),
                     'phone': data.get('phone', ''),
-                    'photo_path': data.get('photo_path', '')
+                    'photo_path': data.get('photo_path', '') or existing_photo_path
                 }
                 
                 conn = db_manager.get_connection()

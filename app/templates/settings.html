@@ -66,7 +66,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
                         <!-- Profile Photo -->
                         <div class="flex flex-col items-center">
-                            <img :src="profile.photo_url || '/static/default-user.png'" class="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover mb-4" alt="Photo">
+                            <img :src="profile.photo_url || '/static/images/user-placeholder.svg'" class="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover mb-4 bg-gray-100" alt="Photo de profil">
                             <input type="file" id="photoInput" class="hidden" accept="image/*" @change="uploadPhoto">
                             <button type="button" onclick="document.getElementById('photoInput').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm w-full sm:w-auto mt-2">
                                 <i class="fas fa-camera mr-2"></i>
@@ -560,7 +560,9 @@
                         first_name: this.profile.first_name,
                         last_name: this.profile.last_name,
                         email: this.profile.email,
-                        phone: this.profile.phone
+                        phone: this.profile.phone,
+                        // Always send the current photo_url/path to preserve it
+                        photo_path: this.profile.photo_url || ''
                     };
                     
                     // Send the update request
@@ -739,7 +741,9 @@
                     })
                         .then(data => {
                             if (data.success) {
-                                this.profile.photo_url = data.photo_url;
+                                // Reload profile from backend to ensure persistence
+                                this.loadSettings();
+                                showToast('Photo de profil mise à jour !', 'success');
                             } else {
                                 showToast(data.error || 'Erreur upload', 'error');
                             }
