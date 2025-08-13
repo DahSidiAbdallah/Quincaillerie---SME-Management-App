@@ -241,35 +241,50 @@
                     <!-- Navigation Links (Desktop) -->
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">
-                            <a href="{{ url_for('dashboard') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
-                                📊 Tableau de bord
-                            </a>
-                            <a href="{{ url_for('inventory') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
-                                📦 Inventaire
-                            </a>
-                            <a href="{{ url_for('sales') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
-                                💰 Ventes
-                            </a>
-                            <a href="{{ url_for('customers') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
-                                👥 Clients
-                            </a>
-                            <a href="{{ url_for('finance') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
-                                💳 Finance
-                            </a>
-                            <a href="{{ url_for('reports') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
-                                📈 Rapports
-                            </a>
-                            {% if user_role == 'admin' %}
-                            <a href="{{ url_for('admin') }}" 
-                               class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
-                                ⚙️ Admin
-                            </a>
+                            {% if user_role == 'employee' %}
+                                <a href="{{ url_for('inventory') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                                    📦 Inventaire
+                                </a>
+                                <a href="{{ url_for('sales') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                                    💰 Ventes
+                                </a>
+                                <a href="{{ url_for('customers') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                                    👥 Clients
+                                </a>
+                            {% else %}
+                                <a href="{{ url_for('dashboard') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
+                                    📊 Tableau de bord
+                                </a>
+                                <a href="{{ url_for('inventory') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                                    📦 Inventaire
+                                </a>
+                                <a href="{{ url_for('sales') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                                    💰 Ventes
+                                </a>
+                                <a href="{{ url_for('customers') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                                    👥 Clients
+                                </a>
+                                <a href="{{ url_for('finance') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
+                                    💳 Finance
+                                </a>
+                                <a href="{{ url_for('reports') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
+                                    📈 Rapports
+                                </a>
+                                {% if user_role == 'admin' %}
+                                <a href="{{ url_for('admin') }}" 
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
+                                    ⚙️ Admin
+                                </a>
+                                {% endif %}
                             {% endif %}
                         </div>
                     </div>
@@ -343,35 +358,50 @@
             <!-- Mobile menu -->
             <div x-show="mobileMenuOpen" class="md:hidden mobile-menu-container" id="mobile-menu">
                 <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-                    <a href="{{ url_for('dashboard') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
-                        📊 Tableau de bord
-                    </a>
-                    <a href="{{ url_for('inventory') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
-                        📦 Inventaire
-                    </a>
-                    <a href="{{ url_for('sales') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
-                        💰 Ventes
-                    </a>
-                    <a href="{{ url_for('customers') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
-                        👥 Clients
-                    </a>
-                    <a href="{{ url_for('finance') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
-                        💳 Finance
-                    </a>
-                    <a href="{{ url_for('reports') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
-                        📈 Rapports
-                    </a>
-                    {% if user_role == 'admin' %}
-                    <a href="{{ url_for('admin') }}" 
-                       class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
-                        ⚙️ Admin
-                    </a>
+                    {% if user_role == 'employee' %}
+                        <a href="{{ url_for('inventory') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                            📦 Inventaire
+                        </a>
+                        <a href="{{ url_for('sales') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                            💰 Ventes
+                        </a>
+                        <a href="{{ url_for('customers') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                            👥 Clients
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('dashboard') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
+                            📊 Tableau de bord
+                        </a>
+                        <a href="{{ url_for('inventory') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                            📦 Inventaire
+                        </a>
+                        <a href="{{ url_for('sales') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                            💰 Ventes
+                        </a>
+                        <a href="{{ url_for('customers') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                            👥 Clients
+                        </a>
+                        <a href="{{ url_for('finance') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
+                            💳 Finance
+                        </a>
+                        <a href="{{ url_for('reports') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
+                            📈 Rapports
+                        </a>
+                        {% if user_role == 'admin' %}
+                        <a href="{{ url_for('admin') }}" 
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
+                            ⚙️ Admin
+                        </a>
+                        {% endif %}
                     {% endif %}
                     
                     <!-- Mobile sync status -->

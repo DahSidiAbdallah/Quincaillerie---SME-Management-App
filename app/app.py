@@ -1,3 +1,11 @@
+def login_required(f):
+    """Decorator to require login for protected routes"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
@@ -141,12 +149,17 @@ def get_user_language():
     """Get user's preferred language from session or default to French"""
     return session.get('language', 'fr')
 
-def login_required(f):
-    """Decorator to require login for protected routes"""
+
+def employee_allowed_only(f):
+    """Decorator to restrict employees to allowed pages only"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
+        if session.get('user_role') == 'employee':
+            # Only allow inventory, sales, customers, settings
+            allowed_endpoints = ['inventory', 'sales', 'customers', 'settings']
+            if request.endpoint not in allowed_endpoints:
+                flash("Accès refusé: cette page n'est pas disponible pour les employés.", 'error')
+                return redirect(url_for('inventory'))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -208,6 +221,8 @@ def inject_globals():
 def index():
     """Main landing page"""
     if 'user_id' in session:
+        if session.get('user_role') == 'employee':
+            return redirect(url_for('inventory'))
         return redirect(url_for('dashboard'))
     return render_template('login.html')
 
@@ -285,7 +300,11 @@ def login():
                     db_manager.log_user_action(user['id'], 'login', f'Connexion réussie pour {username}')
                 
                 if request.is_json:
+                    if user['role'] == 'employee':
+                        return jsonify({'success': True, 'redirect': url_for('inventory')})
                     return jsonify({'success': True, 'redirect': url_for('dashboard')})
+                if user['role'] == 'employee':
+                    return redirect(url_for('inventory'))
                 return redirect(url_for('dashboard'))
         else:
             # Fallback authentication for minimal mode
@@ -294,10 +313,17 @@ def login():
                 session['username'] = 'admin'
                 session['user_role'] = 'admin'
                 session['language'] = 'fr'
-                
                 if request.is_json:
                     return jsonify({'success': True, 'redirect': url_for('dashboard')})
                 return redirect(url_for('dashboard'))
+            elif username == 'employee' and pin == '1234':
+                session['user_id'] = 2
+                session['username'] = 'employee'
+                session['user_role'] = 'employee'
+                session['language'] = 'fr'
+                if request.is_json:
+                    return jsonify({'success': True, 'redirect': url_for('inventory')})
+                return redirect(url_for('inventory'))
         
         message = 'Nom d\'utilisateur ou PIN incorrect'
         if request.is_json:
@@ -355,6 +381,7 @@ def app_status():
 
 @app.route('/dashboard')
 @login_required
+@employee_allowed_only
 def dashboard():
     """Main dashboard - different views for admin vs employee"""
     user_role = session.get('user_role', 'employee')
@@ -875,6 +902,7 @@ def sales_list():
 
 @app.route('/finance')
 @login_required
+@employee_allowed_only
 def finance():
     """Financial management page"""
     return render_template('finance.html')
@@ -1169,6 +1197,7 @@ def finance_charts():
 
 @app.route('/reports')
 @login_required
+@employee_allowed_only
 def reports():
     """Reports and analytics page"""
     return render_template('reports.html')
@@ -1506,6 +1535,7 @@ def reports_inventory():
 
 @app.route('/admin')
 @admin_required
+@employee_allowed_only
 def admin():
     """Admin panel"""
     return render_template('admin.html')
