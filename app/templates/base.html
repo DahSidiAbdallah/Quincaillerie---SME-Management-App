@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ current_language }}">
+<html lang="{{ current_language }}" dir="{{ 'rtl' if current_language == 'ar' else 'ltr' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -32,6 +32,7 @@
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     
     <!-- JS resources -->
+    <script src="{{ url_for('static', filename='js/translations.js') }}"></script>
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     <script src="{{ url_for('static', filename='js/enhanced-api-fetch.js') }}"></script>
     <script src="{{ url_for('static', filename='js/offline-handler.js') }}"></script>
@@ -242,46 +243,46 @@
                     <div class="hidden md:block ml-10">
                         <div class="flex items-baseline space-x-4">
                             {% if user_role == 'employee' %}
-                                <a href="{{ url_for('inventory') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                                <a href="{{ url_for('inventory') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}" data-i18n="nav_inventory">
                                     📦 Inventaire
                                 </a>
-                                <a href="{{ url_for('sales') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                                <a href="{{ url_for('sales') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}" data-i18n="nav_sales">
                                     💰 Ventes
                                 </a>
-                                <a href="{{ url_for('customers') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                                <a href="{{ url_for('customers') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}" data-i18n="nav_customers">
                                     👥 Clients
                                 </a>
                             {% else %}
-                                <a href="{{ url_for('dashboard') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
+                                <a href="{{ url_for('dashboard') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}" data-i18n="nav_dashboard">
                                     📊 Tableau de bord
                                 </a>
-                                <a href="{{ url_for('inventory') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                                <a href="{{ url_for('inventory') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}" data-i18n="nav_inventory">
                                     📦 Inventaire
                                 </a>
-                                <a href="{{ url_for('sales') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                                <a href="{{ url_for('sales') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}" data-i18n="nav_sales">
                                     💰 Ventes
                                 </a>
-                                <a href="{{ url_for('customers') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                                <a href="{{ url_for('customers') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}" data-i18n="nav_customers">
                                     👥 Clients
                                 </a>
-                                <a href="{{ url_for('finance') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
+                                <a href="{{ url_for('finance') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}" data-i18n="nav_finance">
                                     💳 Finance
                                 </a>
-                                <a href="{{ url_for('reports') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
+                                <a href="{{ url_for('reports') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}" data-i18n="nav_reports">
                                     📈 Rapports
                                 </a>
                                 {% if user_role == 'admin' %}
-                                <a href="{{ url_for('admin') }}" 
-                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
+                                <a href="{{ url_for('admin') }}"
+                                   class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}" data-i18n="nav_admin">
                                     ⚙️ Admin
                                 </a>
                                 {% endif %}
@@ -295,7 +296,7 @@
                     <!-- Sync Status -->
                     <div id="syncStatus" class="hidden sm:flex items-center text-sm">
                         <div id="syncIndicator" class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-                        <span id="syncText">Synchronisé</span>
+                        <span id="syncText" data-i18n="sync_status">Synchronisé</span>
                     </div>
                     
                     <!-- Language Selector -->
@@ -342,12 +343,12 @@
                         </button>
                         <div x-show="open" @click.away="open = false" 
                              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
-                            <a href="{{ url_for('settings') }}" 
-                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                            <a href="{{ url_for('settings') }}"
+                               class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="settings">
                                 ⚙️ Paramètres
                             </a>
-                            <button onclick="handleLogout()" 
-                               class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100">
+                            <button onclick="handleLogout()"
+                               class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100" data-i18n="logout">
                                 🚪 Déconnexion
                             </button>
                         </div>
@@ -359,46 +360,46 @@
             <div x-show="mobileMenuOpen" class="md:hidden mobile-menu-container" id="mobile-menu">
                 <div class="px-2 pt-2 pb-3 space-y-1 sm:px-3">
                     {% if user_role == 'employee' %}
-                        <a href="{{ url_for('inventory') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                        <a href="{{ url_for('inventory') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}" data-i18n="nav_inventory">
                             📦 Inventaire
                         </a>
-                        <a href="{{ url_for('sales') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                        <a href="{{ url_for('sales') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}" data-i18n="nav_sales">
                             💰 Ventes
                         </a>
-                        <a href="{{ url_for('customers') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                        <a href="{{ url_for('customers') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}" data-i18n="nav_customers">
                             👥 Clients
                         </a>
                     {% else %}
-                        <a href="{{ url_for('dashboard') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}">
+                        <a href="{{ url_for('dashboard') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'dashboard' else '' }}" data-i18n="nav_dashboard">
                             📊 Tableau de bord
                         </a>
-                        <a href="{{ url_for('inventory') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}">
+                        <a href="{{ url_for('inventory') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'inventory' else '' }}" data-i18n="nav_inventory">
                             📦 Inventaire
                         </a>
-                        <a href="{{ url_for('sales') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}">
+                        <a href="{{ url_for('sales') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'sales' else '' }}" data-i18n="nav_sales">
                             💰 Ventes
                         </a>
-                        <a href="{{ url_for('customers') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}">
+                        <a href="{{ url_for('customers') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'customers' else '' }}" data-i18n="nav_customers">
                             👥 Clients
                         </a>
-                        <a href="{{ url_for('finance') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}">
+                        <a href="{{ url_for('finance') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'finance' else '' }}" data-i18n="nav_finance">
                             💳 Finance
                         </a>
-                        <a href="{{ url_for('reports') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}">
+                        <a href="{{ url_for('reports') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'reports' else '' }}" data-i18n="nav_reports">
                             📈 Rapports
                         </a>
                         {% if user_role == 'admin' %}
-                        <a href="{{ url_for('admin') }}" 
-                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}">
+                        <a href="{{ url_for('admin') }}"
+                           class="block px-3 py-2 rounded-md text-base font-medium hover:bg-gray-700 {{ 'bg-gray-900' if request.endpoint == 'admin' else '' }}" data-i18n="nav_admin">
                             ⚙️ Admin
                         </a>
                         {% endif %}
@@ -407,7 +408,7 @@
                     <!-- Mobile sync status -->
                     <div class="flex items-center px-3 py-2 text-sm">
                         <div class="w-2 h-2 rounded-full bg-green-500 mr-2" id="mobileSyncIndicator"></div>
-                        <span id="mobileSyncText">Synchronisé</span>
+                        <span id="mobileSyncText" data-i18n="sync_status">Synchronisé</span>
                     </div>
                 </div>
             </div>
@@ -470,13 +471,13 @@
                     <span class="text-sm">© {{ current_year }} SME Management v{{ app_version }}</span>
                     <span id="connectionStatus" class="text-xs bg-gray-700 px-2 py-1 rounded">
                         <span id="statusDot" class="inline-block w-2 h-2 rounded-full bg-green-400 mr-1"></span>
-                        <span id="statusText">En ligne</span>
+                        <span id="statusText" data-i18n="status_online">En ligne</span>
                     </span>
                 </div>
                 <div class="flex items-center space-x-4 text-sm">
-                    <span>Mode: <span class="font-semibold">{{ 'Administrateur' if user_role == 'admin' else 'Employé' }}</span></span>
+                    <span data-i18n="mode_prefix">Mode:</span> <span class="font-semibold" data-i18n="{{ 'mode_admin' if user_role == 'admin' else 'mode_employee' }}">{{ 'Administrateur' if user_role == 'admin' else 'Employé' }}</span>
                     <span>|</span>
-                    <span>Utilisateur: <span class="font-semibold">{{ current_user }}</span></span>
+                    <span data-i18n="user_prefix">Utilisateur:</span> <span class="font-semibold">{{ current_user }}</span>
                 </div>
             </div>
         </div>
@@ -511,20 +512,33 @@
             const offlineIndicator = document.getElementById('offlineIndicator');
             const syncIndicator = document.getElementById('syncIndicator');
             const syncText = document.getElementById('syncText');
-            
+            const mobileSyncText = document.getElementById('mobileSyncText');
+
             if (navigator.onLine) {
                 statusDot.className = 'inline-block w-2 h-2 rounded-full bg-green-400 mr-1';
-                statusText.textContent = 'En ligne';
+                statusText.setAttribute('data-i18n', 'status_online');
+                statusText.textContent = t('status_online');
                 offlineIndicator.classList.remove('show');
                 syncIndicator.className = 'w-2 h-2 rounded-full bg-green-500 mr-2';
-                syncText.textContent = 'Synchronisé';
+                syncText.setAttribute('data-i18n', 'sync_status');
+                syncText.textContent = t('sync_status');
+                if (mobileSyncText) {
+                    mobileSyncText.setAttribute('data-i18n', 'sync_status');
+                    mobileSyncText.textContent = t('sync_status');
+                }
                 window.AppConfig.isOffline = false;
             } else {
                 statusDot.className = 'inline-block w-2 h-2 rounded-full bg-red-400 mr-1';
-                statusText.textContent = 'Hors ligne';
+                statusText.setAttribute('data-i18n', 'status_offline');
+                statusText.textContent = t('status_offline');
                 offlineIndicator.classList.add('show');
                 syncIndicator.className = 'w-2 h-2 rounded-full bg-yellow-500 mr-2';
-                syncText.textContent = 'Hors ligne';
+                syncText.setAttribute('data-i18n', 'status_offline');
+                syncText.textContent = t('status_offline');
+                if (mobileSyncText) {
+                    mobileSyncText.setAttribute('data-i18n', 'status_offline');
+                    mobileSyncText.textContent = t('status_offline');
+                }
                 window.AppConfig.isOffline = true;
             }
         }
@@ -607,7 +621,7 @@
                 loader = document.createElement('div');
                 loader.id = 'globalLoader';
                 loader.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
-                loader.innerHTML = '<div class="bg-white p-4 rounded-lg"><div class="spinner mx-auto"></div><p class="mt-2 text-center">Chargement...</p></div>';
+                loader.innerHTML = '<div class="bg-white p-4 rounded-lg"><div class="spinner mx-auto"></div><p class="mt-2 text-center">' + t('loading') + '</p></div>';
                 document.body.appendChild(loader);
             }
             
@@ -621,6 +635,9 @@
         
         // Logout handler
         window.handleLogout = function() {
+            if (!confirm(t('logout_confirm'))) {
+                return;
+            }
             window.showLoading(true);
             fetch('/api/auth/logout', { method: 'POST' })
                 .then(response => {
@@ -628,13 +645,13 @@
                         window.location.href = '/login';
                     } else {
                         window.showLoading(false);
-                        window.showNotification('Erreur lors de la déconnexion', 'error');
+                        window.showNotification(t('logout_error'), 'error');
                     }
                 })
                 .catch(error => {
                     console.error('Logout error:', error);
                     window.showLoading(false);
-                    window.showNotification('Erreur lors de la déconnexion', 'error');
+                    window.showNotification(t('logout_error'), 'error');
                 });
         };
 
@@ -654,7 +671,7 @@
     </script>
     
     <!-- PWA Install Button -->
-    <button id="pwaInstallButton" class="install-button hidden">
+    <button id="pwaInstallButton" class="install-button hidden" data-i18n="install_app">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         </svg>
@@ -686,11 +703,11 @@
             clearTimers();
             // Warn 10s before expiry
             warningTimer = setTimeout(() => {
-                window.showNotification('Votre session va expirer dans 10 secondes. Vous serez déconnecté(e) bientôt.', 'warning');
+                window.showNotification(t('session_expiring'), 'warning');
             }, timeoutMs - warningMs);
             // Auto-logout at expiry (optional, comment if not wanted)
             logoutTimer = setTimeout(() => {
-                window.showNotification('Session expirée. Déconnexion...', 'error');
+                window.showNotification(t('session_expired'), 'error');
                 setTimeout(() => { window.handleLogout && window.handleLogout(); }, 2000);
             }, timeoutMs);
         }
@@ -702,6 +719,7 @@
 
         // Start timers on page load
         startSessionTimers();
+        applyTranslations('{{ current_language }}');
     })();
     </script>
     </html>
