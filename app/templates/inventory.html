@@ -1486,8 +1486,18 @@
         if (productId) {
             title.textContent = 'Modifier le Produit';
             await loadProductData(productId);
+            // Make currentStock field read-only and grey
+            const currentStockInput = document.getElementById('currentStock');
+            currentStockInput.readOnly = true;
+            currentStockInput.classList.remove('bg-white');
+            currentStockInput.classList.add('bg-gray-100', 'text-gray-500');
         } else {
             title.textContent = 'Ajouter un Produit';
+            // Make currentStock field editable and normal
+            const currentStockInput = document.getElementById('currentStock');
+            currentStockInput.readOnly = false;
+            currentStockInput.classList.remove('bg-gray-100', 'text-gray-500');
+            currentStockInput.classList.add('bg-white');
         }
 
         modal.classList.remove('hidden');
@@ -1737,12 +1747,19 @@
         const quantity = parseInt(document.getElementById('adjustmentQuantity').value);
         const reason = document.getElementById('adjustmentReason').value;
         const notes = document.getElementById('adjustmentNotes').value;
-        
+
         if (!quantity || quantity < 1) {
             showNotification('Veuillez entrer une quantité valide', 'error');
             return;
         }
-        
+
+        // Prevent multiple submissions
+        const saveBtn = document.querySelector('#stockAdjustmentModal button[type="button"][onclick^="submitStockAdjustment"]');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Enregistrement...';
+        }
+
         // Prepare data for API
         const data = {
             product_id: productId,
@@ -1751,17 +1768,17 @@
             reason: reason,
             notes: notes
         };
-        
+
         // Send to API
-    fetch('/api/inventory/adjust-stock', {
+        fetch('/api/inventory/adjust-stock', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Accept': 'application/json'
-        },
-        credentials: 'same-origin',
-        cache: 'no-store',
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store',
             body: JSON.stringify(data)
         })
         .then(response => response.json())
@@ -1772,11 +1789,19 @@
                 loadProducts(); // Reload products to show updated stock
             } else {
                 showNotification(result.message || 'Erreur lors de l\'ajustement du stock', 'error');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Enregistrer';
+                }
             }
         })
         .catch(error => {
             console.error('Error adjusting stock:', error);
             showNotification('Erreur de connexion', 'error');
+            if (saveBtn) {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Enregistrer';
+            }
         });
     }
     
