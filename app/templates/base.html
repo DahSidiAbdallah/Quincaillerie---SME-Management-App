@@ -309,7 +309,7 @@
                              class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
                             {% for lang_code, lang_name in supported_languages.items() %}
                             {% if lang_code != 'en' %}
-                            <button onclick="changeLanguage('{{ lang_code }}')"
+                            <button onclick="applyTranslations('{{ lang_code }}')"
                                class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 {{ 'bg-gray-100' if lang_code == current_language else '' }}">
                                 {{ lang_name }}
                             </button>
