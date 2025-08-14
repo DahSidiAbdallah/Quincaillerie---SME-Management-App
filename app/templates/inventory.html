@@ -487,8 +487,8 @@
                 
                 <div>
                     <label for="location" class="block text-sm font-medium text-gray-700">Emplacement</label>
-                    <input type="text" id="location" name="location" placeholder="Ex: A1, B2, Entrepôt..." 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+              <input type="text" id="depot" name="depot" placeholder="Ex: A1, B2, Entrepôt..." 
+                  class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
             </div>
             
@@ -1527,7 +1527,7 @@
             document.getElementById('productName').value = product.name;
             document.getElementById('productCode').value = product.code || '';
             document.getElementById('productCategory').value = product.category;
-            document.getElementById('productUnit').value = product.unit;
+            document.getElementById('productUnit').value = product.unit || '';
             document.getElementById('productDescription').value = product.description || '';
             document.getElementById('purchasePrice').value = product.purchase_price || '';
             document.getElementById('salePrice').value = product.sale_price;
@@ -1535,7 +1535,7 @@
             // Prefer reorder_level/min_stock_alert for min stock
             document.getElementById('minStockAlert').value = (product.reorder_level ?? product.min_stock_alert ?? 0);
             document.getElementById('supplier').value = product.supplier || '';
-            document.getElementById('location').value = product.location || '';
+            document.getElementById('depot').value = product.depot || product.location || '';
 
             calculateMargin();
         } catch (error) {
@@ -1877,7 +1877,7 @@
                                                 </div>
                                                 <div class="py-2 flex justify-between">
                                                     <dt class="text-sm font-medium text-gray-500">Emplacement</dt>
-                                                    <dd class="text-sm text-gray-900">${product.location || 'N/A'}</dd>
+                                                    <dd class="text-sm text-gray-900">${product.depot || product.location || 'N/A'}</dd>
                                                 </div>
                                             </dl>
                                         </div>

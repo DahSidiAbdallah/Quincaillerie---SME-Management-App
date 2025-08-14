@@ -194,13 +194,15 @@ def create_product():
         supplier = data.get('supplier', '')
         sku = data.get('sku') or data.get('code') or None
         barcode = data.get('barcode') or None
+        unit = data.get('unit') or None
+        depot = data.get('depot') or data.get('location') or None
 
         cursor.execute('''
             INSERT INTO products 
-            (name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, created_by, unit, depot)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, session['user_id']
+            name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, session['user_id'], unit, depot
         ))
 
         product_id = cursor.lastrowid
@@ -223,7 +225,9 @@ def create_product():
             'category': category,
             'supplier': supplier,
             'sku': sku,
-            'barcode': barcode
+            'barcode': barcode,
+            'unit': unit,
+            'depot': depot
         })
 
         return jsonify({'success': True, 'product_id': product_id, 'message': 'Produit créé avec succès'})
@@ -386,7 +390,7 @@ def update_product(product_id):
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
+
         # Get current product data for logging (handle optional is_active)
         cursor.execute('PRAGMA table_info(products)')
         _pcols = {row[1] for row in cursor.fetchall()}
@@ -419,7 +423,7 @@ def update_product(product_id):
             'sku': 'sku'
         }
         # Allowed direct fields
-        allowed = {'name', 'description', 'purchase_price', 'category', 'supplier', 'barcode'}
+        allowed = {'name', 'description', 'purchase_price', 'category', 'supplier', 'barcode', 'unit', 'depot'}
         updatable_fields = set(allowed) | set(mapping.keys())
 
         for field in data.keys():
@@ -433,35 +437,35 @@ def update_product(product_id):
                 values.append(int(data[field]))
             else:
                 values.append(data[field])
-        
+
         if update_fields:
             update_fields.append('updated_at = CURRENT_TIMESTAMP')
             values.append(product_id)
             query = f"UPDATE products SET {', '.join(update_fields)} WHERE id = ?"
             cursor.execute(query, values)
             conn.commit()
-            
+
             # Log the update
             db_manager.log_user_action(
                 session['user_id'],
                 'update_product',
                 f"Mise à jour produit: {old_product['name']}"
             )
-            
+
             # Add to sync queue
             db_manager.add_to_sync_queue('products', product_id, 'update', data)
-        
+
         return jsonify({'success': True, 'message': 'Produit mis à jour avec succès'})
-        
+
     except Exception as e:
         logger.error(f"Error updating product: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la mise à jour du produit'}), 500
     finally:
-        try:
-            if conn:
+        if conn:
+            try:
                 conn.close()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
 @inventory_bp.route('/products/<int:product_id>', methods=['DELETE'])
 def delete_product(product_id):
