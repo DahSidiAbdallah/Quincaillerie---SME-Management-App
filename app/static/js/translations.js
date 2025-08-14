@@ -87,6 +87,60 @@ window.translations = {
     inventory_history: "📜 Historique d'Inventaire",
     inventory_total_products: "Total Produits",
     sales_page_title: "Gestion des Ventes - SME Management",
+    sales_today: "Ventes Aujourd'hui",
+    sales_active_customers: "Clients Actifs",
+    sales_pending: "En Attente",
+    sales_monthly_revenue: "Revenus Mensuel",
+    sales_status_all: "Tous les statuts",
+    sales_status_paid: "Payé",
+    sales_status_pending: "En attente",
+    sales_status_retard: "Retard",
+    sales_status_cancelled: "Annulé",
+    sales_table_id: "ID",
+    sales_table_customer: "Client",
+    sales_table_date: "Date",
+    sales_table_amount: "Montant",
+    sales_table_payment_method: "Mode Paiement",
+    sales_table_status: "Statut",
+    sales_table_actions: "Actions",
+    sales_table_product: "Produit",
+    sales_table_quantity: "Quantité",
+    sales_table_unit_price: "Prix Unitaire",
+    sales_table_total: "Total",
+    sales_no_sales: "Aucune vente trouvée",
+    sales_form_customer: "Client",
+    sales_form_select_customer: "Sélectionner un client",
+    sales_browse_customers: "Parcourir les clients",
+    sales_form_payment_method: "Mode de Paiement",
+    sales_payment_cash: "Espèces",
+    sales_payment_card: "Carte",
+    sales_payment_check: "Chèque",
+    sales_payment_credit: "Crédit",
+    sales_form_due_date: "Date d'échéance",
+    sales_form_products: "Produits",
+    sales_form_select_product: "Sélectionner un produit",
+    sales_form_quantity: "Quantité",
+    sales_form_total: "Total:",
+    sales_cancel: "Annuler",
+    sales_create: "Créer la Vente",
+    sales_customer_list: "Liste des Clients",
+    sales_manage_customers: "Gérer les clients dans la page dédiée",
+    sales_search_customer_placeholder: "Rechercher un client (nom, téléphone)",
+    sales_customer_name: "Nom",
+    sales_customer_phone: "Téléphone",
+    sales_select: "Sélectionner",
+    sales_no_customers: "Aucun client",
+    sales_edit_sale: "Modifier la Vente",
+    sales_form_due_date_credit: "Date d'échéance (crédit)",
+    sales_form_notes: "Notes",
+    sales_save: "Enregistrer",
+    sales_view_sale: "Détails de la Vente",
+    sales_paid: "Payé:",
+    sales_credit_remaining: "Crédit restant:",
+    sales_delete_sale: "Supprimer la vente",
+    sales_delete_confirm: "Êtes-vous sûr de vouloir supprimer la vente ? Cette action va restaurer le stock.",
+    sales_delete: "Supprimer",
+    sales_mark_paid: "Marquer payé",
     sales_header: "Gestion des Ventes",
     sales_description: "Gérez vos transactions, clients et paiements",
     sales_new_sale: "Nouvelle Vente",
@@ -208,6 +262,60 @@ window.translations = {
     inventory_history: "📜 تاريخ المخزون",
     inventory_total_products: "إجمالي المنتجات",
     sales_page_title: "إدارة المبيعات - إدارة المتجر",
+    sales_today: "مبيعات اليوم",
+    sales_active_customers: "العملاء النشطون",
+    sales_pending: "قيد الانتظار",
+    sales_monthly_revenue: "الإيرادات الشهرية",
+    sales_status_all: "كل الحالات",
+    sales_status_paid: "مدفوع",
+    sales_status_pending: "قيد الانتظار",
+    sales_status_retard: "متأخر",
+    sales_status_cancelled: "ملغى",
+    sales_table_id: "المعرف",
+    sales_table_customer: "العميل",
+    sales_table_date: "التاريخ",
+    sales_table_amount: "المبلغ",
+    sales_table_payment_method: "طريقة الدفع",
+    sales_table_status: "الحالة",
+    sales_table_actions: "إجراءات",
+    sales_table_product: "المنتج",
+    sales_table_quantity: "الكمية",
+    sales_table_unit_price: "سعر الوحدة",
+    sales_table_total: "الإجمالي",
+    sales_no_sales: "لا توجد مبيعات",
+    sales_form_customer: "العميل",
+    sales_form_select_customer: "اختر عميلاً",
+    sales_browse_customers: "تصفح العملاء",
+    sales_form_payment_method: "طريقة الدفع",
+    sales_payment_cash: "نقداً",
+    sales_payment_card: "بطاقة",
+    sales_payment_check: "شيك",
+    sales_payment_credit: "ائتمان",
+    sales_form_due_date: "تاريخ الاستحقاق",
+    sales_form_products: "المنتجات",
+    sales_form_select_product: "اختر منتجاً",
+    sales_form_quantity: "الكمية",
+    sales_form_total: ":الإجمالي",
+    sales_cancel: "إلغاء",
+    sales_create: "إنشاء عملية البيع",
+    sales_customer_list: "قائمة العملاء",
+    sales_manage_customers: "إدارة العملاء في الصفحة المخصصة",
+    sales_search_customer_placeholder: "ابحث عن عميل (الاسم، الهاتف)",
+    sales_customer_name: "الاسم",
+    sales_customer_phone: "الهاتف",
+    sales_select: "اختيار",
+    sales_no_customers: "لا يوجد عملاء",
+    sales_edit_sale: "تعديل البيع",
+    sales_form_due_date_credit: "تاريخ الاستحقاق (ائتمان)",
+    sales_form_notes: "ملاحظات",
+    sales_save: "حفظ",
+    sales_view_sale: "تفاصيل البيع",
+    sales_paid: ":مدفوع",
+    sales_credit_remaining: ":المتبقي من الائتمان",
+    sales_delete_sale: "حذف البيع",
+    sales_delete_confirm: "هل أنت متأكد أنك تريد حذف عملية البيع؟ سيؤدي ذلك إلى استعادة المخزون.",
+    sales_delete: "حذف",
+    sales_mark_paid: "تحديد كمدفوع",
     sales_header: "إدارة المبيعات",
     sales_description: "إدارة المعاملات والزبناء والمدفوعات",
     sales_new_sale: "عملية بيع جديدة",
@@ -265,12 +373,23 @@ if (!document.getElementById('lang-loading-overlay')) {
     document.head.appendChild(style);
 }
 
-window.currentLang = document.documentElement.lang || 'fr';
+
+// Get language from localStorage if available, else from <html lang>, else default to 'fr'
+function getStoredLang() {
+    try {
+        const stored = localStorage.getItem('app_language');
+        if (stored && (stored === 'fr' || stored === 'ar')) return stored;
+    } catch (e) {}
+    return document.documentElement.lang || 'fr';
+}
+
+window.currentLang = getStoredLang();
 
 function t(key) {
     const langDict = window.translations[window.currentLang] || {};
     return langDict[key] || key;
 }
+
 
 function applyTranslations(lang) {
     // Show loading overlay
@@ -287,6 +406,10 @@ function applyTranslations(lang) {
     setTimeout(() => {
         if (lang) {
             window.currentLang = lang;
+            try { localStorage.setItem('app_language', lang); } catch (e) {}
+        } else {
+            // If no lang provided, use stored or default
+            window.currentLang = getStoredLang();
         }
         const dir = window.currentLang === 'ar' ? 'rtl' : 'ltr';
         document.documentElement.setAttribute('lang', window.currentLang);

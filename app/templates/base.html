@@ -206,6 +206,16 @@
                 }
             } catch (e) { /* no-op */ }
         })();
+        // Apply stored language ASAP to avoid flash of wrong language
+        (function() {
+            try {
+                var lang = localStorage.getItem('app_language');
+                if (lang && (lang === 'fr' || lang === 'ar')) {
+                    document.documentElement.setAttribute('lang', lang);
+                    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+                }
+            } catch (e) {}
+        })();
     </script>
 </head>
 <body class="bg-gray-50 min-h-screen" dir="{{ 'rtl' if current_language == 'ar' else 'ltr' }}">

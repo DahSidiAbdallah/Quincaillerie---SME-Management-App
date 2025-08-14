@@ -5,6 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="login_page_title">Connexion - SME Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // Apply stored language ASAP to avoid flash of wrong language
+        (function() {
+            try {
+                var lang = localStorage.getItem('app_language');
+                if (lang && (lang === 'fr' || lang === 'ar')) {
+                    document.documentElement.setAttribute('lang', lang);
+                    document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+                }
+            } catch (e) {}
+        })();
+    </script>
     <script src="{{ url_for('static', filename='js/translations.js') }}"></script>
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     <link rel="manifest" href="{{ url_for('serve_manifest_file') }}">
