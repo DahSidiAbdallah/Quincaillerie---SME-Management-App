@@ -170,13 +170,26 @@ def create_product():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
+        # Helper to safely parse numbers
+        def safe_float(val, default=0.0):
+            try:
+                return float(val)
+            except (TypeError, ValueError):
+                return default
+
+        def safe_int(val, default=0):
+            try:
+                return int(val)
+            except (TypeError, ValueError):
+                return default
+
         # Map incoming fields to schema
         name = data['name']
         description = data.get('description', '')
-        purchase_price = float(data.get('purchase_price') or 0)
-        selling_price = float(data.get('sale_price') or data.get('selling_price') or 0)
-        current_stock = int(data.get('current_stock') or 0)
-        reorder_level = int(data.get('min_stock') or data.get('min_stock_alert') or data.get('reorder_level') or 5)
+        purchase_price = safe_float(data.get('purchase_price'))
+        sale_price = safe_float(data.get('sale_price') or data.get('selling_price'))
+        current_stock = safe_int(data.get('current_stock'))
+        reorder_level = safe_int(data.get('min_stock_alert') or data.get('reorder_level'), 5)
         category = data.get('category', '')
         supplier = data.get('supplier', '')
         sku = data.get('sku') or data.get('code') or None
@@ -184,10 +197,10 @@ def create_product():
 
         cursor.execute('''
             INSERT INTO products 
-            (name, description, purchase_price, selling_price, sku, barcode, category, supplier, current_stock, reorder_level, min_order_quantity, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+            (name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            name, description, purchase_price, selling_price, sku, barcode, category, supplier, current_stock, reorder_level, session['user_id']
+            name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, session['user_id']
         ))
 
         product_id = cursor.lastrowid
@@ -204,7 +217,7 @@ def create_product():
         db_manager.add_to_sync_queue('products', product_id, 'insert', {
             'name': name,
             'purchase_price': purchase_price,
-            'selling_price': selling_price,
+            'sale_price': sale_price,
             'current_stock': current_stock,
             'reorder_level': reorder_level,
             'category': category,
@@ -217,13 +230,14 @@ def create_product():
 
     except Exception as e:
         logger.error(f"Error creating product: {e}")
-        return jsonify({'success': False, 'message': 'Erreur lors de la création du produit'}), 500
+        # TEMP: Return full error for debugging
+        return jsonify({'success': False, 'message': 'Erreur lors de la création du produit', 'details': str(e)}), 500
     finally:
-        try:
-            if conn:
+        if conn:
+            try:
                 conn.close()
-        except Exception:
-            pass
+            except Exception:
+                pass
 
 @inventory_bp.route('/products/<int:product_id>', methods=['GET'])
 def get_product(product_id):

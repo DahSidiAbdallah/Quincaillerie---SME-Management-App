@@ -44,7 +44,7 @@
     </div>
 
     <!-- Dashboard Summary Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow p-6">
             <div class="flex items-center">
                 <div class="flex-shrink-0">
@@ -64,6 +64,18 @@
                 <div class="ml-4 flex-1">
                     <h3 class="text-sm font-medium text-gray-500">Stock Faible</h3>
                     <p class="text-2xl font-bold text-gray-900" id="lowStockCount">{{ low_stock_items|length or '0' }}</p>
+                </div>
+            </div>
+        </div>
+         <!-- Rupture (Out of Stock) Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-ban text-2xl text-gray-600"></i>
+                </div>
+                <div class="ml-4 flex-1">
+                    <h3 class="text-sm font-medium text-gray-500">Rupture</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="outOfStockCount">{{ out_of_stock_products or '0' }}</p>
                 </div>
             </div>
         </div>
@@ -89,6 +101,7 @@
                 </div>
             </div>
         </div>
+       
     </div>
 
     <!-- Charts Section -->
@@ -573,6 +586,7 @@
 
     // Load AI insights data
     async function loadAIInsights() {
+        // Sales forecast
         try {
             const forecastData = await apiFetch('/api/ai/sales-forecast');
             if (forecastData.success && forecastData.forecast && forecastData.forecast.summary) {
@@ -588,10 +602,16 @@
             }
         }
 
+        // Restock suggestions (count only actionable)
         try {
             const restockData = await apiFetch('/api/ai/restock-suggestions');
             if (restockData.success) {
-                document.getElementById('restockText').textContent = `${restockData.suggestions.length} produits recommandés`;
+                // Only count suggestions that are not accepted/rejected if such a field exists, else show all
+                let actionable = restockData.suggestions;
+                if (Array.isArray(actionable)) {
+                    actionable = actionable.filter(s => !s.accepted && !s.rejected);
+                }
+                document.getElementById('restockText').textContent = `${actionable.length} produits recommandés`;
             } else {
                 document.getElementById('restockText').textContent = 'Indisponible';
             }
@@ -603,10 +623,16 @@
             }
         }
 
+        // Price suggestions (count only actionable)
         try {
             const priceData = await apiFetch('/api/ai/price-suggestions');
             if (priceData.success) {
-                document.getElementById('pricingText').textContent = `${priceData.suggestions.length} produits à ajuster`;
+                // Only count suggestions where suggested_price != current_price
+                let actionable = priceData.suggestions;
+                if (Array.isArray(actionable)) {
+                    actionable = actionable.filter(s => s.suggested_price != s.current_price);
+                }
+                document.getElementById('pricingText').textContent = `${actionable.length} produits à ajuster`;
             } else {
                 document.getElementById('pricingText').textContent = 'Indisponible';
             }

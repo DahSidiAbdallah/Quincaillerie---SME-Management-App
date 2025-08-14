@@ -484,6 +484,7 @@
             </div>
         </div>
     <!-- Toasts (inside same Alpine scope) -->
+    <!-- Toasts (inside same Alpine scope) - notification history UI removed as requested -->
     <div class="fixed top-4 right-4 space-y-2 z-[60]">
         <template x-for="t in toasts" :key="t.id">
             <div class="px-4 py-3 rounded shadow text-white"
@@ -499,22 +500,7 @@
                 </div>
             </div>
         </template>
-        <button @click="showLog = !showLog" class="mt-2 px-3 py-1 bg-gray-700 text-white rounded text-xs">Voir l'historique</button>
-        <div x-show="showLog" class="absolute right-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white text-gray-800 rounded shadow-lg z-50 border border-gray-200">
-            <div class="p-2 font-bold border-b">Historique des notifications</div>
-            <template x-for="t in notificationLog" :key="t.id">
-                <div class="px-3 py-2 border-b last:border-b-0 flex items-center gap-2">
-                    <i class="fas" :class="{
-                        'fa-check-circle text-green-600': t.type==='success',
-                        'fa-exclamation-triangle text-yellow-600': t.type==='warning',
-                        'fa-times-circle text-red-600': t.type==='error',
-                        'fa-info-circle text-blue-600': t.type==='info'
-                    }"></i>
-                    <span x-text="t.message"></span>
-                    <span class="ml-auto text-xs text-gray-400" x-text="new Date(t.id).toLocaleTimeString('fr-FR')"></span>
-                </div>
-            </template>
-        </div>
+        <!-- Notification history button and log removed -->
     </div>
     </main>
 {% endblock %}

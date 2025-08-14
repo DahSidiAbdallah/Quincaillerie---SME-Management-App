@@ -54,12 +54,7 @@
                         <span class="font-medium">Rapport Financier</span>
                     </button>
                     
-                    <button @click="setActiveReport('customers')" 
-                            :class="activeReport === 'customers' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
-                        <i class="fas fa-users text-2xl mb-2"></i>
-                        <span class="font-medium">Rapport Clients</span>
-                    </button>
+
 
                     <button @click="setActiveReport('activities')" 
                             :class="activeReport === 'activities' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
@@ -108,10 +103,13 @@
                     </div>
                     
                     <div class="flex items-end">
-                        <button @click="generateReport()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
-                            <i class="fas fa-chart-bar mr-2"></i>
-                            Générer Rapport
-                        </button>
+                <button @click="generateReport()" :disabled="isLoading" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <template x-if="isLoading">
+                        <svg class="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
+                    </template>
+                    <i class="fas fa-chart-bar mr-2" x-show="!isLoading"></i>
+                    <span x-text="isLoading ? 'Chargement...' : 'Générer Rapport'"></span>
+                </button>
                     </div>
                 </div>
             </div>
@@ -173,11 +171,11 @@
             <!-- Sales Chart -->
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Évolution des Ventes</h3>
-                <div class="h-80 relative">
+                <template x-if="!hasSalesData && !isLoading">
+                    <div class="h-80 flex items-center justify-center text-gray-400 text-lg">Aucune donnée à afficher</div>
+                </template>
+                <div class="h-80 relative" x-show="hasSalesData">
                     <canvas id="salesChart"></canvas>
-                    <div x-show="reportData.sales && reportData.sales.total_sales === 0" class="absolute inset-0 flex items-center justify-center text-gray-400 text-lg bg-white bg-opacity-80">
-                        Aucune donnée à afficher
-                    </div>
                 </div>
             </div>
 
@@ -198,9 +196,9 @@
                             <template x-for="(product, idx) in reportData.sales.top_products" :key="idx">
                                 <tr>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="product.name || '-' "></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.quantity ?? 0"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.formatCurrency ? window.formatCurrency(product.revenue) : ((product.revenue ?? 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="(product.percentage ?? 0) + '%'" ></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.total_quantity ?? 0"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.formatCurrency ? window.formatCurrency(product.total_profit) : ((product.total_profit ?? 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="reportData.sales.revenue > 0 ? ((product.total_profit / reportData.sales.revenue * 100).toFixed(0) + '%') : '0%'" ></td>
                                 </tr>
                             </template>
                             <tr x-show="!reportData.sales.top_products || reportData.sales.top_products.length === 0">
@@ -220,7 +218,7 @@
                     <button @click="loadActivities()" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
                 </div>
                 <div class="space-y-3">
-                    <template x-for="act in activities" :key="act.title + act.time_ago + act.user">
+                    <template x-for="(act, idx) in activities" :key="act.id ?? idx">
                         <div class="flex items-start space-x-3 p-3 rounded border border-gray-100">
                             <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                                  :class="{
@@ -247,23 +245,73 @@
         <div x-show="activeReport === 'ai_insights'" class="space-y-4">
             <div class="bg-white rounded-lg shadow p-6">
                 <h3 class="text-lg font-medium text-gray-900 mb-4">Résumé IA</h3>
-                <p class="text-gray-700" x-text="ai.summary || 'Chargement du résumé...' "></p>
+                <template x-if="ai.summaryError">
+                    <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
+                        <span class="mr-2">Erreur lors du chargement du résumé IA.</span>
+                        <button @click="loadAI()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
+                    </div>
+                </template>
+                <p class="text-gray-700" x-text="ai.summary || (ai.summaryError ? '' : 'Chargement du résumé...')"></p>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-white rounded-lg shadow p-6">
                     <h4 class="font-semibold text-gray-900 mb-1">Prédiction de ventes</h4>
-                    <p class="text-sm text-gray-600">Prévisions pour les prochains jours</p>
-                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.forecastDays + ' jours'"></p>
+                    <template x-if="ai.forecastError">
+                        <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
+                            <span class="mr-2">Erreur lors du chargement de la prévision de ventes.</span>
+                            <button @click="loadAI()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
+                        </div>
+                    </template>
+                    <p class="text-sm text-gray-600">Prévision sur <span x-text="ai.forecastDays"></span> jours</p>
+                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.forecastSummary || 'Chargement...' "></p>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <h4 class="font-semibold text-gray-900 mb-1">Produits à réapprovisionner</h4>
                     <p class="text-sm text-gray-600">Basé sur la demande et le stock</p>
-                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.restockCount"></p>
+                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.restockSuggestions.length" id="forecastText">...></p>
+                    <button @click="ai.showRestock = !ai.showRestock" class="mt-2 text-blue-600 underline text-sm">Voir les suggestions</button>
+                    <div x-show="ai.showRestock" class="mt-2">
+                        <template x-if="ai.restockError">
+                            <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
+                                <span class="mr-2">Erreur lors du chargement des suggestions de réapprovisionnement.</span>
+                                <button @click="loadRestockSuggestions()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
+                            </div>
+                        </template>
+                        <ul>
+                            <template x-for="(sugg, idx) in ai.restockSuggestions" :key="sugg.id ?? idx">
+                                <li class="mb-1 flex items-center justify-between">
+                                    <span x-text="sugg.product_name"></span>
+                                    <button class="ml-2 bg-green-500 text-white px-2 py-1 rounded text-xs" @click="acceptRestockSuggestion(sugg)">Accepter</button>
+                                    <button class="ml-2 bg-gray-400 text-white px-2 py-1 rounded text-xs" @click="rejectRestockSuggestion(sugg)">Rejeter</button>
+                                </li>
+                            </template>
+                            <li x-show="ai.restockSuggestions.length === 0 && !ai.restockError" class="text-gray-400 text-xs">Aucune suggestion</li>
+                        </ul>
+                    </div>
                 </div>
                 <div class="bg-white rounded-lg shadow p-6">
                     <h4 class="font-semibold text-gray-900 mb-1">Ajustements de prix suggérés</h4>
                     <p class="text-sm text-gray-600">Optimisation des marges</p>
-                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.pricingCount"></p>
+                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.priceSuggestions.length"></p>
+                    <button @click="ai.showPrice = !ai.showPrice" class="mt-2 text-blue-600 underline text-sm">Voir les suggestions</button>
+                    <div x-show="ai.showPrice" class="mt-2">
+                        <template x-if="ai.priceError">
+                            <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
+                                <span class="mr-2">Erreur lors du chargement des suggestions de prix.</span>
+                                <button @click="loadPriceSuggestions()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
+                            </div>
+                        </template>
+                        <ul>
+                            <template x-for="(sugg, idx) in ai.priceSuggestions" :key="sugg.id ?? idx">
+                                <li class="mb-1 flex items-center justify-between">
+                                    <span x-text="sugg.product_name + ': ' + sugg.suggested_price + ' ' + (window.AppConfig?.currentCurrency || 'MRU')"></span>
+                                    <button class="ml-2 bg-green-500 text-white px-2 py-1 rounded text-xs" @click="acceptPriceSuggestion(sugg)">Accepter</button>
+                                    <button class="ml-2 bg-gray-400 text-white px-2 py-1 rounded text-xs" @click="rejectPriceSuggestion(sugg)">Rejeter</button>
+                                </li>
+                            </template>
+                            <li x-show="ai.priceSuggestions.length === 0 && !ai.priceError" class="text-gray-400 text-xs">Aucune suggestion</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
@@ -322,22 +370,22 @@
         </div>
 
         <!-- Export Options -->
-        <div class="bg-white rounded-lg shadow p-6 mt-8">
+    <div class="bg-white rounded-lg shadow p-6 mt-8" x-show="canExport">
             <h3 class="text-lg font-medium text-gray-900 mb-4">Options d'Export</h3>
             <div class="flex flex-wrap gap-4">
-                <button @click="exportToPDF()" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <button @click="exportToPDF()" :disabled="!canExport" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
                     <i class="fas fa-file-pdf mr-2"></i>
                     Exporter PDF
                 </button>
-                <button @click="exportToExcel()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <button @click="exportToExcel()" :disabled="!canExport" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
                     <i class="fas fa-file-excel mr-2"></i>
                     Exporter Excel
                 </button>
-                <button @click="exportToCSV()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <button @click="exportToCSV()" :disabled="!canExport" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
                     <i class="fas fa-file-csv mr-2"></i>
                     Exporter CSV
                 </button>
-                <button @click="scheduleReport()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <button @click="scheduleReport()" :disabled="!canExport" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
                     <i class="fas fa-clock mr-2"></i>
                     Programmer Rapport
                 </button>
@@ -360,15 +408,47 @@
 {% block extra_scripts %}
     <script>
     function reportsManager() {
-            return {
-        activeReport: 'sales',
-                filters: {
-                    period: 'month',
-                    start_date: '',
-                    end_date: ''
-                },
-        activities: [],
-        ai: { summary: '', restockCount: 0, pricingCount: 0, forecastDays: 7 },
+    console.log('reportsManager initialized');
+    return {
+        get canExport() {
+            // Only allow export for supported tabs: sales, inventory, financial
+            return ['sales', 'inventory', 'financial'].includes(this.activeReport);
+        },
+            updateSalesChart(labels, amounts) {
+                // Only update if chart is initialized and datasets exist
+                if (this.salesChart && this.salesChart.data && Array.isArray(this.salesChart.data.datasets) && this.salesChart.data.datasets[0]) {
+                    this.salesChart.data.labels = labels;
+                    this.salesChart.data.datasets[0].data = amounts;
+                    try {
+                        this.salesChart.update();
+                    } catch (e) {
+                        console.error('Chart update error:', e);
+                    }
+                }
+            },
+            activeReport: 'sales',
+            filters: {
+                period: 'today',
+                start_date: '',
+                end_date: ''
+            },
+            prevPeriod: 'today', // Track previous period for x-effect
+            isLoading: false, // For loading spinner
+            hasSalesData: false, // For chart and message visibility
+            activities: [],
+            ai: {
+                summary: '',
+                summaryError: false,
+                restockSuggestions: [],
+                restockError: false,
+                priceSuggestions: [],
+                priceError: false,
+                forecastDays: 7,
+                forecastSummary: '',
+                forecastError: false,
+                showRestock: false,
+                showPrice: false
+            },
                 reportData: {
                     sales: {
                         total_sales: 0,
@@ -392,50 +472,63 @@
                 salesChart: null,
                 
                 init() {
-                    // Honor ?tab=... query parameter for deep links
-                    const params = new URLSearchParams(window.location.search);
-                    const tab = params.get('tab');
-                    if (tab && ['sales','inventory','financial','customers','activities','ai_insights'].includes(tab)) {
-                        this.activeReport = tab;
-                    }
+            // Remove watcher to prevent infinite loop
+            // Honor ?tab=... query parameter for deep links
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            if (tab && ['sales','inventory','financial','customers','activities','ai_insights'].includes(tab)) {
+                this.activeReport = tab;
+            }
 
-                    // Set default date range to current day to match sales page initially
-                    this.filters.period = 'today';
-                    const now = new Date();
-                    this.filters.start_date = now.toISOString().split('T')[0];
-                    this.filters.end_date = now.toISOString().split('T')[0];
-                    
-                    this.loadReportData().then(() => {
-                        if (this.activeReport === 'sales') {
-                            this.initCharts();
-                        }
-                        if (this.activeReport === 'activities') this.loadActivities();
-                        if (this.activeReport === 'ai_insights') this.loadAI();
-                    });
+            // Only set default period if not already set (preserve custom)
+            if (!this.filters.period) {
+                this.filters.period = 'today';
+            }
+            // Only set default dates if not custom
+            if (this.filters.period !== 'custom') {
+                const now = new Date();
+                this.filters.start_date = now.toISOString().split('T')[0];
+                this.filters.end_date = now.toISOString().split('T')[0];
+            }
+
+            this.loadReportData().then(() => {
+                if (this.activeReport === 'sales') {
+                    this.initCharts();
+                }
+                if (this.activeReport === 'activities') this.loadActivities();
+                if (this.activeReport === 'ai_insights') this.loadAI();
+            });
                 },
 
                 setActiveReport(type) {
-    if (this.salesChart && typeof this.salesChart.destroy === 'function') {
-        this.salesChart.destroy();
-        this.salesChart = null;
-    }
-    this.activeReport = type;
-    this.loadReportData().then(() => {
-        if (type === 'sales') {
-            this.initCharts();
-        }
-    });
+            if (this.salesChart && typeof this.salesChart.destroy === 'function') {
+                this.salesChart.destroy();
+                this.salesChart = null;
+            }
+            this.activeReport = type;
+            // Do not reset custom date range when switching tabs
+            this.loadReportData().then(() => {
+                if (type === 'sales') {
+                    this.initCharts();
+                }
+            });
 },
                 
                 loadReportData() {
-                    // Get date range based on selected period
-                    let dateParams = this.getDateRangeParams();
-                    const tasks = [];
+            console.log('loadReportData called, activeReport:', this.activeReport);
+            this.isLoading = true;
+            // Get date range based on selected period
+            let dateParams = this.getDateRangeParams();
+            const tasks = [];
 
-                    if (this.activeReport === 'sales') {
-                        tasks.push(
+            if (this.activeReport === 'sales') {
+                const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
+                    ? `${this.filters.start_date} au ${this.filters.end_date}`
+                    : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
+                tasks.push(
                             apiFetch(`/api/reports/sales-report?start_date=${dateParams.startDate}&end_date=${dateParams.endDate}`)
                                 .then(data => {
+                                    console.log('DEBUG sales report:', data);
                                     if (data.success) {
                                         const stats = data.report.overall_statistics;
                                         const periods = data.report.sales_by_period || [];
@@ -451,31 +544,16 @@
                                             revenue: stats.total_revenue || 0,
                                             average_sale: stats.avg_sale_amount || 0,
                                             best_day: bestDay,
-                                            top_products: data.report.top_products || []
+                                            top_products: data.report.top_products || [],
+                                            sales_by_period: data.report.sales_by_period || []
                                         };
                                         const dataSourceElement = document.getElementById('data-source-info');
                                         if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${data.report.metadata?.date_range || 'Période personnalisée'}`;
+                                            dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${dateLabel}`;
                                         }
                                         let labels = (data.report.sales_by_period || []).map(p => p.period);
                                         let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
-                                        if (labels.length === 0) {
-                                            labels = ['Aucune donnée'];
-                                            amounts = [0];
-                                        }
-                                        if (
-                                            this.salesChart &&
-                                            this.salesChart.data &&
-                                            Array.isArray(this.salesChart.data.datasets) &&
-                                            this.salesChart.data.datasets[0]
-                                        ) {
-                                            this.salesChart.data.labels = labels;
-                                            this.salesChart.data.datasets[0].data = amounts;
-                                            this.salesChart.data.datasets[0].label = `Ventes (${window.AppConfig?.currentCurrency || 'MRU'}) - ${this.filters.period === 'today' ? 'Aujourd\'hui' : this.filters.period === 'week' ? '7 derniers jours' : this.filters.period === 'month' ? 'Ce mois' : 'Période sélectionnée'}`;
-                                            this.salesChart.update();
-                                        } else {
-                                            this.$nextTick(() => { this.initCharts(); });
-                                        }
+                                        this.updateSalesChart(labels, amounts);
                                     }
                                 })
                                 .catch(error => {
@@ -488,6 +566,9 @@
                     }
 
                     if (this.activeReport === 'inventory') {
+                        const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
+                            ? `${this.filters.start_date} au ${this.filters.end_date}`
+                            : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
                         tasks.push(
                             apiFetch('/api/inventory/stats')
                                 .then(data => {
@@ -500,7 +581,7 @@
                                         };
                                         const dataSourceElement = document.getElementById('data-source-info');
                                         if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Données d'inventaire en temps réel - Source: ${data.metadata?.source || 'inventory/stats'}`;
+                                            dataSourceElement.textContent = `Données d'inventaire - ${dateLabel}`;
                                         }
                                     }
                                 })
@@ -514,6 +595,9 @@
                     }
 
                     if (this.activeReport === 'financial') {
+                        const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
+                            ? `${this.filters.start_date} au ${this.filters.end_date}`
+                            : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
                         tasks.push(
                             apiFetch('/api/finance/financial-summary')
                                 .then(data => {
@@ -528,7 +612,7 @@
                                         };
                                         const dataSourceElement = document.getElementById('data-source-info');
                                         if (dataSourceElement) {
-                                            dataSourceElement.textContent = 'Résumé financier cumulatif';
+                                            dataSourceElement.textContent = `Résumé financier - ${dateLabel}`;
                                         }
                                     }
                                 })
@@ -541,10 +625,12 @@
                         );
                     }
 
-                    return Promise.all(tasks).finally(() => {
-                        if (this.activeReport === 'activities') this.loadActivities();
-                        if (this.activeReport === 'ai_insights') this.loadAI();
-                    });
+            return Promise.all(tasks)
+                .finally(() => {
+                    if (this.activeReport === 'activities') this.loadActivities();
+                    if (this.activeReport === 'ai_insights') this.loadAI();
+                    this.isLoading = false;
+                });
                 },
                 loadActivities() {
                         apiFetch('/api/dashboard/activities?limit=50')
@@ -567,30 +653,131 @@
                             });
                 },
                 loadAI() {
+                    // Sales forecast summary (expected revenue)
+                    this.ai.forecastError = false;
+                    apiFetch('/api/ai/sales-forecast')
+                        .then(d => {
+                            if (d?.success && d.forecast && d.forecast.summary) {
+                                this.ai.forecastSummary = d.forecast.summary;
+                                this.ai.forecastDays = d.forecast.days || 7;
+                            } else {
+                                this.ai.forecastSummary = '';
+                                this.ai.forecastError = true;
+                            }
+                        })
+                        .catch(()=>{ this.ai.forecastError = true; });
                     // Summary
+                    this.ai.summaryError = false;
                     apiFetch('/api/ai/summary-assistant?period=week')
-                        .then(d => { if (d?.success) this.ai.summary = d.summary?.text || ''; })
-                        .catch(()=>{
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Erreur lors du chargement du résumé IA.', 'error');
-                            }
-                        });
-                    // Restock count
+                        .then(d => { if (d?.success) this.ai.summary = d.summary?.text || ''; else this.ai.summaryError = true; })
+                        .catch(()=>{ this.ai.summaryError = true; });
+                    // Restock suggestions
+                    this.loadRestockSuggestions();
+                    // Price suggestions
+                    this.loadPriceSuggestions();
+                },
+                loadRestockSuggestions() {
+                    this.ai.restockError = false;
                     apiFetch('/api/ai/restock-suggestions')
-                        .then(d => { if (d?.success) this.ai.restockCount = (d.suggestions||[]).length; })
-                        .catch(()=>{
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Erreur lors du chargement des suggestions de réapprovisionnement.', 'error');
-                            }
-                        });
-                    // Pricing count
+                        .then(d => { if (d?.success) this.ai.restockSuggestions = d.suggestions || []; else this.ai.restockError = true; })
+                        .catch(()=>{ this.ai.restockError = true; });
+                },
+                loadPriceSuggestions() {
+                    this.ai.priceError = false;
                     apiFetch('/api/ai/price-suggestions')
-                        .then(d => { if (d?.success) this.ai.pricingCount = (d.suggestions||[]).length; })
-                        .catch(()=>{
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Erreur lors du chargement des suggestions de prix.', 'error');
+                        .then(d => {
+                            if (d?.success) {
+                                this.ai.priceSuggestions = (d.suggestions || []).filter(s => s.suggested_price != s.current_price);
+                            } else {
+                                this.ai.priceError = true;
                             }
+                        })
+                        .catch(()=>{ this.ai.priceError = true; });
+                },
+                async acceptRestockSuggestion(sugg) {
+                    try {
+                        const resp = await apiFetch('/api/ai/restock-suggestions/accept', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: sugg.id })
                         });
+                        if (resp.success) {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Suggestion de réapprovisionnement acceptée.', 'success');
+                            }
+                            // Remove from list
+                            this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s => s.id !== sugg.id);
+                        } else {
+                            throw new Error(resp.message || 'Erreur inconnue');
+                        }
+                    } catch (e) {
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('Erreur lors de l\'acceptation: ' + (e.message || e), 'error');
+                        }
+                    }
+                },
+                async rejectRestockSuggestion(sugg) {
+                    try {
+                        const resp = await apiFetch('/api/ai/restock-suggestions/reject', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: sugg.id })
+                        });
+                        if (resp.success) {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Suggestion de réapprovisionnement rejetée.', 'info');
+                            }
+                            this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s => s.id !== sugg.id);
+                        } else {
+                            throw new Error(resp.message || 'Erreur inconnue');
+                        }
+                    } catch (e) {
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('Erreur lors du rejet: ' + (e.message || e), 'error');
+                        }
+                    }
+                },
+                async acceptPriceSuggestion(sugg) {
+                    try {
+                        const resp = await apiFetch('/api/ai/price-suggestions/accept', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: sugg.id })
+                        });
+                        if (resp.success) {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Suggestion de prix acceptée.', 'success');
+                            }
+                            this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s => s.id !== sugg.id);
+                        } else {
+                            throw new Error(resp.message || 'Erreur inconnue');
+                        }
+                    } catch (e) {
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('Erreur lors de l\'acceptation: ' + (e.message || e), 'error');
+                        }
+                    }
+                },
+                async rejectPriceSuggestion(sugg) {
+                    try {
+                        const resp = await apiFetch('/api/ai/price-suggestions/reject', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: sugg.id })
+                        });
+                        if (resp.success) {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Suggestion de prix rejetée.', 'info');
+                            }
+                            this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s => s.id !== sugg.id);
+                        } else {
+                            throw new Error(resp.message || 'Erreur inconnue');
+                        }
+                    } catch (e) {
+                        if (typeof window.showNotification === 'function') {
+                            window.showNotification('Erreur lors du rejet: ' + (e.message || e), 'error');
+                        }
+                    }
                 },
                 
                 initCharts() {
@@ -598,15 +785,25 @@
                     const salesCtx = document.getElementById('salesChart');
                     if (salesCtx) {
                         if (this.salesChart && typeof this.salesChart.destroy === 'function') {
-            this.salesChart.destroy();
-        }
+                            this.salesChart.destroy();
+                        }
+                        // Use last loaded data if available
+                        let labels = [];
+                        let amounts = [];
+                        if (this.reportData && this.reportData.sales && Array.isArray(this.reportData.sales.top_products)) {
+                            // If sales_by_period is available, use it for the chart
+                            if (Array.isArray(this.reportData.sales.sales_by_period)) {
+                                labels = this.reportData.sales.sales_by_period.map(p => p.period);
+                                amounts = this.reportData.sales.sales_by_period.map(p => p.total_revenue);
+                            }
+                        }
                         this.salesChart = new Chart(salesCtx.getContext('2d'), {
                             type: 'line',
                             data: {
-                                labels: [],
+                                labels: labels,
                                 datasets: [{
                                     label: `Ventes (${window.AppConfig?.currentCurrency || 'MRU'})`,
-                                    data: [],
+                                    data: amounts,
                                     borderColor: 'rgb(59, 130, 246)',
                                     backgroundColor: 'rgba(59, 130, 246, 0.1)',
                                     tension: 0.4,
@@ -630,6 +827,12 @@
                                     legend: {
                                         display: true,
                                         position: 'top'
+                                    },
+                                    title: {
+                                        display: true,
+                                        text: 'Évolution des ventes',
+                                        font: { size: 18 },
+                                        padding: { top: 10, bottom: 20 }
                                     }
                                 }
                             }
@@ -696,6 +899,14 @@
                 },
                 
                 generateReport() {
+                    if (this.filters.period === 'custom') {
+                        if (!this.filters.start_date || !this.filters.end_date || this.filters.start_date > this.filters.end_date) {
+                            if (typeof window.showNotification === 'function') {
+                                window.showNotification('Veuillez sélectionner une période personnalisée valide (date de début avant date de fin).', 'error');
+                            }
+                            return;
+                        }
+                    }
                     if (typeof window.showNotification === 'function') {
                         window.showNotification(`Génération du rapport ${this.activeReport} pour la période ${this.filters.period}...`, 'info');
                     }
@@ -732,12 +943,6 @@
                             break;
                         case 'financial':
                             endpoint = '/api/reports/export/expenses';
-                            break;
-                        case 'customers':
-                            endpoint = '/api/reports/export/customers';
-                            break;
-                        case 'ai_insights':
-                            endpoint = '/api/reports/export/ai_insights';
                             break;
                         default:
                             endpoint = '/api/reports/export/sales';

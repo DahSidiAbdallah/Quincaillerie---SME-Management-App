@@ -426,7 +426,8 @@ def dashboard():
                 'cash_balance': cash_balance,
                 'recent_activities': recent_activities,
                 'top_selling_products': top_selling_products,
-                'sales_chart_data': sales_chart_data
+                'sales_chart_data': sales_chart_data,
+                'out_of_stock_products': inv_stats.get('out_of_stock', 0)
             }
             
             # Add AI predictions if available
@@ -537,6 +538,7 @@ def inventory():
             'total_products': inventory_stats.get('total', 0),
             'in_stock_products': inventory_stats.get('total', 0) - inventory_stats.get('out_of_stock', 0),
             'low_stock_products': inventory_stats.get('low_stock', 0),
+            'out_of_stock_products': inventory_stats.get('out_of_stock', 0),
             # Pass numeric; template formatter will render currency
             'stock_value': inventory_stats.get('inventory_value', 0),
             'categories': inventory_stats.get('categories', []),

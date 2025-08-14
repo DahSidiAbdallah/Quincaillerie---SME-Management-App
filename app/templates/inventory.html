@@ -178,7 +178,7 @@
     </div>
     
     <!-- Quick Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
         <div class="bg-white rounded-lg shadow p-6">
             <div class="flex items-center">
                 <div class="flex-shrink-0">
@@ -226,6 +226,22 @@
                 </div>
             </div>
         </div>
+        <!-- Rupture (Out of Stock) Card -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <div class="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414-1.414A9 9 0 105.636 18.364l1.414 1.414A9 9 0 1018.364 5.636z"></path>
+                        </svg>
+                    </div>
+                </div>
+                <div class="ml-4">
+                    <p class="text-sm font-medium text-gray-500">Rupture</p>
+                    <p class="text-2xl font-semibold text-gray-900" id="outOfStockProducts">{{ out_of_stock_products or '0' }}</p>
+                </div>
+            </div>
+        </div>
         
         <div class="bg-white rounded-lg shadow p-6">
             <div class="flex items-center">
@@ -242,6 +258,8 @@
                 </div>
             </div>
         </div>
+
+        
     </div>
     
     <!-- Search and Filters -->
@@ -452,18 +470,12 @@
                     <input type="number" id="currentStock" name="current_stock" min="0" required 
                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
-                
                 <div>
-                    <label for="minStock" class="block text-sm font-medium text-gray-700">Stock Minimum</label>
-                    <input type="number" id="minStock" name="min_stock" min="0" 
+                    <label for="minStockAlert" class="block text-sm font-medium text-gray-700">Seuil d'alerte *</label>
+                    <input type="number" id="minStockAlert" name="min_stock_alert" min="0" required
                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
                 </div>
-                
-                <div>
-                    <label for="maxStock" class="block text-sm font-medium text-gray-700">Stock Maximum</label>
-                    <input type="number" id="maxStock" name="max_stock" min="0" 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
+                <div></div>
             </div>
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1050,6 +1062,9 @@
             }
             
             console.log('API Response:', data);
+            // Debug: Log filter and product count for troubleshooting rupture filter
+            const stockFilterValue = stockFilter && stockFilter.value;
+            console.log('[DEBUG] Stock filter:', stockFilterValue, '| Products returned:', Array.isArray(data.products) ? data.products.length : 'N/A');
             
             if (data.success) {
                 if (!data.products || !Array.isArray(data.products)) {
@@ -1191,6 +1206,12 @@
             
             if (currentProducts.length === 0) {
                 console.log('📊 No products to display, showing empty state');
+                // Clear table body to remove old rows
+                const tbody = document.getElementById('productTableBody');
+                if (tbody) tbody.innerHTML = '';
+                // Clear grid view to remove old product cards
+                const gridView = document.getElementById('gridView');
+                if (gridView) gridView.innerHTML = '';
                 showEmptyState();
                 return;
             }
@@ -1512,8 +1533,7 @@
             document.getElementById('salePrice').value = product.sale_price;
             document.getElementById('currentStock').value = product.current_stock;
             // Prefer reorder_level/min_stock_alert for min stock
-            document.getElementById('minStock').value = (product.reorder_level ?? product.min_stock_alert ?? product.min_stock ?? '');
-            document.getElementById('maxStock').value = product.max_stock || '';
+            document.getElementById('minStockAlert').value = (product.reorder_level ?? product.min_stock_alert ?? 0);
             document.getElementById('supplier').value = product.supplier || '';
             document.getElementById('location').value = product.location || '';
 
@@ -1529,13 +1549,23 @@
         
         const formData = new FormData(e.target);
         const productData = Object.fromEntries(formData.entries());
-        
+
+        // Remove empty string numeric fields on create
+    const numericFields = ['purchase_price', 'sale_price', 'current_stock', 'min_stock_alert'];
         const isEdit = productData.product_id !== '';
+        if (!isEdit) {
+            for (const field of numericFields) {
+                if (productData[field] === '') {
+                    delete productData[field];
+                }
+            }
+        }
+
         const url = isEdit 
             ? `/api/inventory/products/${productData.product_id}`
             : '/api/inventory/products';
         const method = isEdit ? 'PUT' : 'POST';
-        
+
         try {
             const response = await fetch(url, {
                 method: method,
@@ -1548,9 +1578,9 @@
                 cache: 'no-store',
                 body: JSON.stringify(productData)
             });
-            
+
             const result = await response.json();
-            
+
             if (result.success) {
                 showNotification(
                     isEdit ? 'Produit modifié avec succès' : 'Produit ajouté avec succès', 
