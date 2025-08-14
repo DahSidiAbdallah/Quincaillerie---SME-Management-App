@@ -576,8 +576,8 @@
                                         this.reportData.inventory = {
                                             total_products: Number(data.stats.total || 0),
                                             low_stock: Number(data.stats.low_stock || 0),
-                                            out_of_stock: Number((data.stats.total || 0) - (data.stats.in_stock || 0)),
-                                            stock_value: Number(data.stats.total_value || 0)
+                                            out_of_stock: Number(data.stats.out_of_stock || 0),
+                                            stock_value: Number((data.stats.inventory_value || data.stats.total_value) ?? 0)
                                         };
                                         const dataSourceElement = document.getElementById('data-source-info');
                                         if (dataSourceElement) {
