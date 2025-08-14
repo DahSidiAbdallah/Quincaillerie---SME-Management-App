@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-
+{% block title_key %}sales_page_title{% endblock %}
 {% block title %}Gestion des Ventes - SME Management{% endblock %}
 
 {% block content %}
 <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="salesManager()">
     <!-- Page Header -->
     <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Gestion des Ventes</h1>
-        <p class="text-gray-600 mt-2">Gérez vos transactions, clients et paiements</p>
+        <h1 class="text-3xl font-bold text-gray-900" data-i18n="sales_header">Gestion des Ventes</h1>
+        <p class="text-gray-600 mt-2" data-i18n="sales_description">Gérez vos transactions, clients et paiements</p>
     </div>
 
     <!-- Quick Stats -->
@@ -80,19 +80,19 @@
     <div class="flex flex-wrap gap-4 mb-6">
         <button @click="showNewSaleModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
             <i class="fas fa-plus mr-2"></i>
-            Nouvelle Vente
+            <span data-i18n="sales_new_sale">Nouvelle Vente</span>
         </button>
         <button @click="showCustomerListModal = true" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg flex items-center">
             <i class="fas fa-users mr-2"></i>
-            Voir Clients
+            <span data-i18n="sales_view_customers">Voir Clients</span>
         </button>
         <button @click="generateReport()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center">
             <i class="fas fa-file-alt mr-2"></i>
-            Rapport de Ventes
+            <span data-i18n="sales_report">Rapport de Ventes</span>
         </button>
         <button @click="exportData()" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center">
             <i class="fas fa-download mr-2"></i>
-            Exporter
+            <span data-i18n="sales_export">Exporter</span>
         </button>
     </div>
 
@@ -100,7 +100,7 @@
     <div class="bg-white shadow rounded-lg overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-200">
             <div class="flex justify-between items-center">
-                <h3 class="text-lg font-medium text-gray-900">Toutes les Ventes</h3>
+                <h3 class="text-lg font-medium text-gray-900" data-i18n="sales_all_sales">Toutes les Ventes</h3>
                 <div class="flex space-x-2">
                     <input type="text" x-model="searchTerm" placeholder="Rechercher..." class="border border-gray-300 rounded-md px-3 py-2 text-sm">
                     <select x-model="filterStatus" class="border border-gray-300 rounded-md px-3 py-2 text-sm">

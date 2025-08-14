@@ -1,23 +1,24 @@
 {% extends "base.html" %}
+{% block title_key %}customers_page_title{% endblock %}
 {% block title %}Clients - SME Management{% endblock %}
 
 {% block content %}
     <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="customerManager()">
         <!-- Page Header -->
         <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900">Gestion des Clients</h1>
-            <p class="text-gray-600 mt-2">Gérez vos clients pour les ventes et le suivi des crédits</p>
+            <h1 class="text-3xl font-bold text-gray-900" data-i18n="customers_header">Gestion des Clients</h1>
+            <p class="text-gray-600 mt-2" data-i18n="customers_description">Gérez vos clients pour les ventes et le suivi des crédits</p>
         </div>
 
         <!-- Action Buttons -->
         <div class="flex flex-wrap gap-4 mb-6">
             <button @click="showAddCustomerModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-user-plus mr-2"></i>
-                Nouveau Client
+                <span data-i18n="customers_new_customer">Nouveau Client</span>
             </button>
             <button @click="exportCustomers()" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-download mr-2"></i>
-                Exporter
+                <span data-i18n="customers_export">Exporter</span>
             </button>
         </div>
 
@@ -25,9 +26,9 @@
         <div class="bg-white shadow rounded-lg overflow-hidden">
             <div class="px-6 py-4 border-b border-gray-200">
                 <div class="flex justify-between items-center">
-                    <h3 class="text-lg font-medium text-gray-900">Liste des Clients</h3>
+                    <h3 class="text-lg font-medium text-gray-900" data-i18n="customers_list">Liste des Clients</h3>
                     <div class="flex space-x-2">
-                        <input type="text" x-model="searchTerm" placeholder="Rechercher..." class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                        <input type="text" x-model="searchTerm" class="border border-gray-300 rounded-md px-3 py-2 text-sm" placeholder="Rechercher..." data-i18n-placeholder="customers_search_placeholder">
                     </div>
                 </div>
             </div>
@@ -69,13 +70,13 @@
                                 <div class="flex flex-col items-center py-6">
                                     <i class="fas fa-users text-4xl text-gray-300 mb-3"></i>
                                     <template x-if="searchTerm">
-                                        <p>Aucun client ne correspond à votre recherche.</p>
+                                        <p data-i18n="customers_empty_search">Aucun client ne correspond à votre recherche.</p>
                                     </template>
                                     <template x-if="!searchTerm">
-                                        <p>Aucun client enregistré. Ajoutez votre premier client!</p>
+                                        <p data-i18n="customers_empty">Aucun client enregistré. Ajoutez votre premier client!</p>
                                     </template>
                                     <button @click="showAddCustomerModal()" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
-                                        <i class="fas fa-user-plus mr-2"></i> Ajouter un client
+                                        <i class="fas fa-user-plus mr-2"></i> <span data-i18n="customers_add_first">Ajouter un client</span>
                                     </button>
                                 </div>
                             </td>
