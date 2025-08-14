@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html lang="{{ current_language }}">
+<html lang="{{ current_language }}" dir="{{ 'rtl' if current_language == 'ar' else 'ltr' }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Connexion - SME Management</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{{ url_for('static', filename='js/translations.js') }}"></script>
     <script src="{{ url_for('static', filename='js/common.js') }}"></script>
     <link rel="manifest" href="{{ url_for('serve_manifest_file') }}">
     <meta name="theme-color" content="#1f2937">
 </head>
-<body class="bg-gradient-to-br from-gray-800 to-gray-900 min-h-screen flex items-center justify-center" 
-      dir="{{ 'rtl' if current_language == 'ar' else 'ltr' }}">
+<body class="bg-gradient-to-br from-gray-800 to-gray-900 min-h-screen flex items-center justify-center">
     
     <div class="max-w-md w-full space-y-8 bg-white p-8 rounded-xl shadow-2xl">
         <!-- Header -->
@@ -18,12 +18,8 @@
             <div class="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-gray-800 text-white text-2xl">
                 🔧
             </div>
-            <h2 class="mt-6 text-3xl font-extrabold text-gray-900">
-                SME Management
-            </h2>
-            <p class="mt-2 text-sm text-gray-600">
-                Système de Gestion - Connectez-vous à votre compte
-            </p>
+            <h2 class="mt-6 text-3xl font-extrabold text-gray-900" data-i18n="app_title">SME Management</h2>
+            <p class="mt-2 text-sm text-gray-600" data-i18n="system_description">Système de Gestion - Connectez-vous à votre compte</p>
         </div>
         
         <!-- Login Form -->
@@ -33,13 +29,11 @@
             <div class="space-y-4">
                 <!-- Username Field -->
                 <div>
-                    <label for="username" class="block text-sm font-medium text-gray-700">
-                        Nom d'utilisateur
-                    </label>
+                    <label for="username" class="block text-sm font-medium text-gray-700" data-i18n="username_label">Nom d'utilisateur</label>
                     <div class="mt-1 relative">
                         <input id="username" name="username" type="text" required 
                                class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-gray-500 focus:border-gray-500 focus:z-10 sm:text-sm"
-                               placeholder="Entrez votre nom d'utilisateur">
+                               placeholder="Entrez votre nom d'utilisateur" data-i18n-placeholder="username_placeholder">
                         <div class="absolute inset-y-0 right-3 flex items-center">
                             <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
@@ -50,13 +44,11 @@
                 
                 <!-- PIN Field -->
                 <div>
-                    <label for="pin" class="block text-sm font-medium text-gray-700">
-                        Code PIN
-                    </label>
+                    <label for="pin" class="block text-sm font-medium text-gray-700" data-i18n="pin_label">Code PIN</label>
                     <div class="mt-1 relative">
                         <input id="pin" name="pin" type="password" required maxlength="6" 
                                class="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-gray-500 focus:border-gray-500 focus:z-10 sm:text-sm"
-                               placeholder="Entrez votre PIN">
+                               placeholder="Entrez votre PIN" data-i18n-placeholder="pin_placeholder">
                         <div class="absolute inset-y-0 right-3 flex items-center">
                             <button type="button" id="togglePin" class="text-gray-400 hover:text-gray-600">
                                 <svg id="eyeIcon" class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -66,9 +58,7 @@
                             </button>
                         </div>
                     </div>
-                    <p class="mt-1 text-xs text-gray-500">
-                        PIN par défaut admin: 1234 | Employés: voir administrateur
-                    </p>
+                    <p class="mt-1 text-xs text-gray-500" data-i18n="pin_hint">PIN par défaut admin: 1234 | Employés: voir administrateur</p>
                 </div>
             </div>
             
@@ -91,7 +81,7 @@
                             <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd"></path>
                         </svg>
                     </span>
-                    <span id="submitText">Se connecter</span>
+                    <span id="submitText" data-i18n="login_button">Se connecter</span>
                     <div id="submitSpinner" class="hidden ml-2">
                         <div class="spinner border-white"></div>
                     </div>
@@ -100,15 +90,15 @@
             
             <!-- Quick Login (Demo) -->
             <div class="mt-6 border-t border-gray-200 pt-6">
-                <p class="text-xs text-gray-500 text-center mb-3">Connexion rapide (démonstration):</p>
+                <p class="text-xs text-gray-500 text-center mb-3" data-i18n="quick_login_title">Connexion rapide (démonstration):</p>
                 <div class="flex space-x-2">
                     <button type="button" onclick="quickLogin('admin', '1234')" 
                             class="flex-1 py-2 px-3 text-xs border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                        👤 Admin
+                        <span data-i18n="quick_login_admin">👤 Admin</span>
                     </button>
                     <button type="button" onclick="quickLogin('employee', '1111')" 
                             class="flex-1 py-2 px-3 text-xs border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-gray-500">
-                        👷 Employé
+                        <span data-i18n="quick_login_employee">👷 Employé</span>
                     </button>
                 </div>
             </div>
@@ -133,7 +123,7 @@
     <div class="fixed bottom-4 right-4 bg-white rounded-lg shadow-lg p-3 text-xs">
         <div class="flex items-center">
             <div id="connectionDot" class="w-2 h-2 rounded-full bg-green-400 mr-2"></div>
-            <span id="connectionText">En ligne</span>
+            <span id="connectionText" data-i18n="status_online">En ligne</span>
         </div>
     </div>
     
@@ -164,10 +154,12 @@
             
             if (navigator.onLine) {
                 dot.className = 'w-2 h-2 rounded-full bg-green-400 mr-2';
-                text.textContent = 'En ligne';
+                text.setAttribute('data-i18n', 'status_online');
+                text.textContent = t('status_online');
             } else {
                 dot.className = 'w-2 h-2 rounded-full bg-red-400 mr-2';
-                text.textContent = 'Hors ligne';
+                text.setAttribute('data-i18n', 'status_offline');
+                text.textContent = t('status_offline');
             }
         }
         
@@ -194,7 +186,7 @@
             
             // Show loading state
             submitBtn.disabled = true;
-            submitText.textContent = 'Connexion...';
+            submitText.textContent = t('login_loading');
             submitSpinner.classList.remove('hidden');
             errorMessage.classList.add('hidden');
             
@@ -220,17 +212,17 @@
                     window.location.href = result.redirect || '{{ url_for("dashboard") }}';
                 } else {
                     // Show error
-                    errorText.textContent = result.message || 'Erreur de connexion';
+                    errorText.textContent = result.message || t('login_error');
                     errorMessage.classList.remove('hidden');
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                errorText.textContent = 'Erreur de connexion. Vérifiez votre connexion internet.';
+                errorText.textContent = t('login_error_connection');
                 errorMessage.classList.remove('hidden');
             } finally {
                 // Reset button state
                 submitBtn.disabled = false;
-                submitText.textContent = 'Se connecter';
+                submitText.textContent = t('login_button');
                 submitSpinner.classList.add('hidden');
             }
         });
@@ -285,6 +277,7 @@
             }
         `;
         document.head.appendChild(style);
+        applyTranslations('{{ current_language }}');
     </script>
 </body>
 </html>

@@ -40,9 +40,8 @@ function apiFetch(url, options = {}) {
         });
 }
 
-// Change language function - redirects to language change endpoint
+// Change language function - updates session and translations
 function changeLanguage(lang) {
-    // Save current path for redirect back
     const currentPath = window.location.pathname;
     fetch(`/set-language/${lang}?redirect=${encodeURIComponent(currentPath)}`, {
         method: 'POST',
@@ -53,7 +52,13 @@ function changeLanguage(lang) {
     })
     .then(response => {
         if (response.ok) {
-            window.location.reload();
+            if (window.AppConfig) {
+                window.AppConfig.language = lang;
+            }
+            applyTranslations(lang);
+            if (typeof updateConnectionStatus === 'function') {
+                updateConnectionStatus();
+            }
         }
     })
     .catch(error => {
@@ -63,7 +68,7 @@ function changeLanguage(lang) {
 
 // Function to handle logout with confirmation
 function handleLogout() {
-    if (confirm('Êtes-vous sûr de vouloir vous déconnecter?')) {
+    if (confirm(t('logout_confirm'))) {
         window.location.href = '/logout';
     }
 }
