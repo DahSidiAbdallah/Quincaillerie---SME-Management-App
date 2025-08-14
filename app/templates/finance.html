@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-
+{% block title_key %}finance_page_title{% endblock %}
 {% block title %}Finance - SME Management{% endblock %}
 
 {% block extra_head %}
@@ -10,16 +10,16 @@
 <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="financeManager()" x-init="init()">
         <!-- Page Header -->
         <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900">Gestion Financière</h1>
-            <p class="text-gray-600 mt-2">Suivez vos revenus, dépenses et performance financière</p>
+            <h1 class="text-3xl font-bold text-gray-900" data-i18n="finance_header">Gestion Financière</h1>
+            <p class="text-gray-600 mt-2" data-i18n="finance_description">Suivez vos revenus, dépenses et performance financière</p>
         <!-- Tabs: Summary vs Receivables (visible so deep links are not confusing) -->
         <div class="mt-4 flex items-center gap-2 text-sm">
         <button @click="setTab('summary')"
             :class="activeTab==='summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
-            class="px-3 py-1 rounded-md">Résumé</button>
+            class="px-3 py-1 rounded-md" data-i18n="finance_tab_summary">Résumé</button>
         <button @click="setTab('receivables')"
             :class="activeTab==='receivables' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
-            class="px-3 py-1 rounded-md">Créances en retard</button>
+            class="px-3 py-1 rounded-md" data-i18n="finance_tab_receivables">Créances en retard</button>
         <span x-show="activeTab==='receivables'" class="ml-2 text-xs text-gray-500">(filtré: en retard)</span>
         </div>
         </div>
@@ -151,25 +151,25 @@
         <div class="flex flex-wrap gap-4 mb-6">
             <button @click="newTransaction.type='income'; showTransactionModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-plus mr-2"></i>
-                Nouvelle Transaction
+                <span data-i18n="finance_new_transaction">Nouvelle Transaction</span>
             </button>
             <button @click="newTransaction.type='expense'; showTransactionModal = true" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-minus mr-2"></i>
-                Nouvelle Dépense
+                <span data-i18n="finance_new_expense">Nouvelle Dépense</span>
             </button>
             <button @click="generateFinanceReport()" :disabled="isGeneratingReport" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
                 <i class="fas fa-file-excel mr-2"></i>
-                <span>Rapport Financier</span>
+                <span data-i18n="finance_report">Rapport Financier</span>
                 <span x-show="isGeneratingReport" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
             </button>
             <button @click="backupData()" :disabled="isBackingUp" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
                 <i class="fas fa-save mr-2"></i>
-                <span>Sauvegarde</span>
+                <span data-i18n="finance_backup">Sauvegarde</span>
+                <span x-show="isBackingUp" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
+            </button>
             <button @click="diagnoseCharts()" class="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-6 py-2 rounded-lg flex items-center">
                 <i class="fas fa-stethoscope mr-2"></i>
-                Diagnostiquer Graphiques
-            </button>
-                <span x-show="isBackingUp" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
+                <span data-i18n="finance_diagnose_charts">Diagnostiquer Graphiques</span>
             </button>
         </div>
 
