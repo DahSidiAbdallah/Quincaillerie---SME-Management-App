@@ -40,6 +40,13 @@ def get_dashboard_stats():
         # Get cash balance
         cash_balance = db_manager.get_cash_balance() or 0
 
+        # Get out of stock count
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM products WHERE is_active = 1 AND current_stock = 0')
+        out_of_stock_count = cursor.fetchone()[0]
+        conn.close()
+
         # Calculate yesterday's sales for comparison
         yesterday_total = 0.0
         conn = None
@@ -52,7 +59,7 @@ def get_dashboard_stats():
                 SELECT SUM(total_amount) as total, COUNT(*) as count
                 FROM sales
                 WHERE DATE(sale_date) = DATE(?, '-1 day')
-                AND is_deleted = 0
+                AND (is_deleted IS NULL OR is_deleted = 0)
                 ''',
                 (today,),
             )
@@ -82,6 +89,7 @@ def get_dashboard_stats():
             'stats': {
                 'total_products': int(total_products or 0),
                 'low_stock_count': len(low_stock_items) if isinstance(low_stock_items, list) else int(low_stock_items or 0),
+                'out_of_stock_count': int(out_of_stock_count or 0),
                 'low_stock_items': low_stock_items,
                 'today_sales_count': int(today_sales_count or 0),
                 'today_sales': float(today_sales_amount or 0),

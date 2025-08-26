@@ -199,6 +199,7 @@ def get_sales():
             UPDATE sales
             SET status='retard'
             WHERE is_credit=1 AND status='pending' AND credit_due_date IS NOT NULL AND credit_due_date < ?
+            AND (is_deleted IS NULL OR is_deleted = 0)
         """, (today,))
         conn.commit()
 
@@ -216,7 +217,7 @@ def get_sales():
                    (SELECT SUM(si.profit_margin) FROM sale_items si WHERE si.sale_id = s.id) as total_profit
             FROM sales s
             LEFT JOIN users u ON s.created_by = u.id
-            WHERE 1=1
+            WHERE (s.is_deleted IS NULL OR s.is_deleted = 0)
         '''
         params = []
 
@@ -330,7 +331,7 @@ def get_sales_stats():
         cursor.execute('''
             SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as amount
             FROM sales
-            WHERE DATE(sale_date) = ?
+            WHERE DATE(sale_date) = ? AND (is_deleted IS NULL OR is_deleted = 0)
         ''', (today_date,))
         today_sales = cursor.fetchone()
         
@@ -339,6 +340,7 @@ def get_sales_stats():
             SELECT COUNT(DISTINCT customer_phone) as count
             FROM sales
             WHERE customer_phone != '' AND DATE(sale_date) >= DATE('now', '-30 days')
+            AND (is_deleted IS NULL OR is_deleted = 0)
         ''')
         active_customers = cursor.fetchone()
         
@@ -347,6 +349,7 @@ def get_sales_stats():
             SELECT COUNT(*) as count
             FROM sales
             WHERE status != 'paid' AND (is_credit = 1 OR payment_method = 'credit')
+            AND (is_deleted IS NULL OR is_deleted = 0)
         ''')
         pending_from_sales = cursor.fetchone()
         
@@ -355,6 +358,7 @@ def get_sales_stats():
             SELECT COALESCE(SUM(total_amount), 0) as amount
             FROM sales
             WHERE strftime('%Y-%m', sale_date) = strftime('%Y-%m', 'now')
+            AND (is_deleted IS NULL OR is_deleted = 0)
         ''')
         monthly_revenue = cursor.fetchone()
         
@@ -575,7 +579,7 @@ def delete_sale(sale_id):
             cursor.execute('DELETE FROM client_debts WHERE sale_id = ?', (sale_id,))
 
             # Finally delete the sale
-            cursor.execute('DELETE FROM sales WHERE id = ?', (sale_id,))
+            cursor.execute('UPDATE sales SET is_deleted = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?', (sale_id,))
 
             conn.commit()
             conn.close()

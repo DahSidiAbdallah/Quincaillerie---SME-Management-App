@@ -2,2753 +2,582 @@
 {% block title_key %}inventory_page_title{% endblock %}
 {% block title %}Gestion d'Inventaire - SME Management{% endblock %}
 
-{% block extra_css %}
-<style>
-    .product-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 1rem;
-    }
-    
-    .product-card {
-        transition: all 0.3s ease;
-        border: 1px solid #e5e7eb;
-    }
-    
-    .product-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-        border-color: #3b82f6;
-    }
-    
-    .stock-level-low {
-        color: #dc2626;
-        background-color: #fee2e2;
-    }
-    
-    .stock-level-medium {
-        color: #d97706;
-        background-color: #fef3c7;
-    }
-    
-    .stock-level-good {
-        color: #059669;
-        background-color: #d1fae5;
-    }
-    
-    .table-row:hover {
-        background-color: #f9fafb;
-    }
-    
-    /* Notification styles */
-    .notification {
-        padding: 12px 16px;
-        border-radius: 8px;
-        margin-bottom: 8px;
-        width: 300px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        display: flex;
-        align-items: center;
-    }
-    
-    .notification.info {
-        background-color: #ebf5ff;
-        border-left: 4px solid #3b82f6;
-    }
-    
-    .notification.success {
-        background-color: #d1fae5;
-        border-left: 4px solid #059669;
-    }
-    
-    .notification.error {
-        background-color: #fee2e2;
-        border-left: 4px solid #dc2626;
-    }
-    
-    .notification.warning {
-        background-color: #fef3c7;
-        border-left: 4px solid #d97706;
-    }
-    
-    .animate-fade-in {
-        animation: fadeIn 0.3s ease-in-out;
-    }
-    
-    .animate-fade-out {
-        animation: fadeOut 0.3s ease-in-out;
-    }
-    
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-20px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    
-    @keyframes fadeOut {
-        from { opacity: 1; transform: translateY(0); }
-        to { opacity: 0; transform: translateY(-20px); }
-    }
-    
-    @media (max-width: 768px) {
-        .product-grid {
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        }
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-
-<div class="space-y-6">
-    <!-- Header Section -->
-    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-        <div>
-            <h1 class="text-3xl font-bold text-gray-900" data-i18n="inventory_header">Gestion d'Inventaire</h1>
-            <p class="text-gray-600 mt-1" data-i18n="inventory_description">Gérez vos produits, stock et approvisionnements</p>
-        </div>
-        
-        <div class="mt-4 sm:mt-0 flex space-x-3">
-            <!-- Add Product Button -->
-            <button onclick="openProductModal()"
-                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center">
-                <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
-                </svg>
-                <span data-i18n="inventory_add_product">Ajouter Produit</span>
-            </button>
-            
-            <!-- Import/Export -->
-            <div class="relative" x-data="{ open: false }">
-                <button @click="open = !open"
-                        class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"></path>
-                    </svg>
-                    <span data-i18n="inventory_import_export">Import/Export</span>
-                </button>
-                
-                <div x-show="open" @click.away="open = false" 
-                     class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
-                    <div class="py-1">
-                        <a href="#" onclick="exportInventory()"
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="inventory_export_inventory">
-                            📤 Exporter Inventaire
-                        </a>
-        
-                        <a href="#" onclick="openImportModal()"
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="inventory_import_products">
-                            📥 Importer Produits
-                        </a>
-                        <a href="#" onclick="generateReport()"
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="inventory_report_inventory">
-                            📊 Rapport d'Inventaire
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-            <!-- NEW: Batch Operations Dropdown -->
-            <div class="relative" x-data="{ open: false }">
-                <button @click="open = !open"
-                        class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg flex items-center">
-                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
-                    </svg>
-                    <span data-i18n="inventory_actions">Actions</span>
-                </button>
-                
-                <div x-show="open" @click.away="open = false" 
-                     class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg z-10">
-                    <div class="py-1">
-                        <a href="#" onclick="startInventoryCount()"
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="inventory_count">
-                            🔢 Comptage d'Inventaire
-                        </a>
-                        <a href="#" onclick="openBatchOperationModal()"
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="inventory_batch_operations">
-                            📋 Opérations par Lot
-                        </a>
-                        <a href="#" onclick="viewInventoryHistory()"
-                           class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100" data-i18n="inventory_history">
-                            📜 Historique d'Inventaire
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="inventoryManager()">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900" data-i18n="inventory_header">Gestion d'Inventaire</h1>
+        <p class="text-gray-600 mt-2" data-i18n="inventory_description">Gérez vos produits, stock et approvisionnements</p>
     </div>
-    
-    <!-- Quick Stats -->
-    <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+
+    <!-- Inventory Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <div class="bg-white rounded-lg shadow p-6">
             <div class="flex items-center">
                 <div class="flex-shrink-0">
-                    <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
-                        </svg>
-                    </div>
+                    <i class="fas fa-boxes text-2xl text-blue-600"></i>
                 </div>
                 <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500" data-i18n="inventory_total_products">Total Produits</p>
-                    <p class="text-2xl font-semibold text-gray-900" id="totalProducts">{{ total_products or '0' }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">En Stock</p>
-                    <p class="text-2xl font-semibold text-gray-900" id="inStockProducts">{{ in_stock_products or '0' }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <div class="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Stock Faible</p>
-                    <p class="text-2xl font-semibold text-gray-900" id="lowStockProducts">{{ low_stock_products or '0' }}</p>
-                </div>
-            </div>
-        </div>
-        <!-- Rupture (Out of Stock) Card -->
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <div class="w-8 h-8 bg-gray-200 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-1.414-1.414A9 9 0 105.636 18.364l1.414 1.414A9 9 0 1018.364 5.636z"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Rupture</p>
-                    <p class="text-2xl font-semibold text-gray-900" id="outOfStockProducts">{{ out_of_stock_products or '0' }}</p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="bg-white rounded-lg shadow p-6">
-            <div class="flex items-center">
-                <div class="flex-shrink-0">
-                    <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
-                        </svg>
-                    </div>
-                </div>
-                <div class="ml-4">
-                    <p class="text-sm font-medium text-gray-500">Valeur Stock</p>
-                    <p class="text-2xl font-semibold text-gray-900" id="stockValue">{{ format_currency(stock_value or 0) }}</p>
+                    <h3 class="text-sm font-medium text-gray-500" data-i18n="inventory_total_products">Total Produits</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="totalProducts" x-text="stats.total">0</p>
                 </div>
             </div>
         </div>
 
-        
-    </div>
-    
-    <!-- Search and Filters -->
-    <div class="bg-white rounded-lg shadow p-6">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-            <!-- Search Bar -->
-            <div class="flex-1 max-w-lg">
-                <div class="relative">
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                        </svg>
-                    </div>
-                    <input type="text" id="searchInput" 
-                           class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                           placeholder="Rechercher produits (nom, code, catégorie...)">
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-check-circle text-2xl text-green-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">En Stock</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="inStockProducts" x-text="stats.in_stock">0</p>
                 </div>
             </div>
-            
-            <!-- View Toggle -->
-            <div class="flex items-center space-x-4">
-                <div class="flex bg-gray-100 rounded-lg p-1">
-                    <button onclick="setView('grid')" id="gridViewBtn"
-                            class="px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
-                        </svg>
-                    </button>
-                    <button onclick="setView('list')" id="listViewBtn"
-                            class="px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
-                        </svg>
-                    </button>
-                </div>
-                
-                <!-- Filters -->
-                <select id="categoryFilter" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-                    <option value="">Toutes catégories</option>
-                    <option value="outils">Outils</option>
-                    <option value="quincaillerie">Quincaillerie</option>
-                    <option value="peinture">Peinture</option>
-                    <option value="plomberie">Plomberie</option>
-                    <option value="electricite">Électricité</option>
-                </select>
-                
-                <select id="stockFilter" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-                    <option value="">Tous les stocks</option>
-                    <option value="in_stock">En stock</option>
-                    <option value="low_stock">Stock faible</option>
-                    <option value="out_of_stock">Rupture</option>
-                </select>
+        </div>
 
-                <!-- NEW: Selection Mode Toggle -->
-                <div class="flex items-center ml-4">
-                    <input type="checkbox" id="selectionModeToggle" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                    <label for="selectionModeToggle" class="ml-2 block text-sm text-gray-900">
-                        Mode sélection
-                    </label>
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-exclamation-triangle text-2xl text-yellow-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">Stock Faible</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="lowStockProducts" x-text="stats.low_stock">0</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-dollar-sign text-2xl text-purple-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">Valeur Stock</h3>
+                    <p class="text-2xl font-bold text-gray-900" id="stockValue" x-text="formatCurrency(stats.inventory_value)">0</p>
                 </div>
             </div>
         </div>
     </div>
-    
-    <!-- Products Display -->
-    <div id="productsContainer">
-        <!-- Grid View -->
-        <div id="gridView" class="product-grid">
-            <!-- Products will be loaded here -->
-        </div>
-        
-        <!-- List View -->
-        <div id="listView" class="hidden bg-white rounded-lg shadow overflow-hidden">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Produit
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Code/Référence
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Catégorie
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Stock
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Prix
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                        </th>
-                    </tr>
-                </thead>
-                <tbody id="productTableBody" class="bg-white divide-y divide-gray-200">
-                    <!-- Table rows will be loaded here -->
-                </tbody>
-            </table>
-        </div>
-    </div>
-    
-    <!-- Loading State -->
-    <div id="loadingState" class="text-center py-12">
-        <div class="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-        <p class="mt-4 text-gray-600">Chargement des produits...</p>
-    </div>
-    
-    <!-- Empty State -->
-    <div id="emptyState" class="hidden text-center py-12">
-        <div class="text-6xl mb-4">📦</div>
-        <h3 class="text-lg font-medium text-gray-900 mb-2">Aucun produit trouvé</h3>
-        <p class="text-gray-600 mb-6">Commencez par ajouter votre premier produit à l'inventaire.</p>
-        <button onclick="openProductModal()" 
-                class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">
-            Ajouter votre premier produit
+
+    <!-- Action Buttons -->
+    <div class="flex flex-wrap gap-4 mb-6">
+        <button @click="showProductModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-plus mr-2"></i>
+            <span data-i18n="inventory_add_product">Ajouter Produit</span>
         </button>
-    </div>
-</div>
-
-<!-- Product Modal -->
-<div id="productModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900" id="modalTitle">Ajouter un Produit</h3>
-            <button onclick="closeProductModal()" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
+        
+        <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-exchange-alt mr-2"></i>
+                <span data-i18n="inventory_import_export">Import/Export</span>
+                <i class="fas fa-chevron-down ml-2"></i>
             </button>
+            <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                <button @click="exportInventory(); open = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-download mr-2"></i><span data-i18n="inventory_export_inventory">📤 Exporter Inventaire</span>
+                </button>
+                <button @click="importProducts(); open = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-upload mr-2"></i><span data-i18n="inventory_import_products">📥 Importer Produits</span>
+                </button>
+                <button @click="generateInventoryReport(); open = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-chart-bar mr-2"></i><span data-i18n="inventory_report_inventory">📊 Rapport d'Inventaire</span>
+                </button>
+            </div>
         </div>
         
-        <form id="productForm" class="space-y-4">
-            <input type="hidden" id="productId" name="product_id">
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="productName" class="block text-sm font-medium text-gray-700">Nom du Produit *</label>
-                    <input type="text" id="productName" name="name" required 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                
-                <div>
-                    <label for="productCode" class="block text-sm font-medium text-gray-700">Code Produit</label>
-                    <input type="text" id="productCode" name="code" 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
+        <div class="relative" x-data="{ open: false }">
+            <button @click="open = !open" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center">
+                <i class="fas fa-cogs mr-2"></i>
+                <span data-i18n="inventory_actions">Actions</span>
+                <i class="fas fa-chevron-down ml-2"></i>
+            </button>
+            <div x-show="open" @click.away="open = false" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                <button @click="showInventoryCountModal = true; open = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-clipboard-list mr-2"></i><span data-i18n="inventory_count">🔢 Comptage d'Inventaire</span>
+                </button>
+                <button @click="showBatchOperationsModal = true; open = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-tasks mr-2"></i><span data-i18n="inventory_batch_operations">📋 Opérations par Lot</span>
+                </button>
+                <button @click="viewStockHistory(); open = false" class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                    <i class="fas fa-history mr-2"></i><span data-i18n="inventory_history">📜 Historique d'Inventaire</span>
+                </button>
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="productCategory" class="block text-sm font-medium text-gray-700">Catégorie *</label>
-                    <select id="productCategory" name="category" required 
-                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Sélectionner une catégorie</option>
-                        <option value="outils">Outils</option>
-                        <option value="quincaillerie">Quincaillerie</option>
-                        <option value="peinture">Peinture</option>
-                        <option value="plomberie">Plomberie</option>
-                        <option value="electricite">Électricité</option>
-                    </select>
-                </div>
-                
-                <div>
-                    <label for="productUnit" class="block text-sm font-medium text-gray-700">Unité</label>
-                    <select id="productUnit" name="unit" 
-                            class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                        <option value="pièce">Pièce</option>
-                        <option value="kg">Kilogramme</option>
-                        <option value="litre">Litre</option>
-                        <option value="mètre">Mètre</option>
-                        <option value="boîte">Boîte</option>
-                        <option value="paquet">Paquet</option>
-                    </select>
-                </div>
-            </div>
-            
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg shadow p-6 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-                <label for="productDescription" class="block text-sm font-medium text-gray-700">Description</label>
-                <textarea id="productDescription" name="description" rows="3" 
-                          class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"></textarea>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Rechercher</label>
+                <input type="text" x-model="searchTerm" placeholder="Nom, code-barres..." class="w-full border border-gray-300 rounded-md px-3 py-2">
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label for="purchasePrice" class="block text-sm font-medium text-gray-700">Prix d'Achat ({{ current_currency }})</label>
-                    <input type="number" id="purchasePrice" name="purchase_price" step="0.01" min="0" 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                
-                <div>
-                    <label for="salePrice" class="block text-sm font-medium text-gray-700">Prix de Vente ({{ current_currency }}) *</label>
-                    <input type="number" id="salePrice" name="sale_price" step="0.01" min="0" required
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                
-                <div>
-                    <label for="marginDisplay" class="block text-sm font-medium text-gray-700">Marge (%)</label>
-                    <input type="text" id="marginDisplay" readonly 
-                           class="mt-1 block w-full border border-gray-200 rounded-md px-3 py-2 bg-gray-50 text-gray-600">
-                </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
+                <select x-model="categoryFilter" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                    <option value="">Toutes les catégories</option>
+                    <template x-for="category in categories" :key="category.category">
+                        <option :value="category.category" x-text="category.category + ' (' + category.product_count + ')'"></option>
+                    </template>
+                </select>
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label for="currentStock" class="block text-sm font-medium text-gray-700">Stock Actuel *</label>
-                    <input type="number" id="currentStock" name="current_stock" min="0" required 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                <div>
-                    <label for="minStockAlert" class="block text-sm font-medium text-gray-700">Seuil d'alerte *</label>
-                    <input type="number" id="minStockAlert" name="min_stock_alert" min="0" required
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                <div></div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Stock</label>
+                <select x-model="stockFilter" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                    <option value="">Tous les stocks</option>
+                    <option value="normal">Stock normal</option>
+                    <option value="low">Stock faible</option>
+                    <option value="out">Rupture de stock</option>
+                </select>
             </div>
-            
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                    <label for="supplier" class="block text-sm font-medium text-gray-700">Fournisseur</label>
-                    <input type="text" id="supplier" name="supplier" 
-                           class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-                
-                <div>
-                    <label for="location" class="block text-sm font-medium text-gray-700">Emplacement</label>
-              <input type="text" id="depot" name="depot" placeholder="Ex: A1, B2, Entrepôt..." 
-                  class="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500">
-                </div>
-            </div>
-            
-            <div class="flex items-center justify-end space-x-3 pt-4">
-                <button type="button" onclick="closeProductModal()" 
-                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    Annuler
-                </button>
-                <button type="submit" 
-                        class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                    <span id="submitButtonText">Enregistrer</span>
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Batch Operation Modal -->
-<div id="batchOperationModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900">Opérations par Lot</h3>
-            <button onclick="closeBatchOperationModal()" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
-        </div>
-        
-        <div class="mt-2">
-            <p class="text-sm text-gray-600 mb-3">
-                <span id="selectedProductsCount">0</span> produits sélectionnés
-            </p>
-            
-            <div class="space-y-4">
-                <div>
-                    <label for="batchOperation" class="block text-sm font-medium text-gray-700">Opération</label>
-                    <select id="batchOperation" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3">
-                        <option value="">Sélectionner une opération</option>
-                        <option value="update_category">Modifier catégorie</option>
-                        <option value="update_supplier">Modifier fournisseur</option>
-                        <option value="deactivate">Désactiver produits</option>
-                        <option value="activate">Activer produits</option>
-                    </select>
-                </div>
-                
-                <div id="categoryField" class="hidden">
-                    <label for="batchCategory" class="block text-sm font-medium text-gray-700">Catégorie</label>
-                    <select id="batchCategory" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3">
-                        <option value="">Sélectionner une catégorie</option>
-                        <option value="outils">Outils</option>
-                        <option value="quincaillerie">Quincaillerie</option>
-                        <option value="peinture">Peinture</option>
-                        <option value="plomberie">Plomberie</option>
-                        <option value="electricite">Électricité</option>
-                    </select>
-                </div>
-                
-                <div id="supplierField" class="hidden">
-                    <label for="batchSupplier" class="block text-sm font-medium text-gray-700">Fournisseur</label>
-                    <input type="text" id="batchSupplier" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3">
-                </div>
-            </div>
-        </div>
-        
-        <div class="flex items-center justify-end space-x-3 mt-4">
-            <button type="button" onclick="closeBatchOperationModal()" 
-                    class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                Annuler
-            </button>
-            <button type="button" onclick="executeBatchOperation()" 
-                    class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                Appliquer
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Inventory Count Modal -->
-<div id="inventoryCountModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900">Comptage d'Inventaire</h3>
-            <button onclick="closeInventoryCountModal()" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
-        </div>
-        
-        <div class="mt-2">
-            <div class="space-y-4">
-                <div class="flex space-x-4">
-                    <div class="w-1/2">
-                        <label for="countReference" class="block text-sm font-medium text-gray-700">Référence</label>
-                        <input type="text" id="countReference" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3"
-                               value="COUNT-{{ '{{' }} now.strftime('%Y%m%d%H%M') {{ '}}' }}">
-                    </div>
-                    <div class="w-1/2">
-                        <label for="countLocation" class="block text-sm font-medium text-gray-700">Emplacement</label>
-                        <input type="text" id="countLocation" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3"
-                               placeholder="Ex: Rayon A, Entrepôt...">
-                    </div>
-                </div>
-                
-                <div>
-                    <label for="countSearch" class="block text-sm font-medium text-gray-700">Rechercher produit</label>
-                    <div class="mt-1 flex space-x-2">
-                        <input type="text" id="countSearch" class="block w-full rounded-md border-gray-300 py-2 px-3"
-                               placeholder="Nom ou code du produit">
-                        <button type="button" onclick="searchProductForCount()" 
-                                class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                            Rechercher
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="border rounded-md p-4">
-                    <h4 class="font-medium text-gray-900 mb-2">Produits comptés</h4>
-                    <div id="countedProducts" class="max-h-64 overflow-y-auto">
-                        <table class="min-w-full divide-y divide-gray-200">
-                            <thead class="bg-gray-50">
-                                <tr>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Système</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Compté</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Écart</th>
-                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="countedProductsBody" class="bg-white divide-y divide-gray-200">
-                                <!-- Products will be added here -->
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                <div class="flex items-center space-x-2">
-                    <input type="checkbox" id="adjustStockAfterCount" class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                    <label for="adjustStockAfterCount" class="block text-sm text-gray-700">
-                        Ajuster automatiquement le stock après le comptage
-                    </label>
-                </div>
-            </div>
-        </div>
-        
-        <div class="flex items-center justify-end space-x-3 mt-4">
-            <button type="button" onclick="closeInventoryCountModal()" 
-                    class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                Annuler
-            </button>
-            <button type="button" onclick="saveInventoryCount()" 
-                    class="px-4 py-2 bg-green-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-green-700">
-                Enregistrer Comptage
-            </button>
-        </div>
-    </div>
-</div>
-
-<!-- Product Image Modal -->
-<div id="productImageModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-md shadow-lg rounded-md bg-white">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-medium text-gray-900">Gérer l'image du produit</h3>
-            <button onclick="closeProductImageModal()" class="text-gray-400 hover:text-gray-600">
-                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                </svg>
-            </button>
-        </div>
-        
-        <div class="mt-2 text-center">
-            <input type="hidden" id="imageProductId" value="">
-            
-            <div id="currentProductImage" class="mb-4">
-                <img id="productImagePreview" src="/static/images/product-placeholder.svg" 
-                     alt="Image produit" class="mx-auto h-48 object-contain">
-            </div>
-            
-            <div class="border-2 border-dashed border-gray-300 rounded-lg p-6">
-                <div class="space-y-2">
-                    <div class="flex justify-center">
-                        <svg class="h-10 w-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                    </div>
-                    <div class="text-sm text-gray-600">
-                        <label for="image-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                            <span>Télécharger une image</span>
-                            <input id="image-upload" name="image-upload" type="file" class="sr-only" accept="image/*">
-                        </label>
-                    </div>
-                    <p class="text-xs text-gray-500">
-                        PNG, JPG, GIF jusqu'à 2MB
-                    </p>
-                </div>
-            </div>
-        </div>
-        
-        <div class="flex items-center justify-between space-x-3 mt-4">
-            <button type="button" onclick="deleteProductImage()" id="deleteImageBtn" 
-                    class="px-4 py-2 bg-red-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-red-700">
-                Supprimer
-            </button>
-            <div class="flex space-x-3">
-                <button type="button" onclick="closeProductImageModal()" 
-                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                    Annuler
-                </button>
-                <button type="button" onclick="uploadProductImage()" 
-                        class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                    Enregistrer
+            <div class="flex items-end">
+                <button @click="loadProducts()" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                    <i class="fas fa-search mr-2"></i>Filtrer
                 </button>
             </div>
         </div>
     </div>
-</div>
 
-{% endblock %}
+    <!-- Loading State -->
+    <div id="loadingState" x-show="isLoading" class="text-center py-8">
+        <i class="fas fa-spinner fa-spin text-4xl text-blue-600 mb-4"></i>
+        <p class="text-gray-600">Chargement des produits...</p>
+    </div>
 
-{% block extra_scripts %}
-<script type="application/json" id="initial-products-data">{{ (initial_products or []) | tojson }}</script>
-{% if debug_pages %}
-<script src="{{ url_for('static', filename='js/inventory-diagnostics.js') }}"></script>
-{% endif %}
-<script>
-    let currentView = 'grid';
-    let currentProducts = [];
-    let isLoading = false;
-    
-    // Simple debounce helper (local, in case global isn't available)
-    function debounce(fn, wait) {
-        let t;
-        return function(...args) {
-            clearTimeout(t);
-            t = setTimeout(() => fn.apply(this, args), wait);
-        };
-    }
-    
-    // Local UI helpers for this page (do not override global window.showLoading)
-    function showLoading() {
-        const loading = document.getElementById('loadingState');
-        const container = document.getElementById('productsContainer');
-        const empty = document.getElementById('emptyState');
-        if (container) container.classList.add('hidden');
-        if (empty) empty.classList.add('hidden');
-        if (loading) loading.classList.remove('hidden');
-    }
-
-    function hideLoading() {
-        const loading = document.getElementById('loadingState');
-        const container = document.getElementById('productsContainer');
-        if (loading) loading.classList.add('hidden');
-        if (container) container.classList.remove('hidden');
-    }
-    
-    function showEmptyState() {
-        const empty = document.getElementById('emptyState');
-        const loading = document.getElementById('loadingState');
-        const container = document.getElementById('productsContainer');
-        if (loading) loading.classList.add('hidden');
-        if (container) container.classList.add('hidden');
-        if (empty) empty.classList.remove('hidden');
-    }
-    
-    function hideEmptyState() {
-        const empty = document.getElementById('emptyState');
-        if (empty) empty.classList.add('hidden');
-        const container = document.getElementById('productsContainer');
-        if (container) container.classList.remove('hidden');
-    }
-
-    // Safety fallback: if grid doesn't render soon, fetch and render directly
-    async function forceRenderIfEmpty(reason = 'unknown') {
-        try {
-            const grid = document.getElementById('gridView');
-            const cards = grid ? grid.querySelectorAll('.product-card').length : 0;
-            if (cards > 0) return; // Already rendered
-
-            // Try to use diagnostics helper if available
-            const hasDiag = typeof window.inventoryDiagnostics === 'object' && typeof window.inventoryDiagnostics.testInventoryAPI === 'function';
-            if (!hasDiag) return;
-
-            console.warn(`⚠️ Forcing render via diagnostics path (reason: ${reason})`);
-            const res = await window.inventoryDiagnostics.testInventoryAPI();
-            if (res && res.success && res.data && Array.isArray(res.data.products) && res.data.products.length) {
-                currentProducts = res.data.products;
-                hideLoading();
-                try {
-                    displayGridView();
-                } catch (e) {
-                    // Manual minimal render as last resort
-                    if (grid) {
-                        grid.innerHTML = '';
-                        currentProducts.forEach(p => {
-                            const card = document.createElement('div');
-                            card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-                            card.innerHTML = `
-                                <h3 class="font-bold text-lg">${p.name || 'Produit'}</h3>
-                                <p class="text-gray-600 text-sm">${p.category || ''}</p>
-                                <div class="flex justify-between items-center mt-2">
-                                    <span class="font-semibold">${window.formatCurrency ? window.formatCurrency(p.sale_price || p.selling_price || 0) : ((p.sale_price || p.selling_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
-                                    <span>Stock: ${p.current_stock || 0}</span>
-                                </div>`;
-                            grid.appendChild(card);
-                        });
-                    }
-                }
-                if (res.data.stats) {
-                    try { updateStats(res.data.stats); } catch (_) {}
-                }
-                console.log('✅ Safety render completed');
-            }
-        } catch (e) {
-            console.error('Safety render failed:', e);
-        }
-    }
-
-    // Update top KPI stats safely
-    function updateStats(stats) {
-        try {
-            if (!stats || typeof stats !== 'object') return;
-
-            const total = Number(stats.total ?? stats.total_products ?? 0) || 0;
-            const outOfStock = Number(stats.out_of_stock ?? 0) || 0;
-            const lowStock = Number(stats.low_stock ?? stats.low_stock_count ?? 0) || 0;
-            const inventoryValue = Number(stats.inventory_value ?? 0) || 0;
-
-            const totalEl = document.getElementById('totalProducts');
-            const inStockEl = document.getElementById('inStockProducts');
-            const lowStockEl = document.getElementById('lowStockProducts');
-            const stockValueEl = document.getElementById('stockValue');
-
-            if (totalEl) totalEl.textContent = String(total);
-            if (inStockEl) inStockEl.textContent = String(total - outOfStock);
-            if (lowStockEl) lowStockEl.textContent = String(lowStock);
-            if (stockValueEl) {
-                // Prefer a global formatter if available
-                if (typeof window.formatCurrency === 'function') {
-                    stockValueEl.textContent = window.formatCurrency(inventoryValue);
-                } else {
-                    const formatted = new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(inventoryValue);
-                    const currency = (window.AppConfig && window.AppConfig.currentCurrency) ? window.AppConfig.currentCurrency : 'MRU';
-                    stockValueEl.textContent = `${formatted} ${currency}`;
-                }
-            }
-        } catch (e) {
-            console.error('updateStats error:', e);
-        }
-    }
-    
-    // Initialize (robust): run immediately if DOM is already ready, else on DOMContentLoaded
-    function initInventoryPage(fromBFCache = false) {
-        try {
-            console.log(`🚀 Init inventory page${fromBFCache ? ' (from BFCache)' : ''}...`);
-            console.log('📋 Checking critical elements exist...');
-
-            // Check if critical elements exist
-            const criticalElements = [
-                'totalProducts', 'inStockProducts', 'lowStockProducts', 'stockValue',
-                'searchInput', 'categoryFilter', 'stockFilter', 'gridView'
-            ];
-
-            criticalElements.forEach(id => {
-                const element = document.getElementById(id);
-                console.log(`Element ${id}:`, element ? '✅ Found' : '❌ Missing');
-            });
-
-            // Avoid double-binding if already initialized
-            if (window.__inventoryPageInitialized && !fromBFCache) {
-                console.log('ℹ️ Inventory page already initialized, skipping re-init');
-            } else {
-                setupEventListeners();
-                calculateMargin(); // Initialize margin calculation
-                window.__inventoryPageInitialized = true;
-            }
-
-            // If server seeded initial products, render them immediately for first paint
-            try {
-                const initialTag = document.getElementById('initial-products-data');
-                if (initialTag && initialTag.textContent) {
-                    const parsed = JSON.parse(initialTag.textContent);
-                    if (Array.isArray(parsed) && parsed.length) {
-                        currentProducts = parsed;
-                        hideLoading();
-                        displayProducts();
-                    } else {
-                        showLoading();
-                    }
-                } else {
-                    showLoading();
-                }
-            } catch (_) {
-                showLoading();
-            }
-            console.log('🔄 Initial setup complete, showing loading state');
-
-            // Always fetch latest products after initial render
-            loadProductsWithAuth();
-
-            // Add early safety checks to prevent infinite loading
-            setTimeout(() => forceRenderIfEmpty('early-check-2s'), 2000);
-            setTimeout(() => forceRenderIfEmpty('early-check-5s'), 5000);
-
-            // Add a longer safety timeout as a last resort
-            setTimeout(() => {
-                console.log('⏰ Safety timeout reached - checking if still loading...');
-                const loadingElement = document.getElementById('loadingState');
-                if (loadingElement && !loadingElement.classList.contains('hidden')) {
-                    console.warn('⚠️ Still loading after 30 seconds, forcing hide loading state');
-                    hideLoading();
-                    // Show a helpful message
-                    showNotification('Produits chargés avec données initiales', 'info');
-                    // Also attempt a forced render if needed
-                    forceRenderIfEmpty('late-check-30s');
-                }
-            }, 30000); // 30 seconds timeout
-        } catch (e) {
-            console.error('Init error:', e);
-            // Ensure the page is usable even if init fails
-            hideLoading();
-        }
-    }
-
-    function setInitialStockFilterFromURL() {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('filter') === 'low_stock') {
-            const stockFilter = document.getElementById('stockFilter');
-            if (stockFilter) {
-                stockFilter.value = 'low_stock';
-            }
-        }
-    }
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            setInitialStockFilterFromURL();
-            initInventoryPage(false);
-        });
-    } else {
-        setInitialStockFilterFromURL();
-        initInventoryPage(false);
-    }
-    // Handle bfcache back/forward navigations
-    window.addEventListener('pageshow', (e) => {
-        if (e.persisted) initInventoryPage(true);
-    });
-    
-    function setupEventListeners() {
-        // Search input
-        document.getElementById('searchInput').addEventListener('input', debounce(handleSearch, 300));
-
-        // Filters
-        document.getElementById('categoryFilter').addEventListener('change', loadProducts);
-        document.getElementById('stockFilter').addEventListener('change', loadProducts);
-        
-        // Price calculation
-        document.getElementById('purchasePrice').addEventListener('input', calculateMargin);
-        document.getElementById('salePrice').addEventListener('input', calculateMargin);
-        
-        // Form submission
-        document.getElementById('productForm').addEventListener('submit', handleProductSubmit);
-    }
-    
-    // Show login redirect message and redirect to login page
-    function showLoginRedirect() {
-        console.log('Showing login redirect message...');
-        showNotification('Veuillez vous connecter pour accéder à l\'inventaire', 'info');
-        setTimeout(() => {
-            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-        }, 2000);
-    }
-    
-    // Load products with authentication - FIXED VERSION
-    async function loadProductsWithAuth() {
-        if (isLoading) {
-            console.log('⚠️ Already loading products, skipping duplicate request');
-            return;
-        }
-        
-        console.log('🔄 loadProductsWithAuth() called - starting product loading');
-        isLoading = true;
-        showLoading();
-        
-        try {
-            // Check if search elements exist
-            const searchInput = document.getElementById('searchInput');
-            const categoryFilter = document.getElementById('categoryFilter');
-            const stockFilter = document.getElementById('stockFilter');
-
-            const params = new URLSearchParams();
-            if (searchInput && searchInput.value) params.append('search', searchInput.value);
-            if (categoryFilter && categoryFilter.value) params.append('category', categoryFilter.value);
-            if (stockFilter && stockFilter.value) {
-                if (stockFilter.value === 'low_stock') {
-                    params.append('low_stock', 'true');
-                } else if (stockFilter.value === 'out_of_stock') {
-                    params.append('out_of_stock', 'true');
-                }
-                // 'in_stock' uses default behavior (no special param)
-            }
-            
-            console.log('🔍 Fetching products with params:', params.toString());
-            
-            // Add headers and credentials for auth - FIXED IMPLEMENTATION
-            const headers = new Headers({
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'  // Explicitly request JSON
-            });
-            
-            // Debug: Show current cookies
-            console.log('🍪 Current document cookies:', document.cookie);
-            
-            const apiUrl = `/api/inventory/products?${params}`;
-            console.log('🚀 Sending request to:', apiUrl);
-            
-            // Use direct fetch call without any interceptors
-            const fetchPromise = window.fetch(apiUrl, {
-                method: 'GET',
-                headers: headers,
-                credentials: 'same-origin', // Explicitly include cookies
-                cache: 'no-store' // Prevent caching
-            });
-            
-            // Set a timeout to ensure we don't hang indefinitely
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error('Request timed out after 10s')), 10000)
-            );
-            
-            // Race the fetch against a timeout
-            const response = await Promise.race([fetchPromise, timeoutPromise]);
-            
-            console.log('✅ Response received:', response);
-            console.log('📊 Response status:', response.status);
-            console.log('🔤 Response headers:', Object.fromEntries([...response.headers.entries()]));
-            
-            // Handle authentication failure
-            if (response.status === 401) {
-                console.error('🔒 Authentication failed - redirecting to login');
-                showNotification('Session expirée. Redirection vers la page de connexion...', 'warning');
-                setTimeout(() => {
-                    window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-                }, 2000);
-                return;
-            }
-            
-            // Check response content type to see if it's HTML (redirect) or JSON (expected)
-            const contentType = response.headers.get('content-type') || '';
-            if (contentType.includes('text/html')) {
-                console.error('⚠️ Received HTML response instead of JSON. This likely means a redirect occurred.');
-                showNotification('Session expirée. Veuillez vous reconnecter.', 'warning');
-                setTimeout(() => {
-                    window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-                }, 2000);
-                return;
-            }
-            
-            // Check if response is OK
-            if (!response.ok) {
-                console.error('API response not OK:', response.status, response.statusText);
-                throw new Error(`API responded with status: ${response.status}`);
-            }
-            
-            // Parse response - wrap in try/catch
-            let data;
-            try {
-                data = await response.json();
-                console.log('Successfully parsed JSON response:', data);
-            } catch (jsonError) {
-                console.error('Failed to parse JSON response:', jsonError);
-                throw new Error('Failed to parse API response as JSON');
-            }
-            
-            console.log('API Response:', data);
-            // Debug: Log filter and product count for troubleshooting rupture filter
-            const stockFilterValue = stockFilter && stockFilter.value;
-            console.log('[DEBUG] Stock filter:', stockFilterValue, '| Products returned:', Array.isArray(data.products) ? data.products.length : 'N/A');
-            
-            if (data.success) {
-                if (!data.products || !Array.isArray(data.products)) {
-                    console.error('❌ Products data is not an array:', data.products);
-                    currentProducts = [];
-                } else {
-                    console.log('✅ Successfully loaded products:', data.products.length);
-                    currentProducts = data.products;
-                }
-                console.log(`✨ Loaded ${currentProducts.length} products - now updating UI`);
-                
-                // CRITICAL: Hide loading state immediately after successful data load
-                hideLoading();
-                isLoading = false;
-                console.log('🎯 Loading state cleared after successful data load');
-                
-                // Update UI with improved error handling
-                try {
-                    // Make sure we have the grid container
-                    const gridView = document.getElementById('gridView');
-                    if (!gridView) {
-                        console.error('❌ Grid view container not found!');
-                        throw new Error('Grid view container not found');
-                    }
-                    
-                    // Try regular display
-                    displayProducts();
-                    console.log('✅ Products displayed successfully');
-                    
-                    // Make sure loading state is hidden
-                    hideLoading();
-                    
-                    // Fallback: If products aren't displaying, try direct DOM manipulation
-                    const visibleProducts = document.querySelectorAll('#gridView .product-card');
-                    if (visibleProducts.length === 0 && currentProducts.length > 0) {
-                        console.warn('⚠️ No product cards found after displayProducts(), using fallback rendering');
-                        
-                        // Clear container
-                        gridView.innerHTML = '';
-                        
-                        // Manually create product cards
-                        currentProducts.forEach(product => {
-                            const card = document.createElement('div');
-                            card.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-                            card.innerHTML = `
-                                <h3 class="font-bold text-lg">${product.name}</h3>
-                                <p class="text-gray-600 text-sm">${product.category}</p>
-                                <div class="flex justify-between items-center mt-2">
-                                    <span class="font-semibold">${product.sale_price}</span>
-                                    <span>Stock: ${product.current_stock}</span>
-                                </div>
-                            `;
-                            gridView.appendChild(card);
-                        });
-                        
-                        console.log('✅ Products displayed using fallback method');
-                    }
-                } catch (displayError) {
-                    console.error('❌ Error displaying products:', displayError);
-                    showNotification('Erreur lors de l\'affichage des produits', 'error');
-                }
-                
-                if (data.stats) {
-                    try {
-                        console.log('📊 About to call updateStats with:', data.stats);
-                        updateStats(data.stats);
-                        console.log('✅ Stats updated successfully:', data.stats);
-                        
-                        // Force update DOM elements directly as fallback
-                        setTimeout(() => {
-                            console.log('🔧 Applying fallback stats update...');
-                            const totalEl = document.getElementById('totalProducts');
-                            const inStockEl = document.getElementById('inStockProducts');
-                            const lowStockEl = document.getElementById('lowStockProducts');
-                            const stockValueEl = document.getElementById('stockValue');
-                            
-                            if (totalEl) {
-                                totalEl.textContent = data.stats.total || '0';
-                                console.log('🔧 Fallback set totalProducts to:', data.stats.total);
-                            }
-                            if (inStockEl) {
-                                const inStock = (data.stats.total || 0) - (data.stats.out_of_stock || 0);
-                                inStockEl.textContent = inStock;
-                                console.log('🔧 Fallback set inStockProducts to:', inStock);
-                            }
-                            if (lowStockEl) {
-                                lowStockEl.textContent = data.stats.low_stock || '0';
-                                console.log('🔧 Fallback set lowStockProducts to:', data.stats.low_stock);
-                            }
-                            if (stockValueEl) {
-                                const inventoryValue = data.stats.inventory_value || 0;
-                                const formattedValue = new Intl.NumberFormat('fr-FR', {
-                                    minimumFractionDigits: 0,
-                                    maximumFractionDigits: 0
-                                }).format(inventoryValue);
-                                stockValueEl.textContent = window.formatCurrency ? window.formatCurrency(inventoryValue) : (formattedValue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
-                                console.log('🔧 Fallback set stockValue to:', formattedValue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
-                            }
-                        }, 100);
-                        
-                    } catch (statsError) {
-                        console.error('❌ Error updating stats:', statsError);
-                    }
-                }
-            } else {
-                console.error('API error:', data.message);
-                showNotification('Erreur lors du chargement des produits: ' + (data.message || 'Erreur inconnue'), 'error');
-                // Show empty state since we have no products
-                currentProducts = [];
-                displayProducts();
-            }
-        } catch (error) {
-            console.error('Error loading products:', error);
-            
-            // Check if it's a timeout or network error
-            if (error.message.includes('timeout')) {
-                showNotification('Délai d\'attente dépassé. Vérifiez votre connexion.', 'error');
-            } else if (error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-                showNotification('Erreur de réseau. Vérifiez votre connexion.', 'error');
-            } else {
-                showNotification('Erreur de connexion', 'error');
-            }
-        } finally {
-            isLoading = false;
-            hideLoading();
-            console.log('Request handling completed');
-        }
-    }
-    
-    // Legacy function - now calls loadProductsWithAuth
-    async function loadProducts() {
-        loadProductsWithAuth();
-    }
-    
-    // Display products based on current view
-    function displayProducts() {
-        try {
-            console.log('⚙️ displayProducts() called with', currentProducts.length, 'products');
-            
-            if (currentProducts.length === 0) {
-                console.log('📊 No products to display, showing empty state');
-                // Clear table body to remove old rows
-                const tbody = document.getElementById('productTableBody');
-                if (tbody) tbody.innerHTML = '';
-                // Clear grid view to remove old product cards
-                const gridView = document.getElementById('gridView');
-                if (gridView) gridView.innerHTML = '';
-                showEmptyState();
-                return;
-            }
-            
-            hideEmptyState();
-            
-            if (currentView === 'grid') {
-                console.log('📊 Displaying grid view');
-                displayGridView();
-            } else {
-                console.log('📊 Displaying list view');
-                displayListView();
-            }
-        } catch (error) {
-            console.error('❌ Error in displayProducts():', error);
-            showNotification('Erreur lors de l\'affichage des produits', 'error');
-        }
-    }
-    
-    // Display products in grid view - FIXED VERSION
-    function displayGridView() {
-        try {
-            const container = document.getElementById('gridView');
-            if (!container) {
-                console.error('❌ Grid view container not found');
-                throw new Error('Grid view container not found');
-            }
-            
-            console.log('⚙️ Clearing grid view container');
-            container.innerHTML = '';
-            
-            console.log(`⚙️ Creating ${currentProducts.length} product cards for grid view`);
-            
-            if (currentProducts.length === 0) {
-                console.log('No products to display, showing empty state');
-                showEmptyState();
-                return;
-            }
-            
-            // Use reusable card factory to ensure consistent actions/selection support
-            currentProducts.forEach((product, index) => {
-                try {
-                    console.log(`⚙️ Creating card for product ${index + 1}/${currentProducts.length}: ${product?.name || 'Produit'}`);
-                    const card = createProductCard(product);
-                    container.appendChild(card);
-                } catch (cardError) {
-                    console.error(`❌ Error creating card for product ${index}:`, cardError);
-                }
-            });
-            
-            // Hide empty state and show products
-            hideEmptyState();
-            document.getElementById('productsContainer').classList.remove('hidden');
-            
-            console.log('✅ Grid view displayed successfully');
-        } catch (error) {
-            console.error('❌ Error in displayGridView():', error);
-            
-            // Try direct method as fallback
-            try {
-                console.log('Attempting fallback display method...');
-                const container = document.getElementById('gridView');
-                if (container && currentProducts && currentProducts.length > 0) {
-                    container.innerHTML = '';
-                    currentProducts.forEach(product => {
-                        try {
-                            const card = createProductCard(product);
-                            container.appendChild(card);
-                        } catch (e) {
-                            // Minimal fallback if factory fails
-                            const div = document.createElement('div');
-                            div.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-                            div.textContent = product?.name || 'Produit';
-                            container.appendChild(div);
-                        }
-                    });
-                    console.log('✅ Fallback display successful');
-                }
-            } catch (fallbackError) {
-                console.error('❌ Fallback display also failed:', fallbackError);
-            }
-        }
-    }
-    
-    // Create product card element
-    function createProductCard(product) {
-        if (!product) {
-            console.error('Attempted to create product card with undefined product');
-            return document.createElement('div'); // Return empty div
-        }
-        
-        const div = document.createElement('div');
-        div.className = 'product-card bg-white rounded-lg shadow-lg p-6';
-        
-        // Make sure we have the required properties
-        const currentStock = product.current_stock || 0;
-        const minStock = product.min_stock_alert || 0;
-        
-        const stockLevel = getStockLevel(currentStock, minStock);
-        const stockClass = getStockClass(stockLevel);
-        
-        div.innerHTML = `
-            <div class="flex items-start justify-between mb-3">
-                <div class="flex-1">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">${product.name}</h3>
-                    <p class="text-xs text-gray-500 mb-1">${product.code || 'N/A'}</p>
-                    <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full mt-1 mb-2">
-                        ${product.category}
-                    </span>
-                </div>
-                <div class="flex flex-col space-y-2 items-end">
-                    <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-800" title="Modifier">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-800" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-            </div>
-            <div class="space-y-2 mb-2">
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-500">Stock:</span>
-                    <span class="text-xs font-medium ${stockClass} px-2 py-1 rounded-full">${product.current_stock} ${product.unit}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                    <span class="text-xs text-gray-500">Prix:</span>
-                    <span class="text-sm font-bold text-gray-900">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</span>
-                </div>
-            </div>
-            ${product.description ? `<div class="text-xs text-gray-600 border-t pt-2 mb-2">${product.description.substring(0, 100)}${product.description.length > 100 ? '...' : ''}</div>` : ''}
-            <div class="flex gap-2 pt-2 border-t">
-                <button onclick="adjustStock(${product.id})" class="flex-1 min-w-0 bg-blue-600 hover:bg-blue-700 text-white py-1 px-2 rounded-md text-xs flex items-center justify-center" style="max-width:120px;">
-                    <i class="fas fa-boxes mr-1"></i> Ajuster Stock
-                </button>
-                <button onclick="viewDetails(${product.id})" class="flex-1 min-w-0 bg-gray-700 hover:bg-gray-800 text-white py-1 px-2 rounded-md text-xs flex items-center justify-center" style="max-width:100px;">
-                    <i class="fas fa-info-circle mr-1"></i> Détails
-                </button>
-            </div>
-        `;
-        
-        return div;
-    }
-    
-    // Display products in list view
-    function displayListView() {
-        const tbody = document.getElementById('productTableBody');
-        tbody.innerHTML = '';
-        
-        currentProducts.forEach(product => {
-            const row = createProductRow(product);
-            tbody.appendChild(row);
-        });
-    }
-    
-    // Create product table row
-    function createProductRow(product) {
-        if (!product) {
-            console.error('Attempted to create product row with undefined product');
-            return document.createElement('tr'); // Return empty row
-        }
-        
-        const tr = document.createElement('tr');
-        tr.className = 'table-row';
-        
-        // Make sure we have the required properties
-        const currentStock = product.current_stock || 0;
-        const minStock = product.min_stock_alert || 0;
-        
-        const stockLevel = getStockLevel(currentStock, minStock);
-        const stockClass = getStockClass(stockLevel);
-        
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div>
-                    <div class="text-sm font-medium text-gray-900">${product.name}</div>
-                    <div class="text-sm text-gray-500">${product.description || ''}</div>
-                </div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${product.code || 'N/A'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                    ${product.category}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="text-sm font-medium ${stockClass} px-2 py-1 rounded-full">
-                    ${product.current_stock} ${product.unit}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div class="flex space-x-2">
-                    <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-900 flex items-center" title="Modifier">
-                        <i class="fas fa-edit mr-1"></i> Modifier
-                    </button>
-                    <button onclick="adjustStock(${product.id})" class="text-green-600 hover:text-green-900 flex items-center" title="Ajuster Stock">
-                        <i class="fas fa-boxes mr-1"></i> Stock
-                    </button>
-                    <button onclick="viewDetails(${product.id})" class="text-gray-600 hover:text-gray-900 flex items-center" title="Détails">
-                        <i class="fas fa-info-circle mr-1"></i> Détails
-                    </button>
-                    <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-900 flex items-center" title="Supprimer">
-                        <i class="fas fa-trash-alt mr-1"></i> Supprimer
-                    </button>
-                </div>
-            </td>
-        `;
-        
-        return tr;
-    }
-    
-    // Utility functions
-    function getStockLevel(currentStock, minStock) {
-        // Convert to numbers and handle undefined/null values
-        const stock = Number(currentStock) || 0;
-        const threshold = Number(minStock) || 0;
-        
-        if (stock === 0) return 'out';
-        if (threshold > 0 && stock <= threshold) return 'low';
-        if (threshold > 0 && stock <= threshold * 2) return 'medium';
-        return 'good';
-    }
-    
-    function getStockClass(level) {
-        const classes = {
-            'out': 'stock-level-low',
-            'low': 'stock-level-low',
-            'medium': 'stock-level-medium',
-            'good': 'stock-level-good'
-        };
-        return classes[level] || '';
-    }
-    
-    // View management
-    function setView(view) {
-        currentView = view;
-        
-        // Update buttons
-        document.getElementById('gridViewBtn').className = view === 'grid' 
-            ? 'px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm'
-            : 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900';
-            
-        document.getElementById('listViewBtn').className = view === 'list' 
-            ? 'px-3 py-1 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm'
-            : 'px-3 py-1 rounded-md text-sm font-medium text-gray-500 hover:text-gray-900';
-        
-        // Show/hide views
-        document.getElementById('gridView').classList.toggle('hidden', view !== 'grid');
-        document.getElementById('listView').classList.toggle('hidden', view !== 'list');
-        
-        displayProducts();
-    }
-    
-    // Search functionality
-    function handleSearch() {
-        loadProducts();
-    }
-    
-    // Modal management
-    async function openProductModal(productId = null) {
-        const modal = document.getElementById('productModal');
-        const title = document.getElementById('modalTitle');
-        const form = document.getElementById('productForm');
-
-        form.reset();
-        document.getElementById('productId').value = '';
-
-        if (productId) {
-            title.textContent = 'Modifier le Produit';
-            await loadProductData(productId);
-            // Make currentStock field read-only and grey
-            const currentStockInput = document.getElementById('currentStock');
-            currentStockInput.readOnly = true;
-            currentStockInput.classList.remove('bg-white');
-            currentStockInput.classList.add('bg-gray-100', 'text-gray-500');
-        } else {
-            title.textContent = 'Ajouter un Produit';
-            // Make currentStock field editable and normal
-            const currentStockInput = document.getElementById('currentStock');
-            currentStockInput.readOnly = false;
-            currentStockInput.classList.remove('bg-gray-100', 'text-gray-500');
-            currentStockInput.classList.add('bg-white');
-        }
-
-        modal.classList.remove('hidden');
-    }
-    
-    function closeProductModal() {
-        document.getElementById('productModal').classList.add('hidden');
-    }
-    
-    // Product operations
-
-    async function fetchProduct(productId) {
-        const response = await fetch(`/api/inventory/products/${productId}`, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store'
-        });
-        const data = await response.json();
-
-        if (!data.success) {
-            throw new Error(data.message || 'Erreur lors du chargement du produit');
-        }
-
-        return data.product;
-    }
-
-    async function loadProductData(productId) {
-        try {
-            const product = await fetchProduct(productId);
-
-            // Fill form fields
-            document.getElementById('productId').value = product.id;
-            document.getElementById('productName').value = product.name;
-            document.getElementById('productCode').value = product.code || '';
-            document.getElementById('productCategory').value = product.category;
-            document.getElementById('productUnit').value = product.unit || '';
-            document.getElementById('productDescription').value = product.description || '';
-            document.getElementById('purchasePrice').value = product.purchase_price || '';
-            document.getElementById('salePrice').value = product.sale_price;
-            document.getElementById('currentStock').value = product.current_stock;
-            // Prefer reorder_level/min_stock_alert for min stock
-            document.getElementById('minStockAlert').value = (product.reorder_level ?? product.min_stock_alert ?? 0);
-            document.getElementById('supplier').value = product.supplier || '';
-            document.getElementById('depot').value = product.depot || product.location || '';
-
-            calculateMargin();
-        } catch (error) {
-            console.error('Error loading product:', error);
-            showNotification('Erreur lors du chargement du produit', 'error');
-        }
-    }
-    
-    async function handleProductSubmit(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(e.target);
-        const productData = Object.fromEntries(formData.entries());
-
-        // Remove empty string numeric fields on create
-    const numericFields = ['purchase_price', 'sale_price', 'current_stock', 'min_stock_alert'];
-        const isEdit = productData.product_id !== '';
-        if (!isEdit) {
-            for (const field of numericFields) {
-                if (productData[field] === '') {
-                    delete productData[field];
-                }
-            }
-        }
-
-        const url = isEdit 
-            ? `/api/inventory/products/${productData.product_id}`
-            : '/api/inventory/products';
-        const method = isEdit ? 'PUT' : 'POST';
-
-        try {
-            const response = await fetch(url, {
-                method: method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store',
-                body: JSON.stringify(productData)
-            });
-
-            const result = await response.json();
-
-            if (result.success) {
-                showNotification(
-                    isEdit ? 'Produit modifié avec succès' : 'Produit ajouté avec succès', 
-                    'success'
-                );
-                closeProductModal();
-                loadProducts();
-            } else {
-                showNotification(result.message || 'Erreur lors de l\'enregistrement', 'error');
-            }
-        } catch (error) {
-            console.error('Error saving product:', error);
-            showNotification('Erreur de connexion', 'error');
-        }
-    }
-    
-    function calculateMargin() {
-        const purchasePrice = parseFloat(document.getElementById('purchasePrice').value) || 0;
-        const salePriceValue = parseFloat(document.getElementById('salePrice').value) || 0;
-
-        let margin = 0;
-        if (purchasePrice > 0 && salePriceValue > 0) {
-            margin = ((salePriceValue - purchasePrice) / purchasePrice * 100).toFixed(2);
-        }
-        
-        document.getElementById('marginDisplay').value = margin + '%';
-    }
-    
-    // Actions
-    function editProduct(productId) {
-        openProductModal(productId);
-    }
-    
-    async function deleteProduct(productId) {
-        if (!confirm('Êtes-vous sûr de vouloir supprimer ce produit?')) return;
-        
-        try {
-            const response = await fetch(`/api/inventory/products/${productId}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store'
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                showNotification('Produit supprimé avec succès', 'success');
-                loadProducts();
-            } else {
-                showNotification(result.message || 'Erreur lors de la suppression', 'error');
-            }
-        } catch (error) {
-            console.error('Error deleting product:', error);
-            showNotification('Erreur de connexion', 'error');
-        }
-    }
-    
-        // Add this function to inventory.html
-    function adjustStock(productId) {
-        // Get product details
-        fetch(`/api/inventory/products/${productId}`, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store'
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const product = data.product;
-                    // Create and show modal
-                    const modalHtml = `
-                    <div id="stockAdjustmentModal" class="fixed inset-0 flex items-center justify-center z-50">
-                        <div class="fixed inset-0 bg-black bg-opacity-50"></div>
-                        <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-                            <h3 class="text-lg font-medium text-gray-900 mb-4">Ajuster le Stock: ${product.name}</h3>
-                            <form id="stockAdjustmentForm" class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Stock Actuel</label>
-                                    <input type="text" value="${product.current_stock}" class="mt-1 bg-gray-100 text-gray-800 block w-full rounded-md px-3 py-2" readonly>
-                                </div>
-                                
-                                <div>
-                                    <label for="adjustmentType" class="block text-sm font-medium text-gray-700">Type d'Ajustement</label>
-                                    <select id="adjustmentType" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3">
-                                        <option value="add">Ajouter au stock</option>
-                                        <option value="subtract">Retirer du stock</option>
-                                        <option value="set">Définir stock exact</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label for="adjustmentQuantity" class="block text-sm font-medium text-gray-700">Quantité</label>
-                                    <input type="number" id="adjustmentQuantity" min="1" value="1" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3">
-                                </div>
-                                
-                                <div>
-                                    <label for="adjustmentReason" class="block text-sm font-medium text-gray-700">Raison</label>
-                                    <select id="adjustmentReason" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3">
-                                        <option value="inventory_correction">Correction d'inventaire</option>
-                                        <option value="damaged">Produits endommagés</option>
-                                        <option value="returned">Retour client</option>
-                                        <option value="other">Autre</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label for="adjustmentNotes" class="block text-sm font-medium text-gray-700">Notes</label>
-                                    <textarea id="adjustmentNotes" rows="2" class="mt-1 block w-full rounded-md border-gray-300 py-2 px-3"></textarea>
-                                </div>
-                                
-                                <div class="flex justify-end space-x-3 pt-4">
-                                    <button type="button" onclick="closeStockAdjustmentModal()" 
-                                            class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                        Annuler
-                                    </button>
-                                    <button type="button" onclick="submitStockAdjustment(${productId})" 
-                                            class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                                        Enregistrer
-                                    </button>
-                                </div>
-                            </form>
+    <!-- Products Container -->
+    <div id="productsContainer" x-show="!isLoading">
+        <!-- Products Grid -->
+        <div id="gridView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <template x-for="product in filteredProducts" :key="product.id">
+                <div class="bg-white rounded-lg shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300">
+                    <div class="p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-lg font-semibold text-gray-900" x-text="product.name"></h3>
+                            <span class="px-2 py-1 text-xs font-medium rounded-full"
+                                  :class="{
+                                      'bg-red-100 text-red-800': product.current_stock === 0,
+                                      'bg-yellow-100 text-yellow-800': product.current_stock > 0 && product.current_stock <= product.min_stock_alert,
+                                      'bg-green-100 text-green-800': product.current_stock > product.min_stock_alert
+                                  }">
+                                <span x-text="getStockStatus(product)"></span>
+                            </span>
                         </div>
-                    </div>`;
-                    
-                    // Add modal to body
-                    const tempDiv = document.createElement('div');
-                    tempDiv.innerHTML = modalHtml;
-                    document.body.appendChild(tempDiv.firstElementChild);
-                } else {
-                    showNotification('Erreur lors du chargement du produit', 'error');
-                }
-            })
-            .catch(error => {
-                console.error('Error loading product:', error);
-                showNotification('Erreur de connexion', 'error');
-            });
-    }
-    
-    function closeStockAdjustmentModal() {
-        const modal = document.getElementById('stockAdjustmentModal');
-        if (modal) modal.remove();
-    }
-    
-    function submitStockAdjustment(productId) {
-        const adjustmentType = document.getElementById('adjustmentType').value;
-        const quantity = parseInt(document.getElementById('adjustmentQuantity').value);
-        const reason = document.getElementById('adjustmentReason').value;
-        const notes = document.getElementById('adjustmentNotes').value;
-
-        if (!quantity || quantity < 1) {
-            showNotification('Veuillez entrer une quantité valide', 'error');
-            return;
-        }
-
-        // Prevent multiple submissions
-        const saveBtn = document.querySelector('#stockAdjustmentModal button[type="button"][onclick^="submitStockAdjustment"]');
-        if (saveBtn) {
-            saveBtn.disabled = true;
-            saveBtn.textContent = 'Enregistrement...';
-        }
-
-        // Prepare data for API
-        const data = {
-            product_id: productId,
-            adjustment_type: adjustmentType,
-            quantity: quantity,
-            reason: reason,
-            notes: notes
-        };
-
-        // Send to API
-        fetch('/api/inventory/adjust-stock', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store',
-            body: JSON.stringify(data)
-        })
-        .then(response => response.json())
-        .then(result => {
-            if (result.success) {
-                showNotification('Stock ajusté avec succès', 'success');
-                closeStockAdjustmentModal();
-                loadProducts(); // Reload products to show updated stock
-            } else {
-                showNotification(result.message || 'Erreur lors de l\'ajustement du stock', 'error');
-                if (saveBtn) {
-                    saveBtn.disabled = false;
-                    saveBtn.textContent = 'Enregistrer';
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error adjusting stock:', error);
-            showNotification('Erreur de connexion', 'error');
-            if (saveBtn) {
-                saveBtn.disabled = false;
-                saveBtn.textContent = 'Enregistrer';
-            }
-        });
-    }
-    
-        // Add this function to inventory.html
-    async function viewDetails(productId) {
-        try {
-            // Fetch unified product details
-            const response = await fetch(`/api/inventory/products/${productId}`, {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store'
-            });
-            const data = await response.json();
-            if (!data.success) throw new Error('API error');
-            const product = data.product;
-            // Show all stock movements (Entrée, Sortie, Ajustement)
-            const movements = product.recent_movements || [];
-            const sales = product.sales_history || [];
-
-            // Create and show modal using unified product mapping
-            const modalHtml = `
-                    <div id="productDetailsModal" class="fixed inset-0 flex items-center justify-center z-50">
-                        <div class="fixed inset-0 bg-black bg-opacity-50"></div>
-                        <div class="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 relative z-10 max-h-[90vh] overflow-auto">
-                            <div class="flex justify-between items-start">
-                                <h2 class="text-xl font-bold text-gray-900">${product.name}</h2>
-                                <button onclick="closeProductDetailsModal()" class="text-gray-400 hover:text-gray-500">
-                                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                    </svg>
-                                </button>
+                        
+                        <p class="text-gray-600 text-sm mb-4" x-text="product.description || 'Aucune description'"></p>
+                        
+                        <div class="space-y-2 mb-4">
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">Catégorie:</span>
+                                <span x-text="product.category || 'Non classé'"></span>
                             </div>
-
-                            <!-- Product Info -->
-                            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div class="space-y-4">
-                                    <div>
-                                        <h3 class="text-lg font-medium text-gray-900">Informations Produit</h3>
-                                        <div class="mt-2 border-t border-gray-200 pt-2">
-                                            <dl class="divide-y divide-gray-200">
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Code</dt>
-                                                    <dd class="text-sm text-gray-900">${product.code || 'N/A'}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Catégorie</dt>
-                                                    <dd class="text-sm text-gray-900">${product.category || 'N/A'}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Prix d'achat</dt>
-                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency(product.purchase_price || 0) : ((product.purchase_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Prix de vente</dt>
-                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Marge</dt>
-                                                    <dd class="text-sm text-gray-900">
-                                                        ${((product.sale_price - product.purchase_price) / (product.purchase_price || 1) * 100).toFixed(2)}%
-                                                    </dd>
-                                                </div>
-                                            </dl>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h3 class="text-lg font-medium text-gray-900">Stock</h3>
-                                        <div class="mt-2 border-t border-gray-200 pt-2">
-                                            <dl class="divide-y divide-gray-200">
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Stock Actuel</dt>
-                                                    <dd class="text-sm text-gray-900">${product.current_stock} ${product.unit || ''}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Seuil d'alerte</dt>
-                                                    <dd class="text-sm text-gray-900">${(product.reorder_level ?? product.min_stock_alert ?? 0)} ${product.unit || ''}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Valeur de stock</dt>
-                                                    <dd class="text-sm text-gray-900">${window.formatCurrency ? window.formatCurrency((product.current_stock || 0) * (product.purchase_price || 0)) : (((product.current_stock || 0) * (product.purchase_price || 0)).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}</dd>
-                                                </div>
-                                            </dl>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h3 class="text-lg font-medium text-gray-900">Autre</h3>
-                                        <div class="mt-2 border-t border-gray-200 pt-2">
-                                            <dl class="divide-y divide-gray-200">
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Fournisseur</dt>
-                                                    <dd class="text-sm text-gray-900">${product.supplier || 'N/A'}</dd>
-                                                </div>
-                                                <div class="py-2 flex justify-between">
-                                                    <dt class="text-sm font-medium text-gray-500">Emplacement</dt>
-                                                    <dd class="text-sm text-gray-900">${product.depot || product.location || 'N/A'}</dd>
-                                                </div>
-                                            </dl>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h3 class="text-lg font-medium text-gray-900 mb-2">Mouvements de Stock</h3>
-                                    <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-gray-200">
-                                            <thead>
-                                                <tr>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Référence</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-gray-200">
-                                                ${movements.length > 0 ?
-                                                    movements.map(m => `
-                                                    <tr>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${new Date(m.movement_time || m.movement_date || m.created_at || Date.now()).toLocaleDateString()}
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm">
-                                                            <span class="px-2 py-1 text-xs font-medium rounded-full
-                                                            ${m.movement_type === 'in' ? 'bg-green-100 text-green-800' :
-                                                              m.movement_type === 'out' ? 'bg-red-100 text-red-800' :
-                                                              'bg-blue-100 text-blue-800'}">
-                                                                ${m.movement_type === 'in' ? 'Entrée' :
-                                                                  m.movement_type === 'out' ? 'Sortie' : 'Ajustement'}
-                                                            </span>
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${m.quantity}
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${m.notes || '-'}
-                                                        </td>
-                                                    </tr>
-                                                    `).join('') :
-                                                    '<tr><td colspan="4" class="px-4 py-2 text-sm text-gray-500 text-center">Aucun mouvement enregistré</td></tr>'
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </div>
-
-                                    <h3 class="text-lg font-medium text-gray-900 mb-2 mt-6">Historique des Ventes</h3>
-                                    <div class="overflow-x-auto">
-                                        <table class="min-w-full divide-y divide-gray-200">
-                                            <thead>
-                                                <tr>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Facture</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantité</th>
-                                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody class="divide-y divide-gray-200">
-                                                ${sales.length > 0 ?
-                                                    sales.map(s => `
-                                                    <tr>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${new Date(s.sale_date).toLocaleDateString()}
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${s.invoice_number || '-'}
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${s.quantity}
-                                                        </td>
-                                                        <td class="px-4 py-2 text-sm text-gray-900">
-                                                            ${window.formatCurrency ? window.formatCurrency(s.total_price || 0) : ((s.total_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
-                                                        </td>
-                                                    </tr>
-                                                    `).join('') :
-                                                    '<tr><td colspan="4" class="px-4 py-2 text-sm text-gray-500 text-center">Aucune vente enregistrée</td></tr>'
-                                                }
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">Prix de vente:</span>
+                                <span class="font-semibold" x-text="formatCurrency(product.sale_price)"></span>
                             </div>
-
-                            <div class="mt-6 flex justify-end space-x-3">
-                                <button onclick="closeProductDetailsModal()"
-                                        class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
-                                    Fermer
-                                </button>
-                                <button onclick="editProduct(${productId}); closeProductDetailsModal();"
-                                        class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700">
-                                    Modifier
-                                </button>
+                            <div class="flex justify-between">
+                                <span class="text-gray-500">Stock actuel:</span>
+                                <span class="font-bold" x-text="product.current_stock"></span>
                             </div>
                         </div>
-                    </div>`;
-
-            // Add modal to body
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = modalHtml;
-            document.body.appendChild(tempDiv.firstElementChild);
-        } catch (error) {
-            console.error('Error loading product details:', error);
-            showNotification('Erreur lors du chargement des détails du produit', 'error');
-        }
-    }
-    
-    function closeProductDetailsModal() {
-        const modal = document.getElementById('productDetailsModal');
-        if (modal) modal.remove();
-    }
-    
-    // Barcode scanner removed
-    
-    // Import/Export functions
-    function exportInventory() {
-        window.open('/api/reports/export/products', '_blank');
-    }
-    
-        // Add this function to inventory.html
-    function openImportModal() {
-        // Create and show modal
-        const modalHtml = `
-        <div id="importModal" class="fixed inset-0 flex items-center justify-center z-50">
-            <div class="fixed inset-0 bg-black bg-opacity-50"></div>
-            <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4 relative z-10">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Importer des Produits</h3>
-                
-                <div class="space-y-6">
-                    <div>
-                        <p class="text-sm text-gray-600">Téléchargez d'abord le modèle, puis remplissez-le avec vos données.</p>
-                        <button onclick="downloadImportTemplate()" class="mt-2 flex items-center text-sm text-blue-600 hover:text-blue-800">
-                            <svg class="mr-1 h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                <path d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v3.586L7.707 9.293a1 1 0 00-1.414 1.414l3 3a1 1 0 001.414 0l3-3a1 1 0 00-1.414-1.414L11 10.586V7z"></path>
-                        </button>
-                    </div>
-                    
-                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                        <div class="space-y-2">
-                            <div class="flex justify-center">
-                                <svg class="h-10 w-10 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
-                                </svg>
-                            </div>
-                            <div class="text-sm text-gray-600">
-                                <label for="file-upload" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none">
-                                    <span>Télécharger un fichier</span>
-                                    <input id="file-upload" name="file-upload" type="file" class="sr-only" accept=".csv,.xlsx">
-                                </label>
-                                <p class="pl-1">ou glisser-déposer</p>
-                            </div>
-                            <p class="text-xs text-gray-500">
-                                CSV ou Excel jusqu'à 10MB
-                            </p>
-                        </div>
-                    </div>
-                    
-                    <div id="selectedFile" class="hidden">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center">
-                                <svg class="h-5 w-5 text-gray-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clip-rule="evenodd"></path>
-                                </svg>
-                                <span id="fileName" class="text-sm text-gray-800"></span>
-                            </div>
-                            <button onclick="clearSelectedFile()" class="text-red-600 hover:text-red-800">
-                                <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path>
-                                </svg>
+                        
+                        <div class="flex space-x-2">
+                            <button @click="editProduct(product)" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 rounded-md text-sm">
+                                <i class="fas fa-edit mr-1"></i>Éditer
+                            </button>
+                            <button @click="adjustStock(product)" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 px-3 rounded-md text-sm">
+                                <i class="fas fa-plus-minus mr-1"></i>Stock
                             </button>
                         </div>
                     </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" x-show="filteredProducts.length === 0 && !isLoading" class="text-center py-12">
+            <i class="fas fa-box-open text-6xl text-gray-300 mb-4"></i>
+            <h3 class="text-lg font-medium text-gray-900 mb-2">Aucun produit trouvé</h3>
+            <p class="text-gray-500 mb-6">Commencez par ajouter votre premier produit</p>
+            <button @click="showProductModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg">
+                <i class="fas fa-plus mr-2"></i>Ajouter un produit
+            </button>
+        </div>
+    </div>
+
+    <!-- Product Modal -->
+    <div x-show="showProductModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-900" x-text="editMode ? 'Modifier le produit' : 'Nouveau produit'"></h3>
+                    <button @click="closeProductModal()" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form @submit.prevent="saveProduct()">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Nom du produit*</label>
+                            <input type="text" x-model="productForm.name" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
+                            <input type="text" x-model="productForm.category" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Ex: Outils, Matériaux">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Prix d'achat*</label>
+                            <input type="number" x-model="productForm.purchase_price" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Prix de vente*</label>
+                            <input type="number" x-model="productForm.sale_price" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Stock initial</label>
+                            <input type="number" x-model="productForm.current_stock" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Seuil d'alerte</label>
+                            <input type="number" x-model="productForm.min_stock_alert" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Fournisseur</label>
+                            <input type="text" x-model="productForm.supplier" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Code-barres</label>
+                            <input type="text" x-model="productForm.barcode" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                    </div>
                     
-                    <div class="flex justify-end space-x-3 pt-4">
-                        <button type="button" onclick="closeImportModal()" 
-                                class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50">
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                        <textarea x-model="productForm.description" class="w-full border border-gray-300 rounded-md px-3 py-2" rows="3"></textarea>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3">
+                        <button type="button" @click="closeProductModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
                             Annuler
                         </button>
-                        <button type="button" id="importButton" onclick="importProducts()" disabled
-                                class="px-4 py-2 bg-blue-600 border border-transparent rounded-md text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                            Importer
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md" :disabled="isLoading">
+                            <i class="fas fa-spinner fa-spin mr-2" x-show="isLoading"></i>
+                            <span x-text="editMode ? 'Mettre à jour' : 'Créer'"></span>
                         </button>
                     </div>
-                </div>
-            </div>`;
-        
-        // Add modal to body
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = modalHtml;
-        document.body.appendChild(tempDiv.firstElementChild);
-        
-        // Setup file input handler
-        document.getElementById('file-upload').addEventListener('change', handleFileSelect);
-        
-        // Setup drag and drop
-        const dropArea = document.querySelector('.border-dashed');
-        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, preventDefaults, false);
-        });
-        
-        ['dragenter', 'dragover'].forEach(eventName => {
-            dropArea.addEventListener(eventName, highlight, false);
-        });
-        
-        ['dragleave', 'drop'].forEach(eventName => {
-            dropArea.addEventListener(eventName, unhighlight, false);
-        });
-        
-        dropArea.addEventListener('drop', handleDrop, false);
-    }
-    
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
-    
-    function highlight() {
-        document.querySelector('.border-dashed').classList.add('border-blue-300', 'bg-blue-50');
-        document.querySelector('.border-dashed').classList.remove('border-gray-300');
-    }
-    
-    function unhighlight() {
-        document.querySelector('.border-dashed').classList.remove('border-blue-300', 'bg-blue-50');
-        document.querySelector('.border-dashed').classList.add('border-gray-300');
-    }
-    
-    function handleDrop(e) {
-        const dt = e.dataTransfer;
-        const files = dt.files;
-        handleFiles(files);
-    }
-    
-    function handleFileSelect(e) {
-        const files = e.target.files;
-        handleFiles(files);
-    }
-    
-    function handleFiles(files) {
-        if (files.length) {
-            const file = files[0];
-            
-            // Check file type
-            const validTypes = ['.csv', '.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv'];
-            const fileType = file.type || file.name.substring(file.name.lastIndexOf('.'));
-            
-            if (!validTypes.includes(fileType)) {
-                showNotification('Format de fichier non pris en charge. Utilisez CSV ou Excel.', 'error');
-                return;
-            }
-            
-            // Check file size (10MB max)
-            if (file.size > 10 * 1024 * 1024) {
-                showNotification('Le fichier est trop grand. Taille maximum: 10MB', 'error');
-                return;
-            }
-            
-            // Show selected file
-            document.getElementById('selectedFile').classList.remove('hidden');
-            document.getElementById('fileName').textContent = file.name;
-            document.getElementById('importButton').disabled = false;
-            
-            // Store file for import
-            window.fileToImport = file;
-        }
-    }
-    
-    function clearSelectedFile() {
-        document.getElementById('selectedFile').classList.add('hidden');
-        document.getElementById('fileName').textContent = '';
-        document.getElementById('file-upload').value = '';
-        document.getElementById('importButton').disabled = true;
-        window.fileToImport = null;
-    }
-    
-    function closeImportModal() {
-        const modal = document.getElementById('importModal');
-        if (modal) modal.remove();
-        window.fileToImport = null;
-    }
-    
-    function downloadImportTemplate() {
-        window.open('/api/inventory/download-import-template', '_blank');
-    }
-    
-    function importProducts() {
-        if (!window.fileToImport) {
-            showNotification('Veuillez sélectionner un fichier', 'error');
-            return;
-        }
-        
-        const formData = new FormData();
-        formData.append('file', window.fileToImport);
-        
-        // Show loading state
-        document.getElementById('importButton').disabled = true;
-        document.getElementById('importButton').innerHTML = `
-            <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-            Importation...
-        `;
-        
-        fetch('/api/inventory/import-products', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showNotification(`${data.imported_count || 'Les'} produits ont été importés avec succès`, 'success');
-                closeImportModal();
-                loadProducts(); // Reload products
-            } else {
-                showNotification(data.message || 'Erreur lors de l\'importation', 'error');
-                document.getElementById('importButton').disabled = false;
-                document.getElementById('importButton').textContent = 'Importer';
-            }
-        })
-        .catch(error => {
-            console.error('Import error:', error);
-            showNotification('Erreur de connexion', 'error');
-            document.getElementById('importButton').disabled = false;
-            document.getElementById('importButton').textContent = 'Importer';
-        });
-    }
-    
-    function generateReport() {
-        window.open('/api/reports/export/products', '_blank');
-    }
-    
-    // New functions for batch operations
-    let selectedProducts = [];
-    
-    function toggleSelectionMode() {
-        const isSelectionMode = document.getElementById('selectionModeToggle').checked;
-        
-        // Show/hide selection checkboxes
-        document.querySelectorAll('.product-selection').forEach(checkbox => {
-            checkbox.style.display = isSelectionMode ? 'block' : 'none';
-        });
-        
-        // Clear selections when turning off
-        if (!isSelectionMode) {
-            selectedProducts = [];
-            updateSelectedProductsCount();
-        }
-    }
-    
-    document.getElementById('selectionModeToggle').addEventListener('change', toggleSelectionMode);
-    
-    function selectProduct(productId, checked) {
-        if (checked) {
-            if (!selectedProducts.includes(productId)) {
-                selectedProducts.push(productId);
-            }
-        } else {
-            selectedProducts = selectedProducts.filter(id => id !== productId);
-        }
-        
-        updateSelectedProductsCount();
-    }
-    
-    function updateSelectedProductsCount() {
-        const count = selectedProducts.length;
-        const countElement = document.getElementById('selectedProductsCount');
-        if (countElement) {
-            countElement.textContent = count;
-        }
-    }
-    
-    function openBatchOperationModal() {
-        if (selectedProducts.length === 0) {
-            showNotification('Veuillez sélectionner au moins un produit', 'warning');
-            return;
-        }
-        
-        document.getElementById('batchOperationModal').classList.remove('hidden');
-        updateSelectedProductsCount();
-        
-        // Reset fields
-        document.getElementById('batchOperation').value = '';
-        document.getElementById('categoryField').classList.add('hidden');
-        document.getElementById('supplierField').classList.add('hidden');
-    }
-    
-    function closeBatchOperationModal() {
-        document.getElementById('batchOperationModal').classList.add('hidden');
-    }
-    
-    document.getElementById('batchOperation').addEventListener('change', function() {
-        const operation = this.value;
-        
-        document.getElementById('categoryField').classList.add('hidden');
-        document.getElementById('supplierField').classList.add('hidden');
-        
-        if (operation === 'update_category') {
-            document.getElementById('categoryField').classList.remove('hidden');
-        } else if (operation === 'update_supplier') {
-            document.getElementById('supplierField').classList.remove('hidden');
-        }
-    });
-    
-    async function executeBatchOperation() {
-        const operation = document.getElementById('batchOperation').value;
-        
-        if (!operation) {
-            showNotification('Veuillez sélectionner une opération', 'warning');
-            return;
-        }
-        
-        // Get additional data based on operation
-        let additionalData = {};
-        
-        if (operation === 'update_category') {
-            const category = document.getElementById('batchCategory').value;
-            if (!category) {
-                showNotification('Veuillez sélectionner une catégorie', 'warning');
-                return;
-            }
-            additionalData.category = category;
-        } else if (operation === 'update_supplier') {
-            const supplier = document.getElementById('batchSupplier').value;
-            if (!supplier) {
-                showNotification('Veuillez saisir un fournisseur', 'warning');
-                return;
-            }
-            additionalData.supplier = supplier;
-        }
-        
-        try {
-            // Show loading state
-            document.querySelector('#batchOperationModal button[type="button"]:last-child').innerHTML = `
-                <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" fill="none" viewBox="0 0 24 24">
-                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Traitement...
-            `;
-            
-            const response = await fetch('/api/inventory/batch-operation', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store',
-                body: JSON.stringify({
-                    operation: operation,
-                    product_ids: selectedProducts,
-                    ...additionalData
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                showNotification(`Opération réussie sur ${data.updated_count} produit(s)`, 'success');
-                closeBatchOperationModal();
-                loadProducts();
-                
-                // Reset selection
-                selectedProducts = [];
-                document.getElementById('selectionModeToggle').checked = false;
-                toggleSelectionMode();
-            } else {
-                showNotification(data.message || 'Erreur lors de l\'opération', 'error');
-            }
-        } catch (error) {
-            console.error('Error executing batch operation:', error);
-            showNotification('Erreur de connexion', 'error');
-        } finally {
-            // Reset button
-            document.querySelector('#batchOperationModal button[type="button"]:last-child').textContent = 'Appliquer';
-        }
-    }
-    
-    // Inventory count functions
-    let countedProductsData = [];
-    
-    function startInventoryCount() {
-        document.getElementById('inventoryCountModal').classList.remove('hidden');
-        countedProductsData = [];
-        document.getElementById('countedProductsBody').innerHTML = '';
-        
-        // Set default reference with current date/time
-        const now = new Date();
-        const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
-        const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
-        document.getElementById('countReference').value = `COUNT-${dateStr}${timeStr}`;
-    }
-    
-    function closeInventoryCountModal() {
-        document.getElementById('inventoryCountModal').classList.add('hidden');
-    }
-    
-    async function searchProductForCount() {
-        const searchTerm = document.getElementById('countSearch').value.trim();
-        
-        if (!searchTerm) {
-            showNotification('Veuillez saisir un terme de recherche', 'warning');
-            return;
-        }
-        
-        try {
-            const response = await fetch(`/api/inventory/products?search=${encodeURIComponent(searchTerm)}`, {
-                method: 'GET',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store'
-            });
-            const data = await response.json();
-            
-            if (data.success && data.products && data.products.length > 0) {
-                const product = data.products[0]; // Use the first match
-                addProductToCount(product);
-            } else {
-                showNotification('Produit non trouvé', 'error');
-            }
-        } catch (error) {
-            console.error('Error searching product:', error);
-            showNotification('Erreur de connexion', 'error');
-        }
-    }
-    
-    function addProductToCount(product) {
-        // Check if product is already added
-        if (countedProductsData.some(p => p.product_id === product.id)) {
-            showNotification('Ce produit est déjà dans la liste de comptage', 'warning');
-            return;
-        }
-        
-        // Add to array
-        countedProductsData.push({
-            product_id: product.id,
-            product_name: product.name,
-            system_quantity: product.current_stock,
-            counted_quantity: product.current_stock, // Default to system quantity
-        });
-        
-        // Refresh table
-        refreshCountedProductsTable();
-        
-        // Clear search
-        document.getElementById('countSearch').value = '';
-    }
-    
-    function removeProductFromCount(index) {
-        countedProductsData.splice(index, 1);
-        refreshCountedProductsTable();
-    }
-    
-    function updateCountedQuantity(index, value) {
-        if (index >= 0 && index < countedProductsData.length) {
-            countedProductsData[index].counted_quantity = parseInt(value) || 0;
-            
-            // Update discrepancy
-            const row = document.querySelector(`#countedProductsBody tr:nth-child(${index + 1}) td:nth-child(4)`);
-            if (row) {
-                const system = countedProductsData[index].system_quantity;
-                const counted = countedProductsData[index].counted_quantity;
-                const discrepancy = counted - system;
-                
-                row.textContent = discrepancy;
-                row.className = discrepancy < 0 ? 'text-red-600' : discrepancy > 0 ? 'text-green-600' : '';
-            }
-        }
-    }
-    
-    function refreshCountedProductsTable() {
-        const tbody = document.getElementById('countedProductsBody');
-        tbody.innerHTML = '';
-        
-        countedProductsData.forEach((item, index) => {
-            const discrepancy = item.counted_quantity - item.system_quantity;
-            
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td class="px-4 py-2">${item.product_name}</td>
-                <td class="px-4 py-2">${item.system_quantity}</td>
-                <td class="px-4 py-2">
-                    <input type="number" min="0" value="${item.counted_quantity}" 
-                           class="w-20 border border-gray-300 rounded px-2 py-1"
-                           oninput="updateCountedQuantity(${index}, this.value)">
-                </td>
-                <td class="px-4 py-2 ${discrepancy < 0 ? 'text-red-600' : discrepancy > 0 ? 'text-green-600' : ''}">${discrepancy}</td>
-                <td class="px-4 py-2">
-                    <button onclick="removeProductFromCount(${index})" class="text-red-600 hover:text-red-800">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                        </svg>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Adjustment Modal -->
+    <div x-show="showStockModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Ajuster le Stock</h3>
+                    <button @click="showStockModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
                     </button>
-                </td>
-            `;
-            
-            tbody.appendChild(row);
-        });
-    }
-    
-    async function saveInventoryCount() {
-        if (countedProductsData.length === 0) {
-            showNotification('Veuillez ajouter au moins un produit', 'warning');
-            return;
-        }
+                </div>
+                
+                <div class="mb-4">
+                    <h4 class="font-medium text-gray-900" x-text="stockAdjustment.product_name"></h4>
+                    <p class="text-sm text-gray-500">Stock actuel: <span x-text="stockAdjustment.current_stock"></span></p>
+                </div>
+                
+                <form @submit.prevent="saveStockAdjustment()">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Type d'ajustement</label>
+                            <select x-model="stockAdjustment.adjustment_type" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                <option value="add">Ajouter au stock</option>
+                                <option value="subtract">Retirer du stock</option>
+                                <option value="set">Définir le stock</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Quantité</label>
+                            <input type="number" x-model="stockAdjustment.quantity" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Référence</label>
+                            <input type="text" x-model="stockAdjustment.reference" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Ex: Livraison #123">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                            <textarea x-model="stockAdjustment.notes" class="w-full border border-gray-300 rounded-md px-3 py-2" rows="3"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" @click="showStockModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                            Annuler
+                        </button>
+                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md">
+                            Ajuster
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function inventoryManager() {
+    return {
+        products: [],
+        categories: [],
+        stats: {
+            total: 0,
+            in_stock: 0,
+            low_stock: 0,
+            out_of_stock: 0,
+            inventory_value: 0
+        },
+        isLoading: true,
+        searchTerm: '',
+        categoryFilter: '',
+        stockFilter: '',
+        showProductModal: false,
+        showStockModal: false,
+        showInventoryCountModal: false,
+        editMode: false,
+        selectedProductId: null,
+        productForm: {
+            name: '',
+            description: '',
+            category: '',
+            purchase_price: '',
+            sale_price: '',
+            current_stock: 0,
+            min_stock_alert: 5,
+            supplier: '',
+            barcode: ''
+        },
+        stockAdjustment: {
+            product_id: null,
+            product_name: '',
+            current_stock: 0,
+            adjustment_type: 'add',
+            quantity: '',
+            reference: '',
+            notes: ''
+        },
         
-        const reference = document.getElementById('countReference').value.trim();
-        const notes = document.getElementById('countLocation').value.trim();
-        const adjustStock = document.getElementById('adjustStockAfterCount').checked;
+        init() {
+            this.loadProducts();
+            this.loadCategories();
+            this.loadStats();
+        },
         
-        try {
-            // Prepare request data
-            const counts = countedProductsData.map(item => ({
-                product_id: item.product_id,
-                counted_qty: item.counted_quantity
-            }));
-            
-            const response = await fetch('/api/inventory/inventory-count', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store',
-                body: JSON.stringify({
-                    reference: reference,
-                    notes: notes,
-                    adjust_stock: adjustStock,
-                    counts: counts
-                })
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                showNotification('Comptage d\'inventaire enregistré avec succès', 'success');
-                closeInventoryCountModal();
-                loadProducts(); // Reload products if stock was adjusted
-            } else {
-                showNotification(data.message || 'Erreur lors de l\'enregistrement', 'error');
-            }
-        } catch (error) {
-            console.error('Error saving inventory count:', error);
-            showNotification('Erreur de connexion', 'error');
-        }
-    }
-    
-    // Product image management
-    function openProductImageModal(productId, productName) {
-        document.getElementById('imageProductId').value = productId;
-        document.getElementById('productImageModal').classList.remove('hidden');
-        
-        // Set title
-        const modalTitle = document.querySelector('#productImageModal h3');
-        if (modalTitle) {
-            modalTitle.textContent = `Image: ${productName || 'Produit'}`;
-        }
-        
-        // Reset image
-    document.getElementById('productImagePreview').src = '/static/images/product-placeholder.svg';
-        document.getElementById('deleteImageBtn').classList.add('opacity-50', 'cursor-not-allowed');
-        document.getElementById('deleteImageBtn').disabled = true;
-        
-        // Check if product has image
-        fetch(`/api/inventory/products/${productId}`, {
-            method: 'GET',
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
-            },
-            credentials: 'same-origin',
-            cache: 'no-store'
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.product) {
-                    const product = data.product;
-                    if (product.image_path) {
-                        document.getElementById('productImagePreview').src = product.image_path;
-                        document.getElementById('deleteImageBtn').classList.remove('opacity-50', 'cursor-not-allowed');
-                        document.getElementById('deleteImageBtn').disabled = false;
+        async loadProducts() {
+            this.isLoading = true;
+            try {
+                const params = new URLSearchParams();
+                if (this.searchTerm) params.append('search', this.searchTerm);
+                if (this.categoryFilter) params.append('category', this.categoryFilter);
+                if (this.stockFilter) params.append('stock_filter', this.stockFilter);
+                
+                const response = await apiFetch(`/api/inventory/products?${params}`);
+                if (response.success) {
+                    this.products = response.products || [];
+                    if (response.stats) {
+                        this.stats = response.stats;
                     }
                 }
-            })
-            .catch(error => {
-                console.error('Error loading product image:', error);
-            });
+            } catch (error) {
+                console.error('Error loading products:', error);
+                this.showNotification('Erreur lors du chargement des produits', 'error');
+            } finally {
+                this.isLoading = false;
+            }
+        },
         
-        // Setup image preview on file select
-        document.getElementById('image-upload').addEventListener('change', function(e) {
-            if (e.target.files && e.target.files[0]) {
-                const reader = new FileReader();
+        async loadCategories() {
+            try {
+                const response = await apiFetch('/api/inventory/categories');
+                if (response.success) {
+                    this.categories = response.categories || [];
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        },
+        
+        async loadStats() {
+            try {
+                const response = await apiFetch('/api/inventory/stats');
+                if (response.success) {
+                    this.stats = response.stats;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        },
+        
+        get filteredProducts() {
+            return this.products.filter(product => {
+                const matchesSearch = !this.searchTerm || 
+                    product.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
+                    (product.barcode && product.barcode.includes(this.searchTerm));
                 
-                reader.onload = function(event) {
-                    document.getElementById('productImagePreview').src = event.target.result;
+                const matchesCategory = !this.categoryFilter || product.category === this.categoryFilter;
+                
+                let matchesStock = true;
+                if (this.stockFilter === 'low') {
+                    matchesStock = product.current_stock <= product.min_stock_alert && product.current_stock > 0;
+                } else if (this.stockFilter === 'out') {
+                    matchesStock = product.current_stock === 0;
+                } else if (this.stockFilter === 'normal') {
+                    matchesStock = product.current_stock > product.min_stock_alert;
                 }
                 
-                reader.readAsDataURL(e.target.files[0]);
-            }
-        });
-    }
-    
-    function closeProductImageModal() {
-        document.getElementById('productImageModal').classList.add('hidden');
-    }
-    
-    async function uploadProductImage() {
-        const productId = document.getElementById('imageProductId').value;
-        const fileInput = document.getElementById('image-upload');
-        
-        if (!productId) {
-            showNotification('ID produit manquant', 'error');
-            return;
-        }
-        
-        if (!fileInput.files || fileInput.files.length === 0) {
-            showNotification('Veuillez sélectionner une image', 'warning');
-            return;
-        }
-        
-        const formData = new FormData();
-        formData.append('image', fileInput.files[0]);
-        
-        try {
-            const response = await fetch(`/api/inventory/product-image/${productId}`, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store'
+                return matchesSearch && matchesCategory && matchesStock;
             });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                showNotification('Image téléchargée avec succès', 'success');
-                closeProductImageModal();
-                loadProducts(); // Reload to show updated images
-            } else {
-                showNotification(data.message || 'Erreur lors du téléchargement', 'error');
-            }
-        } catch (error) {
-            console.error('Error uploading image:', error);
-            showNotification('Erreur de connexion', 'error');
-        }
-    }
-    
-    async function deleteProductImage() {
-        const productId = document.getElementById('imageProductId').value;
+        },
         
-        if (!productId) {
-            showNotification('ID produit manquant', 'error');
-            return;
-        }
-        
-        if (!confirm('Êtes-vous sûr de vouloir supprimer cette image ?')) {
-            return;
-        }
-        
-        try {
-            const response = await fetch(`/api/inventory/product-image/${productId}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Accept': 'application/json'
-                },
-                credentials: 'same-origin',
-                cache: 'no-store'
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                showNotification('Image supprimée avec succès', 'success');
-                closeProductImageModal();
-                loadProducts(); // Reload to show updated images
-            } else {
-                showNotification(data.message || 'Erreur lors de la suppression', 'error');
-            }
-        } catch (error) {
-            console.error('Error deleting image:', error);
-            showNotification('Erreur de connexion', 'error');
-        }
-    }
-    
-    function viewInventoryHistory() {
-        // This could open a new page or modal showing inventory count history
-        window.open('/inventory/history', '_blank');
-    }
-
-    // Make sure we properly close resources when leaving the page
-    window.addEventListener('beforeunload', function() {
-        try {
-            if (typeof scannerActive !== 'undefined' && scannerActive && typeof stopScanner === 'function') {
-                stopScanner();
-            }
-        } catch (_) { /* no-op */ }
-    });
-    
-    // Override createProductCard function to add selection checkbox
-    const originalCreateProductCard = createProductCard;
-    createProductCard = function(product) {
-        const card = originalCreateProductCard(product);
-        
-        // Add selection checkbox
-        const selectionCheckbox = document.createElement('div');
-        selectionCheckbox.className = 'product-selection absolute top-2 right-2 hidden';
-        selectionCheckbox.innerHTML = `
-            <input type="checkbox" class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                   onchange="selectProduct(${product.id}, this.checked)">
-        `;
-        card.style.position = 'relative';
-        card.appendChild(selectionCheckbox);
-        
-        // Add image management
-        const actionDiv = card.querySelector('.flex.space-x-2.pt-3.border-t');
-        if (actionDiv) {
-            const imageButton = document.createElement('button');
-            imageButton.className = 'flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 px-3 rounded-md text-sm';
-            imageButton.textContent = 'Image';
-            imageButton.onclick = function(e) {
-                e.stopPropagation();
-                openProductImageModal(product.id, product.name);
+        editProduct(product) {
+            this.editMode = true;
+            this.selectedProductId = product.id;
+            this.productForm = {
+                name: product.name,
+                description: product.description || '',
+                category: product.category || '',
+                purchase_price: product.purchase_price,
+                sale_price: product.sale_price,
+                current_stock: product.current_stock,
+                min_stock_alert: product.min_stock_alert,
+                supplier: product.supplier || '',
+                barcode: product.barcode || ''
             };
-            
-            actionDiv.appendChild(imageButton);
-        }
+            this.showProductModal = true;
+        },
         
-        return card;
+        adjustStock(product) {
+            this.stockAdjustment = {
+                product_id: product.id,
+                product_name: product.name,
+                current_stock: product.current_stock,
+                adjustment_type: 'add',
+                quantity: '',
+                reference: '',
+                notes: ''
+            };
+            this.showStockModal = true;
+        },
+        
+        async saveProduct() {
+            try {
+                const url = this.editMode ? `/api/inventory/products/${this.selectedProductId}` : '/api/inventory/products';
+                const method = this.editMode ? 'PUT' : 'POST';
+                
+                const response = await apiFetch(url, {
+                    method: method,
+                    body: this.productForm
+                });
+                
+                if (response.success) {
+                    this.closeProductModal();
+                    this.loadProducts();
+                    this.loadStats();
+                    this.showNotification(
+                        this.editMode ? 'Produit mis à jour avec succès' : 'Produit créé avec succès',
+                        'success'
+                    );
+                } else {
+                    this.showNotification(response.message || 'Erreur lors de la sauvegarde', 'error');
+                }
+            } catch (error) {
+                console.error('Error saving product:', error);
+                this.showNotification('Erreur lors de la sauvegarde du produit', 'error');
+            }
+        },
+        
+        async saveStockAdjustment() {
+            try {
+                const response = await apiFetch('/api/inventory/adjust-stock', {
+                    method: 'POST',
+                    body: this.stockAdjustment
+                });
+                
+                if (response.success) {
+                    this.showStockModal = false;
+                    this.loadProducts();
+                    this.loadStats();
+                    this.showNotification('Stock ajusté avec succès', 'success');
+                } else {
+                    this.showNotification(response.message || 'Erreur lors de l\'ajustement', 'error');
+                }
+            } catch (error) {
+                console.error('Error adjusting stock:', error);
+                this.showNotification('Erreur lors de l\'ajustement du stock', 'error');
+            }
+        },
+        
+        closeProductModal() {
+            this.showProductModal = false;
+            this.editMode = false;
+            this.selectedProductId = null;
+            this.productForm = {
+                name: '',
+                description: '',
+                category: '',
+                purchase_price: '',
+                sale_price: '',
+                current_stock: 0,
+                min_stock_alert: 5,
+                supplier: '',
+                barcode: ''
+            };
+        },
+        
+        getStockStatus(product) {
+            if (product.current_stock === 0) {
+                return 'Rupture';
+            } else if (product.current_stock <= product.min_stock_alert) {
+                return 'Stock faible';
+            } else {
+                return 'En stock';
+            }
+        },
+        
+        exportInventory() {
+            window.open('/api/reports/export/products', '_blank');
+        },
+        
+        importProducts() {
+            this.showNotification('Fonctionnalité d\'import en cours de développement', 'info');
+        },
+        
+        generateInventoryReport() {
+            window.open('/api/reports/inventory-report', '_blank');
+        },
+        
+        viewStockHistory() {
+            window.open('/api/inventory/stock-movements', '_blank');
+        },
+        
+        formatCurrency(amount) {
+            return window.formatCurrency ? window.formatCurrency(amount) : `${amount} MRU`;
+        },
+        
+        showNotification(message, type = 'info') {
+            if (window.showNotification) {
+                window.showNotification(message, type);
+            } else {
+                alert(message);
+            }
+        }
     };
+}
 </script>
+<style>
+[x-cloak] { display: none !important; }
+</style>
 {% endblock %}

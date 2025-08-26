@@ -1,1318 +1,724 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% block title_key %}finance_page_title{% endblock %}
 {% block title %}Finance - SME Management{% endblock %}
 
 {% block extra_head %}
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .chart-container {
+        position: relative;
+        height: 300px;
+        margin: 1rem 0;
+    }
+    
+    .metric-card {
+        transition: all 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 250px;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="financeManager()" x-init="init()">
-        <!-- Page Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900" data-i18n="finance_header">Gestion Financière</h1>
-            <p class="text-gray-600 mt-2" data-i18n="finance_description">Suivez vos revenus, dépenses et performance financière</p>
-        <!-- Tabs: Summary vs Receivables (visible so deep links are not confusing) -->
-        <div class="mt-4 flex items-center gap-2 text-sm">
-        <button @click="setTab('summary')"
-            :class="activeTab==='summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
-            class="px-3 py-1 rounded-md" data-i18n="finance_tab_summary">Résumé</button>
-        <button @click="setTab('receivables')"
-            :class="activeTab==='receivables' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
-            class="px-3 py-1 rounded-md" data-i18n="finance_tab_receivables">Créances en retard</button>
-        <span x-show="activeTab==='receivables'" class="ml-2 text-xs text-gray-500">(filtré: en retard)</span>
-        </div>
-        </div>
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="financeManager()">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900" data-i18n="finance_header">Gestion Financière</h1>
+        <p class="text-gray-600 mt-2" data-i18n="finance_description">Suivez vos revenus, dépenses et performance financière</p>
+    </div>
 
-        <!-- Financial Summary Cards -->
+    <!-- Financial Summary Cards -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-dollar-sign text-2xl text-green-600"></i>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <h3 class="text-sm font-medium text-gray-500">Revenus Total</h3>
-                        <template x-if="isLoadingSummary">
-                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
-                        </template>
-                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.total_revenue">0 {{ current_currency }}</p>
-            <!-- Removed fake delta to avoid misleading metrics -->
-                    </div>
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-chart-line text-2xl text-green-600"></i>
                 </div>
-            </div>
-            
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-credit-card text-2xl text-red-600"></i>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <h3 class="text-sm font-medium text-gray-500">Dépenses Total</h3>
-                        <template x-if="isLoadingSummary">
-                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
-                        </template>
-                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.total_expenses">0 {{ current_currency }}</p>
-            <!-- Removed fake delta to avoid misleading metrics -->
-                    </div>
-                </div>
-            </div>
-            
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-chart-line text-2xl text-blue-600"></i>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <h3 class="text-sm font-medium text-gray-500">Bénéfice Net</h3>
-                        <template x-if="isLoadingSummary">
-                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
-                        </template>
-                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.net_profit">0 {{ current_currency }}</p>
-            <!-- Removed fake delta to avoid misleading metrics -->
-                    </div>
-                </div>
-            </div>
-            
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center">
-                    <div class="flex-shrink-0">
-                        <i class="fas fa-wallet text-2xl text-purple-600"></i>
-                    </div>
-                    <div class="ml-4 flex-1">
-                        <h3 class="text-sm font-medium text-gray-500">Solde Caisse</h3>
-                        <template x-if="isLoadingSummary">
-                            <div class="h-6 w-32 bg-gray-200 rounded animate-pulse"></div>
-                        </template>
-                        <p x-show="!isLoadingSummary" class="text-2xl font-bold text-gray-900" x-text="summary.cash_balance">0 {{ current_currency }}</p>
-                        <p class="text-sm text-gray-500">Dernière MAJ: Aujourd'hui</p>
-                    </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">Revenus Total</h3>
+                    <p class="text-2xl font-bold text-gray-900" x-text="formatCurrency(summary.total_revenue)">0</p>
                 </div>
             </div>
         </div>
 
-        <!-- Charts Section -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-            <!-- Revenue Chart -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-medium text-gray-900">Évolution des Revenus</h3>
-                    <select x-model="chartPeriod" @change="updateCharts()" class="border border-gray-300 rounded-md px-3 py-1 text-sm">
-                        <option value="week">7 derniers jours</option>
-                        <option value="month">30 derniers jours</option>
-                        <option value="year">12 derniers mois</option>
-                        <option value="all">Tout le temps</option>
-                    </select>
-                       <button @click="exportChart('revenue')" class="ml-2 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm" aria-label="Exporter le graphique des revenus">
-                           <i class="fas fa-download mr-1"></i>Exporter
-                       </button>
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-arrow-down text-2xl text-red-600"></i>
                 </div>
-                <div class="h-64 relative">
-                    <template x-if="chartError">
-                        <div class="absolute inset-0 flex items-center justify-center text-red-600 bg-red-50 z-10">
-                            <i class="fas fa-exclamation-triangle mr-2"></i>
-                            <span x-text="chartError"></span>
-                        </div>
-                    </template>
-                    <div x-show="isLoadingCharts && !chartError" class="absolute inset-0 flex items-center justify-center text-gray-500">
-                        <i class="fas fa-spinner fa-spin mr-2"></i>Chargement du graphique...
-                    </div>
-                    <canvas id="revenueChart"></canvas>
-                </div>
-            </div>
-            
-            <!-- Expense Breakdown -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Répartition des Dépenses</h3>
-                   <div class="flex gap-2 mb-2">
-                       <button @click="exportChart('expense')" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm" aria-label="Exporter le graphique des dépenses">
-                           <i class="fas fa-download mr-1"></i>Exporter Image
-                       </button>
-                       <button @click="exportExpenseCSV()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded-md text-sm" aria-label="Exporter les données des dépenses">
-                           <i class="fas fa-file-csv mr-1"></i>Exporter CSV
-                       </button>
-                   </div>
-                <div class="h-64 relative">
-                    <template x-if="chartError">
-                        <div class="absolute inset-0 flex items-center justify-center text-red-600 bg-red-50 z-10">
-                            <i class="fas fa-exclamation-triangle mr-2"></i>
-                            <span x-text="chartError"></span>
-                        </div>
-                    </template>
-                    <div x-show="isLoadingCharts && !chartError" class="absolute inset-0 flex items-center justify-center text-gray-500">
-                        <i class="fas fa-spinner fa-spin mr-2"></i>Chargement du graphique...
-                    </div>
-                    <canvas id="expenseChart"></canvas>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">Dépenses Total</h3>
+                    <p class="text-2xl font-bold text-gray-900" x-text="formatCurrency(summary.total_business_expenses)">0</p>
                 </div>
             </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="flex flex-wrap gap-4 mb-6">
-            <button @click="newTransaction.type='income'; showTransactionModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
-                <i class="fas fa-plus mr-2"></i>
-                <span data-i18n="finance_new_transaction">Nouvelle Transaction</span>
-            </button>
-            <button @click="newTransaction.type='expense'; showTransactionModal = true" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center">
-                <i class="fas fa-minus mr-2"></i>
-                <span data-i18n="finance_new_expense">Nouvelle Dépense</span>
-            </button>
-            <button @click="generateFinanceReport()" :disabled="isGeneratingReport" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
-                <i class="fas fa-file-excel mr-2"></i>
-                <span data-i18n="finance_report">Rapport Financier</span>
-                <span x-show="isGeneratingReport" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
-            </button>
-            <button @click="backupData()" :disabled="isBackingUp" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50">
-                <i class="fas fa-save mr-2"></i>
-                <span data-i18n="finance_backup">Sauvegarde</span>
-                <span x-show="isBackingUp" class="ml-2 animate-spin"><i class="fas fa-spinner"></i></span>
-            </button>
-            <button @click="diagnoseCharts()" class="bg-yellow-400 hover:bg-yellow-500 text-gray-900 px-6 py-2 rounded-lg flex items-center">
-                <i class="fas fa-stethoscope mr-2"></i>
-                <span data-i18n="finance_diagnose_charts">Diagnostiquer Graphiques</span>
-            </button>
-        </div>
-
-        <!-- Receivables (when navigated with tab=receivables) -->
-        <div x-show="activeTab==='receivables'" class="bg-white shadow rounded-lg overflow-hidden mb-8">
-            <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 class="text-lg font-medium text-gray-900">Créances Clients (en retard)</h3>
-                <div class="flex gap-2">
-                    <button @click="loadReceivables(true)" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
-                    <button @click="exportReceivablesCSV()" class="text-sm text-gray-700 bg-gray-200 hover:bg-gray-300 rounded px-2 py-1"><i class="fas fa-file-csv mr-1"></i>Exporter CSV</button>
-                    <button @click="markSelectedReceivablesPaid()" :disabled="selectedReceivables.length===0" class="text-sm text-green-700 bg-green-100 hover:bg-green-200 rounded px-2 py-1 disabled:opacity-50"><i class="fas fa-check mr-1"></i>Marquer comme payé</button>
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-coins text-2xl text-blue-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">Bénéfice Net</h3>
+                    <p class="text-2xl font-bold" 
+                       :class="summary.net_income >= 0 ? 'text-green-600' : 'text-red-600'"
+                       x-text="formatCurrency(summary.net_income)">0</p>
                 </div>
             </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-2 py-3"><input type="checkbox" :checked="allReceivablesSelected" @change="toggleAllReceivables($event)"></th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant dû</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Échéance</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jours de retard</th>
-                        </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                        <template x-for="d in paginatedReceivables" :key="d.id">
-                            <tr>
-                                <td class="px-2 py-4"><input type="checkbox" :value="d.id" :checked="selectedReceivables.includes(d.id)" @change="toggleReceivableSelection(d.id)"></td>
-                                <td class="px-6 py-4 text-sm text-gray-900" x-text="d.client_name"></td>
-                                <td class="px-6 py-4 text-sm text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(d.remaining_amount) : (Number(d.remaining_amount||0).toFixed(2)+' '+(window.AppConfig?.currentCurrency||'MRU'))"></td>
-                                <td class="px-6 py-4 text-sm text-gray-500" x-text="formatDate(d.due_date)"></td>
-                                <td class="px-6 py-4 text-sm" :class="(d.days_overdue||0)>0 ? 'text-red-600 font-semibold' : 'text-gray-500'" x-text="d.days_overdue||0"></td>
-                            </tr>
-                        </template>
-                        <tr x-show="paginatedReceivables.length===0">
-                            <td colspan="5" class="px-6 py-4 text-center text-gray-500">Aucune créance en retard</td>
-                        </tr>
-                    </tbody>
-                    <tfoot class="bg-gray-50">
-                        <tr>
-                            <td></td>
-                            <td class="px-6 py-3 text-right text-sm font-medium" colspan="1">Total</td>
-                            <td class="px-6 py-3 text-sm font-semibold" x-text="window.formatCurrency ? window.formatCurrency(receivablesTotal) : (Number(receivablesTotal||0).toFixed(2)+' '+(window.AppConfig?.currentCurrency||'MRU'))"></td>
-                            <td colspan="2"></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-            <!-- Pagination Controls -->
-            <div class="flex justify-end items-center gap-2 px-6 py-2">
-                <button @click="prevReceivablesPage()" :disabled="receivablesPage===1" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&lt;</button>
-                <span class="text-sm">Page <span x-text="receivablesPage"></span> / <span x-text="receivablesTotalPages"></span></span>
-                <button @click="nextReceivablesPage()" :disabled="receivablesPage===receivablesTotalPages" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&gt;</button>
-            </div>
         </div>
 
+        <div class="metric-card bg-white rounded-lg shadow p-6">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-wallet text-2xl text-purple-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-sm font-medium text-gray-500">Solde Caisse</h3>
+                    <p class="text-2xl font-bold text-gray-900" x-text="formatCurrency(summary.current_cash_balance)">0</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="border-b border-gray-200">
+            <nav class="-mb-px flex space-x-8 px-6">
+                <button @click="activeTab = 'summary'" 
+                        :class="activeTab === 'summary' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-chart-pie mr-2"></i><span data-i18n="finance_tab_summary">Résumé</span>
+                </button>
+                <button @click="activeTab = 'receivables'" 
+                        :class="activeTab === 'receivables' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-clock mr-2"></i><span data-i18n="finance_tab_receivables">Créances</span>
+                </button>
+                <button @click="activeTab = 'charts'" 
+                        :class="activeTab === 'charts' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-chart-bar mr-2"></i>Graphiques
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Summary Tab -->
+    <div x-show="activeTab === 'summary'" class="space-y-6">
         <!-- Recent Transactions -->
-        <div class="bg-white shadow rounded-lg overflow-hidden">
+        <div class="bg-white rounded-lg shadow">
             <div class="px-6 py-4 border-b border-gray-200">
-                <div class="flex justify-between items-center">
-                    <h3 class="text-lg font-medium text-gray-900">Transactions Récentes</h3>
-                    <div class="flex flex-wrap gap-2 items-center">
-                        <input type="text" x-model="searchTerm" placeholder="Rechercher..." class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-                        <select x-model="filterType" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
-                            <option value="">Tous types</option>
-                            <option value="income">Revenus</option>
-                            <option value="expense">Dépenses</option>
-                        </select>
-                        <input type="date" x-model="filterStartDate" class="border border-gray-300 rounded-md px-2 py-2 text-sm" aria-label="Date début">
-                        <input type="date" x-model="filterEndDate" class="border border-gray-300 rounded-md px-2 py-2 text-sm" aria-label="Date fin">
-                        <button @click="refreshPeriod();" class="border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50">Rafraîchir</button>
-                        <button @click="exportTransactionsCSV()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded-md text-sm" aria-label="Exporter les transactions"><i class="fas fa-file-csv mr-1"></i>Exporter CSV</button>
-                    </div>
-                </div>
+                <h3 class="text-lg font-medium text-gray-900">Transactions Récentes</h3>
             </div>
-            <!-- Totals above table -->
-            <div class="px-6 py-3 text-sm text-gray-600 grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>Revenus: <span class="font-semibold" x-text="formatCurrencyPlain(totalIncome)"></span></div>
-                <div>Dépenses: <span class="font-semibold" x-text="formatCurrencyPlain(totalExpense)"></span></div>
-                <div>Net: <span class="font-semibold" :class="(totalIncome-totalExpense)>=0?'text-green-600':'text-red-600'" x-text="formatCurrencyPlain(totalIncome-totalExpense)"></span></div>
-                <div>Total lignes: <span class="font-semibold" x-text="filteredTransactions.length"></span></div>
-            </div>
-            
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paiement</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
                         </tr>
                     </thead>
                     <tbody class="bg-white divide-y divide-gray-200">
-                        <tr x-show="isLoadingTransactions">
-                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">
-                                <i class="fas fa-spinner fa-spin mr-2"></i>Chargement des transactions...
-                            </td>
-                        </tr>
-                        <template x-for="transaction in paginatedTransactions" :key="(transaction.origin||'tx') + '-' + transaction.id">
+                        <template x-for="transaction in recentTransactions" :key="transaction.id">
                             <tr class="hover:bg-gray-50">
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date)"></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.description || transaction.source || '-' "></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="formatDate(transaction.date)"></td>
                                 <td class="px-6 py-4 whitespace-nowrap">
                                     <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
-                                          :class="{
-                                              'bg-green-100 text-green-800': transaction.type === 'income',
-                                              'bg-red-100 text-red-800': transaction.type === 'expense'
-                                          }"
-                                          x-text="transaction.type === 'income' ? 'Revenu' : 'Dépense'">
+                                          :class="transaction.type === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                          x-text="transaction.type === 'income' ? 'Revenus' : 'Dépenses'">
                                     </span>
                                 </td>
+                                <td class="px-6 py-4 text-sm text-gray-900" x-text="transaction.description"></td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium"
-                                    :class="{
-                                        'text-green-600': transaction.type === 'income',
-                                        'text-red-600': transaction.type === 'expense'
-                                    }">
-                                    <span x-text="(transaction.type === 'income' ? '+' : '-') + (window.formatCurrency ? window.formatCurrency(Number(transaction.amount||0)) : (Number(transaction.amount||0).toFixed(2) + ' ' + (window.AppConfig?.currentCurrency || 'MRU')))" ></span>
-                                </td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="transaction.subcategory || transaction.category"></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.client_name || '-' "></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="transaction.payment_method || '-' "></td>
-                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                    <template x-if="['retard','pending','paid','completed'].includes((transaction.payment_status||'').toLowerCase())">
-                                        <span>
-                                            <template x-if="(transaction.payment_status||'').toLowerCase() === 'retard'">Retard</template>
-                                            <template x-if="(transaction.payment_status||'').toLowerCase() === 'pending'">En attente</template>
-                                            <template x-if="['paid','completed'].includes((transaction.payment_status||'').toLowerCase())">Payé</template>
-                                        </span>
-                                    </template>
-                                    <template x-if="!['retard','pending','paid','completed'].includes((transaction.payment_status||'').toLowerCase())">
-                                        <span x-text="transaction.payment_status || '-' "></span>
-                                    </template>
+                                    :class="transaction.type === 'income' ? 'text-green-600' : 'text-red-600'"
+                                    x-text="formatCurrency(transaction.amount)"></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receivables Tab -->
+    <div x-show="activeTab === 'receivables'" class="space-y-6">
+        <div class="bg-white rounded-lg shadow">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <div class="flex justify-between items-center">
+                    <h3 class="text-lg font-medium text-gray-900" data-i18n="finance_tab_receivables">Créances en retard</h3>
+                    <div class="flex space-x-2">
+                        <select x-model="receivablesFilter" @change="loadReceivables()" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
+                            <option value="overdue">En retard</option>
+                            <option value="pending">En attente</option>
+                            <option value="all">Toutes</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Client</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Montant</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date échéance</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jours retard</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-gray-200">
+                        <template x-for="debt in receivables" :key="debt.id">
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="debt.client_name"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="formatCurrency(debt.remaining_amount)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="formatDate(debt.due_date)"></td>
+                                <td class="px-6 py-4 whitespace-nowrap">
+                                    <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                          :class="debt.days_overdue > 30 ? 'bg-red-100 text-red-800' : debt.days_overdue > 7 ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'"
+                                          x-text="debt.days_overdue + ' jours'">
+                                    </span>
                                 </td>
                                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    <div class="flex items-center gap-3">
-                                        <button :disabled="transaction.origin==='sale'" @click="editTransaction(transaction)" :class="transaction.origin==='sale' ? 'text-gray-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-900'" title="" :title="transaction.origin==='sale' ? 'Les ventes ne sont pas modifiables ici' : 'Modifier'">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button :disabled="transaction.origin==='sale'" @click="deleteTransaction(transaction)" :class="transaction.origin==='sale' ? 'text-gray-300 cursor-not-allowed' : 'text-red-600 hover:text-red-900'" :title="transaction.origin==='sale' ? 'Supprimer une vente n\'est pas possible ici' : 'Supprimer'">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </div>
+                                    <button @click="markPaid(debt)" class="text-green-600 hover:text-green-900">
+                                        <i class="fas fa-check-circle"></i> Marquer payé
+                                    </button>
                                 </td>
                             </tr>
                         </template>
                         
-                        <tr x-show="filteredTransactions.length === 0">
-                            <td colspan="6" class="px-6 py-4 text-center text-gray-500">
-                                <div class="flex flex-col items-center">
-                                    <i class="fas fa-receipt text-4xl text-gray-300 mb-2"></i>
-                                    <p>Aucune transaction trouvée</p>
-                                </div>
+                        <tr x-show="receivables.length === 0">
+                            <td colspan="5" class="px-6 py-4 text-center text-gray-500">
+                                Aucune créance trouvée
                             </td>
                         </tr>
                     </tbody>
                 </table>
             </div>
-            <!-- Pagination Controls -->
-            <div class="flex justify-end items-center gap-2 px-6 py-2">
-                <button @click="prevTransactionsPage()" :disabled="transactionsPage===1" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&lt;</button>
-                <span class="text-sm">Page <span x-text="transactionsPage"></span> / <span x-text="transactionsTotalPages"></span></span>
-                <button @click="nextTransactionsPage()" :disabled="transactionsPage===transactionsTotalPages" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 disabled:opacity-50">&gt;</button>
+        </div>
+    </div>
+
+    <!-- Charts Tab -->
+    <div x-show="activeTab === 'charts'" class="space-y-6">
+        <!-- Chart Controls -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Analyse Financière</h3>
+                <div class="flex space-x-2">
+                    <button @click="updateCharts('week')" 
+                            :class="chartPeriod === 'week' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 text-xs rounded-md hover:bg-blue-200 transition">
+                        7 jours
+                    </button>
+                    <button @click="updateCharts('month')" 
+                            :class="chartPeriod === 'month' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 text-xs rounded-md hover:bg-blue-200 transition">
+                        30 jours
+                    </button>
+                    <button @click="updateCharts('year')" 
+                            :class="chartPeriod === 'year' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'"
+                            class="px-3 py-1 text-xs rounded-md hover:bg-blue-200 transition">
+                        1 an
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Revenue vs Expenses Chart -->
+            <div class="chart-container">
+                <canvas id="financeChart"></canvas>
             </div>
         </div>
+
+        <!-- Profit Trend Chart -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-4">Tendance des Bénéfices</h3>
+            <div class="chart-container">
+                <canvas id="profitChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="flex flex-wrap gap-4 mb-6">
+        <button @click="showTransactionModal = true" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-plus mr-2"></i>
+            <span data-i18n="finance_new_transaction">Nouvelle Transaction</span>
+        </button>
+        <button @click="showExpenseModal = true" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-minus mr-2"></i>
+            <span data-i18n="finance_new_expense">Nouvelle Dépense</span>
+        </button>
+        <button @click="generateReport()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-file-alt mr-2"></i>
+            <span data-i18n="finance_report">Rapport Financier</span>
+        </button>
+        <button @click="createBackup()" class="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-save mr-2"></i>
+            <span data-i18n="finance_backup">Sauvegarde</span>
+        </button>
+        <button @click="diagnoseCharts()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-6 py-2 rounded-lg flex items-center">
+            <i class="fas fa-bug mr-2"></i>
+            <span data-i18n="finance_diagnose_charts">Diagnostiquer Graphiques</span>
+        </button>
+    </div>
 
     <!-- Transaction Modal -->
-        <div x-show="showTransactionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
-            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
-                <div class="mt-3">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-medium text-gray-900">Nouvelle Transaction</h3>
-                        <button @click="showTransactionModal = false" class="text-gray-400 hover:text-gray-600">
-                            <i class="fas fa-times"></i>
-                        </button>
+    <div x-show="showTransactionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Nouvelle Transaction</h3>
+                    <button @click="showTransactionModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form @submit.prevent="createTransaction()">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
+                            <select x-model="newTransaction.type" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                <option value="capital">Injection de Capital</option>
+                                <option value="revenue">Revenus</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Montant</label>
+                            <input type="number" x-model="newTransaction.amount" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Source/Description</label>
+                            <input type="text" x-model="newTransaction.source" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                            <input type="date" x-model="newTransaction.date" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Justification</label>
+                            <textarea x-model="newTransaction.justification" class="w-full border border-gray-300 rounded-md px-3 py-2" rows="3"></textarea>
+                        </div>
                     </div>
                     
-                    <form @submit.prevent="createTransaction()">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                                <select x-model="newTransaction.type" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                                    <option value="income">Revenu</option>
-                                    <option value="expense">Dépense</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Montant ({{ current_currency }})</label>
-                                <input type="number" x-model="newTransaction.amount" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                            <input type="text" x-model="newTransaction.description" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                        </div>
-                        
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
-                            <div class="flex gap-2 mb-2">
-                                <select x-model="newTransaction.category" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                                    <option value="">Sélectionner une catégorie</option>
-                                    <template x-for="category in categories" :key="category">
-                                        <option :value="category" x-text="category"></option>
-                                    </template>
-                                </select>
-                                <input type="text" x-model="newCategory" placeholder="Nouvelle catégorie" class="border border-gray-300 rounded-md px-2 py-2 text-sm">
-                                <button type="button" @click="addCategory()" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">Ajouter</button>
-                            </div>
-                            <div class="flex flex-wrap gap-2 mt-1">
-                                <template x-for="category in categories" :key="category">
-                                    <span class="inline-flex items-center bg-gray-200 rounded px-2 py-1 text-xs">
-                                        <span x-text="category"></span>
-                                        <button type="button" @click="removeCategory(category)" class="ml-1 text-red-500 hover:text-red-700" title="Supprimer">&times;</button>
-                                    </span>
-                                </template>
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Justificatif (reçu, facture, etc.)</label>
-                            <input type="file" @change="handleAttachment($event, 'new')" accept="image/*,application/pdf" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <template x-if="newTransaction.attachmentPreview">
-                                <div class="mt-2">
-                                    <img :src="newTransaction.attachmentPreview" alt="Aperçu pièce jointe" class="max-h-32 border rounded shadow">
-                                </div>
-                            </template>
-                        </div>
-                        
-                        <div class="flex justify-end space-x-3">
-                            <button type="button" @click="showTransactionModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
-                                Annuler
-                            </button>
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
-                                Créer Transaction
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Edit Transaction Modal -->
-        <div x-show="showEditModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
-            <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
-                <div class="mt-3">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-medium text-gray-900">Modifier Transaction</h3>
-                        <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600">
-                            <i class="fas fa-times"></i>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" @click="showTransactionModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                            Annuler
+                        </button>
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                            Enregistrer
                         </button>
                     </div>
-                    <form @submit.prevent="updateTransaction()">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Type</label>
-                                <input type="text" x-model="editData.type" class="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-100" disabled>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-medium text-gray-700 mb-2">Montant ({{ current_currency }})</label>
-                                <input type="number" x-model.number="editData.amount" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
-                            <input type="text" x-model="editData.description" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        </div>
-                        <div class="mb-4" x-show="editData.type === 'expense'">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
-                            <div class="flex gap-2 mb-2">
-                                <select x-model="editData.category" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                                    <option value="">Sélectionner une catégorie</option>
-                                    <template x-for="category in categories" :key="category">
-                                        <option :value="category" x-text="category"></option>
-                                    </template>
-                                </select>
-                                <input type="text" x-model="newCategory" placeholder="Nouvelle catégorie" class="border border-gray-300 rounded-md px-2 py-2 text-sm">
-                                <button type="button" @click="addCategory()" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded">Ajouter</button>
-                            </div>
-                            <div class="flex flex-wrap gap-2 mt-1">
-                                <template x-for="category in categories" :key="category">
-                                    <span class="inline-flex items-center bg-gray-200 rounded px-2 py-1 text-xs">
-                                        <span x-text="category"></span>
-                                        <button type="button" @click="removeCategory(category)" class="ml-1 text-red-500 hover:text-red-700" title="Supprimer">&times;</button>
-                                    </span>
-                                </template>
-                            </div>
-                        </div>
-                        <div class="mb-4">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Justificatif (reçu, facture, etc.)</label>
-                            <input type="file" @change="handleAttachment($event, 'edit')" accept="image/*,application/pdf" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <template x-if="editData.attachmentPreview">
-                                <div class="mt-2">
-                                    <img :src="editData.attachmentPreview" alt="Aperçu pièce jointe" class="max-h-32 border rounded shadow">
-                                </div>
-                            </template>
-                        </div>
-                        <div class="flex justify-end space-x-3">
-                            <button type="button" @click="showEditModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
-                                Annuler
-                            </button>
-                            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
-                                Enregistrer
-                            </button>
-                        </div>
-                    </form>
-                </div>
+                </form>
             </div>
         </div>
-    <!-- Toasts (inside same Alpine scope) -->
-    <!-- Toasts (inside same Alpine scope) - notification history UI removed as requested -->
-    <div class="fixed top-4 right-4 space-y-2 z-[60]">
-        <template x-for="t in toasts" :key="t.id">
-            <div class="px-4 py-3 rounded shadow text-white"
-                 :class="{'bg-green-600': t.type==='success', 'bg-red-600': t.type==='error', 'bg-yellow-600': t.type==='warning', 'bg-blue-600': t.type==='info'}">
-                <div class="flex items-center">
-                    <i class="fas mr-2" :class="{
-                        'fa-check-circle': t.type==='success',
-                        'fa-exclamation-triangle': t.type==='warning',
-                        'fa-times-circle': t.type==='error',
-                        'fa-info-circle': t.type==='info'
-                    }"></i>
-                    <span x-text="t.message"></span>
-                </div>
-            </div>
-        </template>
-        <!-- Notification history button and log removed -->
     </div>
-    </main>
+
+    <!-- Expense Modal -->
+    <div x-show="showExpenseModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" x-cloak>
+        <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+            <div class="mt-3">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">Nouvelle Dépense</h3>
+                    <button @click="showExpenseModal = false" class="text-gray-400 hover:text-gray-600">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                
+                <form @submit.prevent="createExpense()">
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Catégorie</label>
+                            <select x-model="newExpense.category" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                                <option value="business">Professionnel</option>
+                                <option value="personal">Personnel</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Sous-catégorie</label>
+                            <input type="text" x-model="newExpense.subcategory" class="w-full border border-gray-300 rounded-md px-3 py-2" placeholder="Ex: Loyer, Électricité, Fournitures">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Montant</label>
+                            <input type="number" x-model="newExpense.amount" step="0.01" min="0" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                            <input type="text" x-model="newExpense.description" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Date</label>
+                            <input type="date" x-model="newExpense.expense_date" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" @click="showExpenseModal = false" class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded-md">
+                            Annuler
+                        </button>
+                        <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md">
+                            Enregistrer
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</main>
 {% endblock %}
 
 {% block extra_scripts %}
-    <script>
-    function financeManager() {
-        return {
-            // State
-            diagnoseCharts() {
-                let result = [];
-                // Check Alpine.js
-                result.push('Alpine.js: ' + (window.Alpine ? 'OK' : 'NOT FOUND'));
-                // Check Chart.js
-                result.push('Chart.js: ' + (window.Chart ? 'OK' : 'NOT FOUND'));
-                // Check apiFetch
-                result.push('apiFetch: ' + (typeof window.apiFetch === 'function' ? 'OK' : 'NOT FOUND'));
-                // Check chart containers
-                result.push('revenueChart canvas: ' + (document.getElementById('revenueChart') ? 'OK' : 'NOT FOUND'));
-                result.push('expenseChart canvas: ' + (document.getElementById('expenseChart') ? 'OK' : 'NOT FOUND'));
-                // Test API
-                result.push('Testing /api/finance/charts...');
-                apiFetch('/api/finance/charts?period=' + (this.chartPeriod || 'week'))
-                  .then(data => {
-                    if (data && data.chart_data) {
-                        result.push('API: OK, received chart_data');
-                        if (data.chart_data.revenue && Array.isArray(data.chart_data.revenue.data)) {
-                            result.push('Revenue data: ' + data.chart_data.revenue.data.length + ' points');
-                        } else {
-                            result.push('Revenue data: MISSING');
-                        }
-                        if (data.chart_data.expense && Array.isArray(data.chart_data.expense.data)) {
-                            result.push('Expense data: ' + data.chart_data.expense.data.length + ' points');
-                        } else {
-                            result.push('Expense data: MISSING');
-                        }
-                    } else {
-                        result.push('API: ERROR or missing chart_data');
-                    }
-                    alert(result.join('\n'));
-                  })
-                  .catch(e => {
-                    result.push('API: ERROR - ' + (e && e.message ? e.message : e));
-                    alert(result.join('\n'));
-                  });
-            },
-            chartsInitialized: false,
-            chartError: null,
-            activeTab: 'summary',
-            summary: {
-                total_revenue: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
-                total_expenses: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
-                net_profit: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
-                cash_balance: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU')
-            },
-            transactions: [],
-            receivables: [],
-            receivablesTotal: 0,
-            // Used as expense subcategories; backend categories are 'business'|'personal'
-            categories: ['Achats', 'Salaires', 'Loyer', 'Électricité', 'Maintenance', 'Marketing', 'Divers'],
-            newCategory: '',
-            addCategory() {
-                const cat = (this.newCategory || '').trim();
-                if (cat && !this.categories.includes(cat)) {
-                    this.categories.push(cat);
-                    this.newCategory = '';
-                    this.showToast('success', 'Catégorie ajoutée');
+<script>
+function financeManager() {
+    return {
+        activeTab: 'summary',
+        chartPeriod: 'week',
+        summary: {
+            total_revenue: 0,
+            total_business_expenses: 0,
+            total_profit: 0,
+            net_income: 0,
+            current_cash_balance: 0
+        },
+        recentTransactions: [],
+        receivables: [],
+        receivablesFilter: 'overdue',
+        showTransactionModal: false,
+        showExpenseModal: false,
+        newTransaction: {
+            type: 'capital',
+            amount: '',
+            source: '',
+            date: new Date().toISOString().split('T')[0],
+            justification: ''
+        },
+        newExpense: {
+            category: 'business',
+            subcategory: '',
+            amount: '',
+            description: '',
+            expense_date: new Date().toISOString().split('T')[0]
+        },
+        financeChart: null,
+        profitChart: null,
+        
+        init() {
+            this.loadFinancialSummary();
+            this.loadRecentTransactions();
+            this.loadReceivables();
+            this.$nextTick(() => {
+                this.initializeCharts();
+            });
+        },
+        
+        async loadFinancialSummary() {
+            try {
+                const response = await apiFetch('/api/finance/financial-summary');
+                if (response.success) {
+                    this.summary = response.financial_summary;
+                    // Calculate net income
+                    this.summary.net_income = this.summary.total_profit - this.summary.total_business_expenses;
                 }
-            },
-            removeCategory(cat) {
-                this.categories = this.categories.filter(c => c !== cat);
-                if (this.newTransaction.category === cat) this.newTransaction.category = '';
-                if (this.editData.category === cat) this.editData.category = '';
-                this.showToast('success', 'Catégorie supprimée');
-            },
-            handleAttachment(event, mode) {
-                const file = event.target.files[0];
-                if (!file) return;
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    if (mode === 'new') {
-                        this.newTransaction.attachment = file;
-                        this.newTransaction.attachmentPreview = e.target.result;
-                    } else if (mode === 'edit') {
-                        this.editData.attachment = file;
-                        this.editData.attachmentPreview = e.target.result;
-                    }
-                };
-                reader.readAsDataURL(file);
-            },
-            // Receivables selection and pagination
-            selectedReceivables: [],
-            receivablesPage: 1,
-            receivablesPageSize: 10,
-            get paginatedReceivables() {
-                const start = (this.receivablesPage - 1) * this.receivablesPageSize;
-                return this.receivables.slice(start, start + this.receivablesPageSize);
-            },
-            get receivablesTotalPages() {
-                return Math.max(1, Math.ceil(this.receivables.length / this.receivablesPageSize));
-            },
-            get allReceivablesSelected() {
-                return this.paginatedReceivables.length > 0 && this.paginatedReceivables.every(r => this.selectedReceivables.includes(r.id));
-            },
-            toggleReceivableSelection(id) {
-                if (this.selectedReceivables.includes(id)) {
-                    this.selectedReceivables = this.selectedReceivables.filter(x => x !== id);
-                } else {
-                    this.selectedReceivables.push(id);
+            } catch (error) {
+                console.error('Error loading financial summary:', error);
+            }
+        },
+        
+        async loadRecentTransactions() {
+            try {
+                const response = await apiFetch('/api/finance/transactions?limit=10');
+                if (response.success) {
+                    this.recentTransactions = response.transactions || [];
                 }
-            },
-            toggleAllReceivables(e) {
-                if (e.target.checked) {
-                    const ids = this.paginatedReceivables.map(r => r.id);
-                    this.selectedReceivables = Array.from(new Set([...this.selectedReceivables, ...ids]));
-                } else {
-                    const ids = this.paginatedReceivables.map(r => r.id);
-                    this.selectedReceivables = this.selectedReceivables.filter(id => !ids.includes(id));
+            } catch (error) {
+                console.error('Error loading transactions:', error);
+            }
+        },
+        
+        async loadReceivables() {
+            try {
+                const url = this.receivablesFilter === 'overdue' 
+                    ? '/api/finance/client-debts?overdue=true'
+                    : `/api/finance/client-debts?status=${this.receivablesFilter === 'all' ? 'pending' : this.receivablesFilter}`;
+                const response = await apiFetch(url);
+                if (response.success) {
+                    this.receivables = response.debts || [];
                 }
-            },
-            prevReceivablesPage() {
-                if (this.receivablesPage > 1) this.receivablesPage--;
-            },
-            nextReceivablesPage() {
-                if (this.receivablesPage < this.receivablesTotalPages) this.receivablesPage++;
-            },
-            exportReceivablesCSV() {
-                if (!this.receivables.length) { this.showToast('error', 'Aucune créance à exporter'); return; }
-                let csv = 'Client,Montant dû,Échéance,Jours de retard\n';
-                this.receivables.forEach(d => {
-                    csv += `"${d.client_name}",${d.remaining_amount},"${this.formatDate(d.due_date)}",${d.days_overdue||0}\n`;
-                });
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'creances.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                this.showToast('success', 'Créances exportées en CSV');
-            },
-            markSelectedReceivablesPaid() {
-                if (!this.selectedReceivables.length) return;
-                const ids = [...this.selectedReceivables];
-                let successCount = 0, failCount = 0;
-                Promise.all(ids.map(id =>
-                    fetch(`/api/finance/client-debts/${id}/status`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin'
-                    })
-                    .then(r => r.json())
-                    .then(res => {
-                        if (res.success) {
-                            successCount++;
-                            // Remove from UI
-                            this.receivables = this.receivables.filter(r => r.id !== id);
-                        } else {
-                            failCount++;
-                        }
-                    })
-                    .catch(() => { failCount++; })
-                )).then(() => {
-                    this.selectedReceivables = [];
-                    if (successCount > 0)
-                        this.showToast('success', `${successCount} créance(s) marquée(s) comme payée(s)`);
-                    if (failCount > 0)
-                        this.showToast('error', `${failCount} échec(s) lors de la mise à jour`);
-                });
-            },
-            showTransactionModal: false,
-            showEditModal: false,
-            newTransaction: { type: 'income', amount: '', description: '', category: '' },
-            editData: { id: null, type: 'income', amount: 0, description: '', category: '' },
-            searchTerm: '',
-            filterType: '',
-            filterStartDate: '',
-            filterEndDate: '',
-            transactionsPage: 1,
-            transactionsPageSize: 10,
-            chartPeriod: 'month',
-            revenueChart: null,
-            expenseChart: null,
-            // Loading flags
-            isLoadingSummary: true,
-            isLoadingTransactions: true,
-            isLoadingCharts: true,
-            isGeneratingReport: false,
-            isBackingUp: false,
-            toasts: [],
-            notificationLog: [],
-            showLog: false,
-            totalIncome: 0,
-            totalExpense: 0,
-
-            // Init lifecycle
-            init() {
-                // Handle deep links
-                const params = new URLSearchParams(window.location.search);
-                const tab = params.get('tab');
-                const filter = params.get('filter');
-                const period = params.get('period');
-                if (period && ['week','month','year','all'].includes(period)) this.chartPeriod = period;
-                if (tab === 'receivables') {
-                    this.activeTab = 'receivables';
-                    this.loadReceivables(filter === 'overdue');
-                }
-
-                // Bootstrap data in parallel
-                Promise.allSettled([
-                    this.loadSummary(),
-                    this.loadTransactions(),
-                ]).finally(() => {
-                    // Charts after first paint
-                    this.$nextTick(() => {
-                        // Always ensure we have the pinned 4.4.x build; previous pages may have loaded 4.5.x
-                        const needsPinnedChart =
-                            !window.Chart ||
-                            !window.Chart.version ||
-                            !window.Chart.version.startsWith('4.4.');
-
-                        const afterInit = () => {
-                            this.initCharts();
-                            this.updateCharts();
-                        };
-                        if (needsPinnedChart) {
-                            const s = document.createElement('script');
-                            s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js';
-                            s.onload = afterInit;
-                            document.head.appendChild(s);
-                        } else {
-                            afterInit();
-                        }
-                    });
-                });
-            },
-
-            // URL tab setter
-            setTab(tab) {
-                this.activeTab = tab;
-                try {
-                    const u = new URL(window.location);
-                    if (tab === 'receivables') {
-                        u.searchParams.set('tab', 'receivables');
-                        u.searchParams.set('filter', 'overdue');
-                        this.loadReceivables(true);
-                    } else {
-                        u.searchParams.delete('tab');
-                        u.searchParams.delete('filter');
-                    }
-                    window.history.replaceState(null, '', u.toString());
-                } catch (e) {}
-            },
-
-            // Data loaders
-            async loadSummary() {
-                this.isLoadingSummary = true;
-                const cur = (window.AppConfig?.currentCurrency || 'MRU');
-                const fmt = (v) => window.formatCurrency ? window.formatCurrency(Number(v||0)) : (Number(v||0).toFixed(2) + ' ' + cur);
-                try {
-                    // Prefer comprehensive blueprint summary (numeric)
-                    const a = await apiFetch('/api/finance/financial-summary').catch(() => null);
-                    let fs = a?.financial_summary || a?.summary || a;
-                    if (fs && (fs.total_revenue !== undefined || fs.current_cash_balance !== undefined)) {
-                        const totalRev = Number(fs.total_revenue || 0);
-                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses || 0) : (Number(fs.total_business_expenses || 0) + Number(fs.total_personal_expenses || 0));
-                        const net = totalRev - totalExp;
-                        this.summary = {
-                            total_revenue: fmt(totalRev),
-                            total_expenses: fmt(totalExp),
-                            net_profit: fmt(net),
-                            cash_balance: fmt(fs.current_cash_balance || fs.cash_balance || 0)
-                        };
-                    } else {
-                        // Fallback to app summary (already formatted strings)
-                        const b = await apiFetch('/api/finance/summary').catch(() => null);
-                        const s = b?.summary || b;
-                        if (s && (s.total_revenue || s.cash_balance)) {
-                            this.summary = {
-                                total_revenue: s.total_revenue || fmt(0),
-                                total_expenses: s.total_expenses || fmt(0),
-                                net_profit: s.net_profit || fmt(0),
-                                cash_balance: s.cash_balance || fmt(0)
-                            };
-                        }
-                    }
-                } catch (e) {
-                    console.error('Summary load failed', e);
-                    this.showToast('error', 'Erreur de chargement du résumé');
-                } finally {
-                    this.isLoadingSummary = false;
-                }
-            },
-
-            async loadTransactions() {
-                this.isLoadingTransactions = true;
-                try {
-                    const res = await apiFetch('/api/finance/transactions').catch(() => ({ transactions: [] }));
-                    const baseList = (res?.transactions && Array.isArray(res.transactions)) ? res.transactions : (Array.isArray(res) ? res : []);
-
-                    // Map backend fields to frontend expected fields
-                    const mapTx = (t) => {
-                        let type = t.type;
-                        if (type === 'revenu') type = 'income';
-                        if (type === 'expense') type = 'expense';
-                        let amount = t.amount;
-                        if (t.montant !== undefined) amount = t.montant;
-                        let category = t.category;
-                        if (t.categorie !== undefined) category = t.categorie;
-                        return {
-                            id: t.id || t.sale_id || t.expense_id,
-                            date: t.date || t.entry_date || t.expense_date || t.sale_date,
-                            amount: Number(amount || t.total_amount || 0),
-                            description: t.description || t.source || t.details || (category==='capital' ? 'Apport de capital' : ''),
-                            type: type || (category === 'income' ? 'income' : (category==='capital' ? 'income' : 'expense')),
-                            category: category || '',
-                            subcategory: t.subcategory || '',
-                            client_name: t.client_name || '',
-                            payment_method: t.payment_method || '',
-                            payment_status: t.payment_status || '',
-                            origin: category==='capital' ? 'capital' : (type==='income' ? 'sale' : 'expense')
-                        };
-                    };
-
-                    this.transactions = baseList.map(mapTx).sort((a,b)=>{
-                        const db = this.parseDateFlex(b.date) || new Date(0);
-                        const da = this.parseDateFlex(a.date) || new Date(0);
-                        return db - da;
-                    });
-
-                    // Totals
-                    this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+Number(x.amount||0),0);
-                    this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+Number(x.amount||0),0);
-                } catch (e) {
-                    console.error('Transactions load failed', e);
-                    this.showToast('error', 'Erreur de chargement des transactions');
-                } finally {
-                    this.isLoadingTransactions = false;
-                }
-            },
-
-            loadReceivables(onlyOverdue=false) {
-                // Only show receivables truly overdue if onlyOverdue is true
-                const url = onlyOverdue ? '/api/finance/client-debts?overdue=true' : '/api/finance/client-debts';
-                apiFetch(url)
-                    .then(data => {
-                        if (data?.success) {
-                            this.receivables = data.debts || [];
-                            this.receivablesTotal = Number(data.total_remaining || 0);
-                        } else if (data && Array.isArray(data)) {
-                            this.receivables = data;
-                            this.receivablesTotal = this.receivables.reduce((s, d) => s + Number(d.remaining_amount||0), 0);
-                        }
-                    })
-                    .catch(err => console.error('Error loading receivables', err));
-            },
-
-            refreshPeriod() {
-                // Refresh summary, transactions, and charts
-                this.loadSummary();
-                this.loadTransactions();
-                this.updateCharts();
-                if (this.activeTab === 'receivables') {
-                    this.loadReceivables(true);
-                }
-            },
-
-            // Derived
-            get filteredTransactions() {
-                return this.transactions.filter(transaction => {
-                    const term = (this.searchTerm || '').toLowerCase();
-                    const desc = (transaction.description || transaction.source || '').toLowerCase();
-                    const matchesSearch = !term || desc.includes(term);
-                    const matchesType = !this.filterType || transaction.type === this.filterType;
-                    let matchesDate = true;
-                    if (this.filterStartDate) {
-                        const txDate = this.toYMD(this.parseDateFlex(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date));
-                        matchesDate = matchesDate && txDate >= this.filterStartDate;
-                    }
-                    if (this.filterEndDate) {
-                        const txDate = this.toYMD(this.parseDateFlex(transaction.date || transaction.created_at || transaction.expense_date || transaction.entry_date));
-                        matchesDate = matchesDate && txDate <= this.filterEndDate;
-                    }
-                    return matchesSearch && matchesType && matchesDate;
-                });
-            },
-            get paginatedTransactions() {
-                const start = (this.transactionsPage - 1) * this.transactionsPageSize;
-                return this.filteredTransactions.slice(start, start + this.transactionsPageSize);
-            },
-            get transactionsTotalPages() {
-                return Math.max(1, Math.ceil(this.filteredTransactions.length / this.transactionsPageSize));
-            },
-            prevTransactionsPage() {
-                if (this.transactionsPage > 1) this.transactionsPage--;
-            },
-            nextTransactionsPage() {
-                if (this.transactionsPage < this.transactionsTotalPages) this.transactionsPage++;
-            },
-
-            exportTransactionsCSV() {
-                if (!this.filteredTransactions.length) { this.showToast('error', 'Aucune transaction à exporter'); return; }
-                var csv = 'Date,Description,Type,Montant,Catégorie\n';
-                var self = this;
-                this.filteredTransactions.forEach(function(t) {
-                    var date = self.formatDate(t.date || t.created_at || t.expense_date || t.entry_date);
-                    var desc = t.description || t.source || '-';
-                    var type = t.type;
-                    var amount = t.amount;
-                    var cat = t.subcategory || t.category;
-                    csv += '"' + date + '","' + desc + '",' + type + ',' + amount + ',"' + cat + '"\n';
-                });
-                var blob = new Blob([csv], { type: 'text/csv' });
-                var url = URL.createObjectURL(blob);
-                var a = document.createElement('a');
-                a.href = url;
-                a.download = 'transactions.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                this.showToast('success', 'Transactions exportées en CSV');
-            },
-            // Charts
-            initCharts() {
-                const revCanvas = document.getElementById('revenueChart');
-                const expCanvas = document.getElementById('expenseChart');
-                if (!revCanvas || !expCanvas || !window.Chart) {
-                    this.chartError = 'Graph canvases not found';
-                    return;
-                }
-
-                // Destroy old charts if they exist
-                if (this.revenueChart) this.revenueChart.destroy();
-                if (this.expenseChart) this.expenseChart.destroy();
-
-                const revenueCtx = revCanvas.getContext('2d');
-                const expenseCtx = expCanvas.getContext('2d');
-
-                // Create new charts
-                // Use Alpine.raw to keep chart instances out of reactivity proxies
-                this.revenueChart = Alpine.raw(new Chart(revenueCtx, {
+            } catch (error) {
+                console.error('Error loading receivables:', error);
+            }
+        },
+        
+        async initializeCharts() {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available');
+                return;
+            }
+            
+            // Initialize finance chart
+            const financeCtx = document.getElementById('financeChart');
+            if (financeCtx) {
+                this.financeChart = new Chart(financeCtx, {
                     type: 'line',
-                    data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
+                    data: {
+                        labels: [],
+                        datasets: [
+                            {
+                                label: 'Revenus',
+                                data: [],
+                                borderColor: 'rgb(34, 197, 94)',
+                                backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            },
+                            {
+                                label: 'Dépenses',
+                                data: [],
+                                borderColor: 'rgb(239, 68, 68)',
+                                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }
+                        ]
+                    },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        scales: { y: { beginAtZero: true } },
-                        plugins: {
-                            legend: { display: true },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return `Revenus: ${context.parsed.y.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return window.formatCurrency ? window.formatCurrency(value) : value;
                                     }
                                 }
                             }
                         },
-                        onClick: (e, elements) => {
-                            if (elements && elements.length > 0) {
-                                const idx = elements[0].index;
-                                const label = this.revenueChart.data.labels[idx];
-                                this.showToast('info', `Détail pour: ${label}`);
-                            }
-                        }
-                    }
-                }));
-                this.expenseChart = Alpine.raw(new Chart(expenseCtx, {
-                    type: 'doughnut',
-                    data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                position: 'bottom',
-                                labels: {
-                                    boxWidth: 24,
-                                    font: { size: 16, weight: 'bold' },
-                                    padding: 20,
-                                },
-                                onClick: (e, legendItem, legend) => {
-                                    const labels = legend.chart?.data?.labels || [];
-                                    const category = labels[legendItem.index] ?? '';
-                                    if (category && category !== 'Aucune dépense') {
-                                        if (this.searchTerm === category && this.filterType === 'expense') {
-                                            this.searchTerm = '';
-                                            this.filterType = '';
-                                            this.showToast('info', 'Filtre de catégorie retiré');
-                                        } else {
-                                            this.filterType = 'expense';
-                                            this.searchTerm = category;
-                                            this.showToast('info', `Filtré par catégorie: ${category}`);
-                                        }
+                                position: 'top'
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Initialize profit chart
+            const profitCtx = document.getElementById('profitChart');
+            if (profitCtx) {
+                this.profitChart = new Chart(profitCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Bénéfice Net',
+                            data: [],
+                            backgroundColor: function(context) {
+                                const value = context.parsed.y;
+                                return value >= 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
+                            },
+                            borderColor: function(context) {
+                                const value = context.parsed.y;
+                                return value >= 0 ? 'rgb(34, 197, 94)' : 'rgb(239, 68, 68)';
+                            },
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return window.formatCurrency ? window.formatCurrency(value) : value;
                                     }
                                 }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => {
-                                        const label = context.label ?? '';
-                                        const value = context.parsed ?? 0;
-                                        return `${label}: ${value.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${window.AppConfig?.currentCurrency || 'MRU'}`;
-                                    },
-                                },
-                            },
+                            }
                         },
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        }
                     }
-                }));
-                this.chartsInitialized = true;
-                // Do NOT call updateCharts() here to avoid infinite recursion/stack overflow
-            },
-
-            updateCharts() {
-                this.isLoadingCharts = true;
-                this.chartError = null;
-                console.log('[updateCharts] called, chartsInitialized:', this.chartsInitialized, 'revenueChart:', !!this.revenueChart, 'expenseChart:', !!this.expenseChart);
-                try {
-                    const u = new URL(window.location);
-                    u.searchParams.set('period', this.chartPeriod);
-                    window.history.replaceState(null, '', u.toString());
-                } catch (e) {}
-                const periodParam = this.chartPeriod;
-                apiFetch(`/api/finance/charts?period=${periodParam}`)
-                    .then(data => {
-                        if (!data || data.success === false) {
-                            this.chartError = 'Données de graphique indisponibles';
-                            this.showToast && this.showToast('error', 'API: Données de graphique indisponibles');
-                            console.warn('[updateCharts] API returned no data or success=false', data);
-                            this.isLoadingCharts = false;
-                            return;
-                        }
-                        // Ensure charts exist before updating
-                        if (!this.chartsInitialized || !this.revenueChart || !this.expenseChart) {
-                            this.chartError = 'Erreur: Les graphiques ne sont pas initialisés.';
-                            this.isLoadingCharts = false;
-                            return;
-                        }
-                        // Defensive: check chart data structure
-                        const chart = data?.chart_data || data || {};
-                        const rev = chart.revenue || {};
-                        const rLabels = Array.isArray(rev.labels) ? rev.labels : [];
-                        const rData = Array.isArray(rev.data) ? rev.data.map(v=>Number(v||0)) : [];
-                        this.revenueChart.data.labels = rLabels.length ? rLabels : ['Aucune donnée'];
-                        if (this.revenueChart.data.datasets && this.revenueChart.data.datasets[0]) {
-                            this.revenueChart.data.datasets[0].data = rData.length ? rData : [0];
-                        } else {
-                            this.revenueChart.data.datasets = [{ label: 'Revenus', data: [0] }];
-                        }
-                        if (typeof this.revenueChart.update === 'function') {
-                            this.revenueChart.update();
-                        } else {
-                            this.showToast && this.showToast('error', 'revenueChart.update() missing');
-                            console.warn('[updateCharts] revenueChart.update() missing');
-                        }
-                        // Defensive: Expense
-                        const exp = chart.expense || {};
-                        const eLabels = Array.isArray(exp.categories) ? exp.categories : [];
-                        const eData = Array.isArray(exp.data) ? exp.data.map(v=>Number(v||0)) : [];
-                        this.expenseChart.data.labels = eLabels.length ? eLabels : ['Aucune dépense'];
-                        if (this.expenseChart.data.datasets && this.expenseChart.data.datasets[0]) {
-                            this.expenseChart.data.datasets[0].data = eLabels.length ? eData : [0];
-                            this.expenseChart.data.datasets[0].backgroundColor = eLabels.length
-                                ? eLabels.map((_,i)=>`hsl(${(i*53)%360} 85% 55%)`)
-                                : ['#9CA3AF'];
-                        } else {
-                            this.expenseChart.data.datasets = [{ data: [0], backgroundColor: ['#9CA3AF'] }];
-                        }
-                        if (typeof this.expenseChart.update === 'function') {
-                            this.expenseChart.update();
-                        } else {
-                            this.showToast && this.showToast('error', 'expenseChart.update() missing');
-                            console.warn('[updateCharts] expenseChart.update() missing');
-                        }
-                        this.showToast && this.showToast('success', 'Charts updated successfully');
-                        console.log('[updateCharts] charts updated successfully');
-                        this.isLoadingCharts = false;
-                    })
-                    .catch(err => {
-                        console.error('Error updating charts:', err);
-                        this.chartError = 'Erreur de chargement des graphiques.';
-                        this.showToast && this.showToast('error', 'Erreur JS lors de la mise à jour des graphiques: ' + (err && err.message ? err.message : err));
-                        this.isLoadingCharts = false;
-                    });
-            },
-
-            // CRUD
-            createTransaction() {
-                if (this._creating) return; // prevent double submits
-                const today = new Date().toISOString().split('T')[0];
-                const isIncome = this.newTransaction.type === 'income';
-                const url = isIncome ? '/api/finance/capital' : '/api/finance/expenses';
-                // Basic validation
-                const amt = Number(this.newTransaction.amount);
-                if (!amt || amt <= 0) { this.showToast('warning', 'Montant invalide'); return; }
-                if (!this.newTransaction.description) { this.showToast('warning', 'Description requise'); return; }
-                const payload = isIncome ? {
-                    amount: this.newTransaction.amount,
-                    source: this.newTransaction.description,
-                    entry_date: today
-                } : {
-                    amount: this.newTransaction.amount,
-                    category: 'business',
-                    subcategory: this.newTransaction.category || 'Divers',
-                    description: this.newTransaction.description,
-                    expense_date: today
+                });
+            }
+            
+            // Load initial chart data
+            this.updateCharts('week');
+        },
+        
+        async updateCharts(period) {
+            this.chartPeriod = period;
+            
+            try {
+                const response = await apiFetch(`/api/finance/charts?period=${period}`);
+                if (response.success && response.chart_data) {
+                    const chartData = response.chart_data;
+                    
+                    // Update finance chart
+                    if (this.financeChart) {
+                        this.financeChart.data.labels = chartData.labels;
+                        this.financeChart.data.datasets[0].data = chartData.revenue;
+                        this.financeChart.data.datasets[1].data = chartData.expense;
+                        this.financeChart.update();
+                    }
+                    
+                    // Update profit chart
+                    if (this.profitChart) {
+                        this.profitChart.data.labels = chartData.labels;
+                        this.profitChart.data.datasets[0].data = chartData.profit;
+                        this.profitChart.update();
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating charts:', error);
+                this.showNotification('Erreur lors de la mise à jour des graphiques', 'error');
+            }
+        },
+        
+        async createTransaction() {
+            try {
+                const transactionData = {
+                    amount: parseFloat(this.newTransaction.amount),
+                    source: this.newTransaction.source,
+                    justification: this.newTransaction.justification,
+                    entry_date: this.newTransaction.date
                 };
-                this._creating = true;
-                apiFetch(url, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload) })
-                    .then(data => {
-                        if (data.success) {
-                            // Refresh everything to reflect new entry
-                            this.loadTransactions();
-                            this.loadSummary();
-                            this.updateCharts();
-                            this.showTransactionModal = false;
-                            this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
-                            this.showToast('success', 'Transaction créée avec succès');
-                        } else {
-                            this.showToast('error', data.message || 'Erreur lors de la création');
-                        }
-                    })
-                    .catch(err => { console.error('Error creating transaction:', err); this.showToast('error', 'Erreur lors de la création'); })
-                    .finally(() => { this._creating = false; });
-            },
-
-            editTransaction(transaction) {
-                if (transaction.origin === 'sale') return; // Not editable here
-                this.editData = {
-                    id: transaction.id,
-                    type: transaction.type,
-                    amount: Number(transaction.amount || 0),
-                    description: transaction.description || '',
-                    category: transaction.subcategory || transaction.category || ''
-                };
-                this.showEditModal = true;
-            },
-
-            updateTransaction() {
-                if (!this.editData.id) return;
-                const isIncome = this.editData.type === 'income';
-                const url = isIncome ? `/api/finance/capital/${this.editData.id}` : `/api/finance/expenses/${this.editData.id}`;
-                const body = isIncome
-                    ? { amount: Number(this.editData.amount || 0), source: this.editData.description }
-                    : { amount: Number(this.editData.amount || 0), description: this.editData.description, subcategory: this.editData.category };
-                apiFetch(url, { method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) })
-            .then(data=>{
-                        if (data.success) {
-                            this.showEditModal = false;
-                this.loadTransactions();
-                this.loadSummary();
-                this.updateCharts();
-                            this.showToast('success', 'Transaction mise à jour');
-                        } else {
-                            this.showToast('error', data.message || 'Erreur lors de la mise à jour');
-                        }
-                    })
-                    .catch(err=>{ console.error('Error updating transaction:', err); this.showToast('error', 'Erreur lors de la mise à jour'); });
-            },
-
-            deleteTransaction(transaction) {
-                if (transaction.origin === 'sale') return; // Not deletable here
-                if (!confirm('Êtes-vous sûr de vouloir supprimer cette transaction?')) return;
-                const url = transaction.type === 'income' ? `/api/finance/capital/${transaction.id}` : `/api/finance/expenses/${transaction.id}`;
-                apiFetch(url, { method: 'DELETE' })
-            .then(data => {
-                        if (data.success) {
-                            this.transactions = this.transactions.filter(t => !(t.id === transaction.id && t.origin === transaction.origin));
-                // Recompute totals immediately
-                this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+Number(x.amount||0),0);
-                this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+Number(x.amount||0),0);
-                            this.loadSummary();
-                this.updateCharts();
-                            this.showToast('success', 'Transaction supprimée');
-                        } else {
-                            this.showToast('error', data.message || 'Erreur lors de la suppression');
-                        }
-                    })
-                    .catch(err => { console.error('Error deleting transaction:', err); this.showToast('error', 'Erreur lors de la suppression'); });
-            },
-
-            generateFinanceReport() {
-                const params = new URLSearchParams();
-                const now = Date.now();
-                if (this.chartPeriod === 'week') params.append('start_date', new Date(now - 7*24*60*60*1000).toISOString().split('T')[0]);
-                else if (this.chartPeriod === 'month') params.append('start_date', new Date(now - 30*24*60*60*1000).toISOString().split('T')[0]);
-                else if (this.chartPeriod === 'year') params.append('start_date', new Date(now - 365*24*60*60*1000).toISOString().split('T')[0]);
-                this.isGeneratingReport = true;
-                this.showToast('info', 'Génération du rapport en cours...');
-                setTimeout(() => {
-                    window.open(`/api/reports/financial-report?${params.toString()}`, '_blank');
-                    this.isGeneratingReport = false;
-                    this.showToast('success', 'Rapport généré (voir nouvel onglet)');
-                }, 1200);
-            },
-
-            backupData() {
-                this.isBackingUp = true;
-                this.showToast('info', 'Sauvegarde en cours...');
-                apiFetch('/api/admin/backups', { method: 'POST' })
-                    .then(data => {
-                        if (data.success) this.showToast('success', 'Sauvegarde créée avec succès');
-                        else this.showToast('error', data.message || 'Échec de la sauvegarde (droits admin requis)');
-                    })
-                    .catch(err => { console.error('Backup error:', err); this.showToast('error', 'Erreur lors de la sauvegarde'); })
-                    .finally(() => { this.isBackingUp = false; });
-            },
-
-            // Utils
-            parseDateFlex(s) {
-                if (!s) return null;
-                let d = new Date(s);
-                if (!isNaN(d)) return d;
-                if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(s)) {
-                    const part = s.slice(0, 10);
-                    const d3 = new Date(part);
-                    if (!isNaN(d3)) return d3;
+                
+                const response = await apiFetch('/api/finance/capital', {
+                    method: 'POST',
+                    body: transactionData
+                });
+                
+                if (response.success) {
+                    this.showTransactionModal = false;
+                    this.newTransaction = {
+                        type: 'capital',
+                        amount: '',
+                        source: '',
+                        date: new Date().toISOString().split('T')[0],
+                        justification: ''
+                    };
+                    this.loadFinancialSummary();
+                    this.loadRecentTransactions();
+                    this.showNotification('Transaction enregistrée avec succès', 'success');
+                } else {
+                    this.showNotification(response.message || 'Erreur lors de l\'enregistrement', 'error');
                 }
-                const m = /^([0-3]?\d)[\/\-]([0-1]?\d)[\/\-](\d{2,4})/.exec(String(s));
-                if (m) {
-                    const dd = parseInt(m[1], 10), mm = parseInt(m[2], 10) - 1, yy = parseInt(m[3].length === 2 ? ('20' + m[3]) : m[3], 10);
-                    const d2 = new Date(yy, mm, dd);
-                    return isNaN(d2) ? null : d2;
+            } catch (error) {
+                console.error('Error creating transaction:', error);
+                this.showNotification('Erreur lors de la création de la transaction', 'error');
+            }
+        },
+        
+        async createExpense() {
+            try {
+                const response = await apiFetch('/api/finance/expenses', {
+                    method: 'POST',
+                    body: this.newExpense
+                });
+                
+                if (response.success) {
+                    this.showExpenseModal = false;
+                    this.newExpense = {
+                        category: 'business',
+                        subcategory: '',
+                        amount: '',
+                        description: '',
+                        expense_date: new Date().toISOString().split('T')[0]
+                    };
+                    this.loadFinancialSummary();
+                    this.loadRecentTransactions();
+                    this.showNotification('Dépense enregistrée avec succès', 'success');
+                } else {
+                    this.showNotification(response.message || 'Erreur lors de l\'enregistrement', 'error');
                 }
-                return null;
-            },
-            toYMD(d) { return d ? d.toISOString().split('T')[0] : ''; },
-            formatDate(dateString) {
-                if (!dateString) return '-';
-                const d = this.parseDateFlex(dateString);
-                if (!d || isNaN(d.getTime())) return '-';
-                try { return d.toLocaleDateString('fr-FR'); } catch (e) { return this.toYMD(d); }
-            },
-            formatCurrencyPlain(v){
-                const cur = (window.AppConfig?.currentCurrency || 'MRU');
-                const num = Number(v||0);
-                const parts = num.toFixed(2).split('.');
-                const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-                return `${intPart},${parts[1]} ${cur}`;
-            },
-
-            showToast(type, message) {
-                const id = Date.now() + Math.random();
-                const toast = { id, type, message };
-                this.toasts.push(toast);
-                this.notificationLog.unshift(toast);
-                if (this.notificationLog.length > 100) this.notificationLog.pop();
-                setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 3000);
-            },
-            exportExpenseCSV() {
-                if (!this.expenseChart) {
-                    this.showToast('error', 'Graphique non disponible');
-                    return;
+            } catch (error) {
+                console.error('Error creating expense:', error);
+                this.showNotification('Erreur lors de la création de la dépense', 'error');
+            }
+        },
+        
+        async markPaid(debt) {
+            if (!confirm(`Marquer la créance de ${debt.client_name} comme payée?`)) {
+                return;
+            }
+            
+            try {
+                const response = await apiFetch(`/api/finance/client-debts/${debt.id}/status`, {
+                    method: 'PATCH'
+                });
+                
+                if (response.success) {
+                    this.loadReceivables();
+                    this.loadFinancialSummary();
+                    this.showNotification('Créance marquée comme payée', 'success');
+                } else {
+                    this.showNotification(response.message || 'Erreur lors de la mise à jour', 'error');
                 }
-                const labels = this.expenseChart.data.labels;
-                const data = this.expenseChart.data.datasets[0].data;
-                let csv = 'Catégorie,Montant\n';
-                for (let i = 0; i < labels.length; i++) {
-                    csv += '"' + labels[i] + '",' + data[i] + '\n';
-                }
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'depenses.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-                this.showToast('success', 'Données exportées en CSV');
-            },
-
-               exportChart(type) {
-                   let chart = null;
-                   let filename = '';
-                   if (type === 'revenue') {
-                       chart = this.revenueChart;
-                       filename = 'revenus.png';
-                   } else if (type === 'expense') {
-                       chart = this.expenseChart;
-                       filename = 'depenses.png';
-                   }
-                   if (chart) {
-                       const url = chart.toBase64Image();
-                       const a = document.createElement('a');
-                       a.href = url;
-                       a.download = filename;
-                       document.body.appendChild(a);
-                       a.click();
-                       document.body.removeChild(a);
-                       this.showToast('success', 'Graphique exporté');
-                   } else {
-                       this.showToast('error', 'Graphique non disponible');
-                   }
+            } catch (error) {
+                console.error('Error marking debt as paid:', error);
+                this.showNotification('Erreur lors de la mise à jour du statut', 'error');
+            }
+        },
+        
+        generateReport() {
+            window.open('/api/reports/financial-report', '_blank');
+        },
+        
+        createBackup() {
+            window.open('/api/admin/backups', '_blank');
+        },
+        
+        diagnoseCharts() {
+            console.log('Chart diagnosis:');
+            console.log('Finance Chart:', this.financeChart);
+            console.log('Profit Chart:', this.profitChart);
+            console.log('Chart.js available:', typeof Chart !== 'undefined');
+            
+            if (typeof Chart === 'undefined') {
+                this.showNotification('Chart.js n\'est pas chargé', 'error');
+            } else if (!this.financeChart || !this.profitChart) {
+                this.showNotification('Graphiques non initialisés', 'warning');
+                this.initializeCharts();
+            } else {
+                this.showNotification('Graphiques fonctionnels', 'success');
+                this.updateCharts(this.chartPeriod);
+            }
+        },
+        
+        formatCurrency(amount) {
+            return window.formatCurrency ? window.formatCurrency(amount) : `${amount} MRU`;
+        },
+        
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('fr-FR');
+        },
+        
+        showNotification(message, type = 'info') {
+            if (window.showNotification) {
+                window.showNotification(message, type);
+            } else {
+                alert(message);
             }
         }
-    }
-        
-        function changeLanguage(lang) {
-            window.location.href = `/set-language/${lang}`;
-        }
-    </script>
-    <!-- Mobile tweaks: make tables horizontally scrollable and buttons full width on small screens -->
-    <style>
-        [x-cloak] { display: none !important; }
-        @media (max-width: 640px) {
-            .overflow-x-auto { padding-bottom: 1rem; }
-            table { font-size: 0.95rem; }
-            .flex.flex-wrap.gap-4.mb-6 > button { width: 100%; margin-bottom: 0.5rem; }
-            .grid, .grid > div { min-width: 0; }
-        }
-    </style>
+    };
+}
+</script>
+<style>
+[x-cloak] { display: none !important; }
+</style>
 {% endblock %}

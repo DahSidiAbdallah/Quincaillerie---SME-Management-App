@@ -1,977 +1,675 @@
-{% extends 'base.html' %}
-
+{% extends "base.html" %}
 {% block title_key %}reports_page_title{% endblock %}
 {% block title %}Rapports - SME Management{% endblock %}
 
 {% block extra_head %}
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .chart-container {
+        position: relative;
+        height: 400px;
+        margin: 1rem 0;
+    }
+    
+    .report-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    
+    .report-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+    }
+    
+    @media (max-width: 768px) {
+        .chart-container {
+            height: 300px;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="reportsManager()" x-init="init()">
-        <!-- Page Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900" data-i18n="reports_header">Rapports et Analytics</h1>
-            <p class="text-gray-600 mt-2" data-i18n="reports_description">Analysez vos performances et générez des rapports détaillés</p>
+<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="reportsManager()">
+    <!-- Page Header -->
+    <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-900" data-i18n="reports_header">Rapports et Analytics</h1>
+        <p class="text-gray-600 mt-2" data-i18n="reports_description">Analysez vos performances et générez des rapports détaillés</p>
+    </div>
+
+    <!-- Report Type Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <div class="report-card bg-white rounded-lg shadow p-6" @click="generateReport('sales')">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-shopping-cart text-3xl text-blue-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Rapport de Ventes</h3>
+                    <p class="text-sm text-gray-500">Analyse des ventes et revenus</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-card bg-white rounded-lg shadow p-6" @click="generateReport('inventory')">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-boxes text-3xl text-green-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Rapport d'Inventaire</h3>
+                    <p class="text-sm text-gray-500">État des stocks et valeurs</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-card bg-white rounded-lg shadow p-6" @click="generateReport('financial')">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-chart-line text-3xl text-purple-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Rapport Financier</h3>
+                    <p class="text-sm text-gray-500">Analyse financière complète</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-card bg-white rounded-lg shadow p-6" @click="generateReport('customers')">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-users text-3xl text-yellow-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Analyse Clients</h3>
+                    <p class="text-sm text-gray-500">Comportement et fidélité</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-card bg-white rounded-lg shadow p-6" @click="generateReport('profit')">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-coins text-3xl text-orange-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Analyse des Profits</h3>
+                    <p class="text-sm text-gray-500">Rentabilité par produit</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-card bg-white rounded-lg shadow p-6" @click="activeTab = 'ai_insights'">
+            <div class="flex items-center">
+                <div class="flex-shrink-0">
+                    <i class="fas fa-brain text-3xl text-pink-600"></i>
+                </div>
+                <div class="ml-4">
+                    <h3 class="text-lg font-medium text-gray-900">Insights IA</h3>
+                    <p class="text-sm text-gray-500">Prédictions et recommandations</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="bg-white rounded-lg shadow mb-8">
+        <div class="border-b border-gray-200">
+            <nav class="-mb-px flex space-x-8 px-6">
+                <button @click="activeTab = 'analytics'" 
+                        :class="activeTab === 'analytics' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-chart-bar mr-2"></i>Analytics
+                </button>
+                <button @click="activeTab = 'exports'" 
+                        :class="activeTab === 'exports' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-download mr-2"></i>Exports
+                </button>
+                <button @click="activeTab = 'ai_insights'" 
+                        :class="activeTab === 'ai_insights' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
+                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
+                    <i class="fas fa-brain mr-2"></i>IA Insights
+                </button>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Analytics Tab -->
+    <div x-show="activeTab === 'analytics'" class="space-y-6">
+        <!-- Date Range Filter -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex flex-wrap gap-4 items-end">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Date de début</label>
+                    <input type="date" x-model="dateRange.start" class="border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Date de fin</label>
+                    <input type="date" x-model="dateRange.end" class="border border-gray-300 rounded-md px-3 py-2">
+                </div>
+                <button @click="loadAnalytics()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                    <i class="fas fa-search mr-2"></i>Analyser
+                </button>
+            </div>
+        </div>
+
+        <!-- Analytics Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Ventes par Période</h3>
+                <div class="chart-container">
+                    <canvas id="salesAnalyticsChart"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-lg shadow p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Top Produits</h3>
+                <div class="chart-container">
+                    <canvas id="topProductsChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Exports Tab -->
+    <div x-show="activeTab === 'exports'" class="space-y-6">
+        <div class="bg-white rounded-lg shadow p-6">
+            <h3 class="text-lg font-medium text-gray-900 mb-6">Exporter les Données</h3>
             
-            <!-- Data freshness indicator -->
-            <div class="mt-3 p-2 bg-blue-50 border border-blue-200 rounded-md">
-                <div class="flex items-center text-sm text-blue-700">
-                    <i class="fas fa-info-circle mr-2"></i>
-                    <span x-text="`Les données affichées correspondent à la période: ${filters.period === 'custom' ? 'Personnalisée' : filters.period === 'today' ? 'Aujourd\'hui' : filters.period === 'week' ? 'Cette semaine' : filters.period === 'month' ? 'Ce mois' : filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année'}`"></span>
-                </div>
-                <div class="flex items-center text-sm text-blue-700 mt-1">
-                    <i class="fas fa-database mr-2"></i>
-                    <span id="data-source-info">Source des données: Mise à jour en temps réel</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Report Type Selector -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-medium text-gray-900" data-i18n="reports_types">Types de Rapports</h3>
-            </div>
-            <div class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                    <button @click="setActiveReport('sales')" 
-                            :class="activeReport === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
-                        <i class="fas fa-shopping-cart text-2xl mb-2"></i>
-                        <span class="font-medium">Rapport de Ventes</span>
-                    </button>
-                    
-                    <button @click="setActiveReport('inventory')" 
-                            :class="activeReport === 'inventory' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
-                        <i class="fas fa-boxes text-2xl mb-2"></i>
-                        <span class="font-medium">Rapport Inventaire</span>
-                    </button>
-                    
-                    <button @click="setActiveReport('financial')" 
-                            :class="activeReport === 'financial' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
-                        <i class="fas fa-chart-line text-2xl mb-2"></i>
-                        <span class="font-medium">Rapport Financier</span>
-                    </button>
-                    
-
-
-                    <button @click="setActiveReport('activities')" 
-                            :class="activeReport === 'activities' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
-                        <i class="fas fa-clock text-2xl mb-2"></i>
-                        <span class="font-medium">Activités</span>
-                    </button>
-
-                    <button @click="setActiveReport('ai_insights')" 
-                            :class="activeReport === 'ai_insights' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
-                            class="p-4 rounded-lg flex flex-col items-center transition-colors">
-                        <i class="fas fa-robot text-2xl mb-2"></i>
-                        <span class="font-medium">Insights IA</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Report Filters -->
-        <div class="bg-white rounded-lg shadow mb-8">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h3 class="text-lg font-medium text-gray-900" data-i18n="reports_filters">Filtres de Rapport</h3>
-            </div>
-            <div class="p-6">
-                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Période</label>
-                        <select x-model="filters.period" @change="updateReport()" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <option value="today">Aujourd'hui</option>
-                            <option value="week">Cette semaine</option>
-                            <option value="month">Ce mois</option>
-                            <option value="quarter">Ce trimestre</option>
-                            <option value="year">Cette année</option>
-                            <option value="custom">Période personnalisée</option>
-                        </select>
-                    </div>
-                    
-                    <div x-show="filters.period === 'custom'">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Date de début</label>
-                        <input type="date" x-model="filters.start_date" @change="updateReport()" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                    </div>
-                    
-                    <div x-show="filters.period === 'custom'">
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Date de fin</label>
-                        <input type="date" x-model="filters.end_date" @change="updateReport()" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                    </div>
-                    
-                    <div class="flex items-end">
-                    <button @click="generateReport()" :disabled="isLoading" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                    <template x-if="isLoading">
-                        <svg class="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path></svg>
-                    </template>
-                    <i class="fas fa-chart-bar mr-2" x-show="!isLoading"></i>
-                    <span x-text="isLoading ? t('loading') : t('reports_generate_report')"></span>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <button @click="exportData('products')" class="flex flex-col items-center p-4 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-boxes text-2xl text-blue-600 mb-2"></i>
+                    <span class="font-medium">Produits</span>
+                    <span class="text-xs text-gray-500">Export CSV</span>
                 </button>
-                    </div>
-                </div>
+
+                <button @click="exportData('sales')" class="flex flex-col items-center p-4 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-shopping-cart text-2xl text-green-600 mb-2"></i>
+                    <span class="font-medium">Ventes</span>
+                    <span class="text-xs text-gray-500">Export CSV</span>
+                </button>
+
+                <button @click="exportData('customers')" class="flex flex-col items-center p-4 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-users text-2xl text-yellow-600 mb-2"></i>
+                    <span class="font-medium">Clients</span>
+                    <span class="text-xs text-gray-500">Export CSV</span>
+                </button>
+
+                <button @click="exportData('expenses')" class="flex flex-col items-center p-4 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-receipt text-2xl text-red-600 mb-2"></i>
+                    <span class="font-medium">Dépenses</span>
+                    <span class="text-xs text-gray-500">Export CSV</span>
+                </button>
+
+                <button @click="exportData('debts')" class="flex flex-col items-center p-4 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-credit-card text-2xl text-purple-600 mb-2"></i>
+                    <span class="font-medium">Créances</span>
+                    <span class="text-xs text-gray-500">Export CSV</span>
+                </button>
+
+                <button @click="exportData('ai_insights')" class="flex flex-col items-center p-4 border border-gray-300 rounded-lg hover:bg-gray-50">
+                    <i class="fas fa-brain text-2xl text-pink-600 mb-2"></i>
+                    <span class="font-medium">Insights IA</span>
+                    <span class="text-xs text-gray-500">Export CSV</span>
+                </button>
             </div>
         </div>
+    </div>
 
-        <!-- Sales Report -->
-        <div x-show="activeReport === 'sales'" class="space-y-8">
-            <!-- Sales Summary -->
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-shopping-cart text-2xl text-blue-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Ventes Totales</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.sales.total_sales">0</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-dollar-sign text-2xl text-green-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Chiffre d'Affaires</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.sales.revenue) : (reportData.sales.revenue + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-chart-line text-2xl text-purple-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Vente Moyenne</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.sales.average_sale) : (reportData.sales.average_sale + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-trophy text-2xl text-yellow-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Meilleur Jour</h3>
-                            <p class="text-lg font-bold text-gray-900" x-text="reportData.sales.best_day">-</p>
-                        </div>
-                    </div>
-                </div>
+    <!-- AI Insights Tab -->
+    <div x-show="activeTab === 'ai_insights'" class="space-y-6">
+        <!-- AI Controls -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900">Insights Intelligence Artificielle</h3>
+                <button @click="refreshAIInsights()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">
+                    <i class="fas fa-sync mr-2"></i>Actualiser
+                </button>
             </div>
-
-            <!-- Sales Chart -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Évolution des Ventes</h3>
-                <template x-if="!hasSalesData && !isLoading">
-                    <div class="h-80 flex items-center justify-center text-gray-400 text-lg">Aucune donnée à afficher</div>
-                </template>
-                <div class="h-80 relative" x-show="hasSalesData">
-                    <canvas id="salesChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Top Products -->
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Produits les Plus Vendus</h3>
-                <div class="overflow-x-auto">
-                    <table class="min-w-full divide-y divide-gray-200">
-                        <thead class="bg-gray-50">
-                            <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Produit</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantité Vendue</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Chiffre d'Affaires</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">% du Total</th>
-                            </tr>
-                        </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
-                            <template x-for="(product, idx) in reportData.sales.top_products" :key="idx">
-                                <tr>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="product.name || '-' "></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="product.total_quantity ?? 0"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="window.formatCurrency ? window.formatCurrency(product.total_profit) : ((product.total_profit ?? 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))"></td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="reportData.sales.revenue > 0 ? ((product.total_profit / reportData.sales.revenue * 100).toFixed(0) + '%') : '0%'" ></td>
-                                </tr>
-                            </template>
-                            <tr x-show="!reportData.sales.top_products || reportData.sales.top_products.length === 0">
-                                <td colspan="4" class="text-center text-gray-400 py-4">Aucune donnée à afficher</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- Activities Report -->
-        <div x-show="activeReport === 'activities'" class="space-y-4">
-            <div class="bg-white rounded-lg shadow p-6">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 class="text-lg font-medium text-gray-900">Activités récentes</h3>
-                    <button @click="loadActivities()" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
-                </div>
-                <div class="space-y-3">
-                    <template x-for="(act, idx) in activities" :key="act.id ?? idx">
-                        <div class="flex items-start space-x-3 p-3 rounded border border-gray-100">
-                            <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
-                                 :class="{
-                                     'bg-green-100 text-green-600': act.type==='sale',
-                                     'bg-blue-100 text-blue-600': act.type==='stock',
-                                     'bg-purple-100 text-purple-600': act.type==='login',
-                                     'bg-yellow-100 text-yellow-600': act.type==='payment',
-                                     'bg-gray-100 text-gray-600': !['sale','stock','login','payment'].includes(act.type)
-                                 }">
-                                <span class="text-xs font-semibold" x-text="act.type.substring(0,1).toUpperCase()"></span>
-                            </div>
-                            <div class="flex-1">
-                                <p class="text-sm text-gray-900"><span class="font-medium" x-text="act.title"></span> - <span x-text="act.description"></span></p>
-                                <p class="text-xs text-gray-500" x-text="`${act.time_ago} par ${act.user}`"></p>
-                            </div>
-                        </div>
-                    </template>
-                    <div x-show="!activities || activities.length===0" class="text-center text-gray-500 py-8">Aucune activité trouvée</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- AI Insights Report (Admin oriented) -->
-        <div x-show="activeReport === 'ai_insights'" class="space-y-4">
-            <div class="bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Résumé IA</h3>
-                <template x-if="ai.summaryError">
-                    <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
-                        <span class="mr-2">Erreur lors du chargement du résumé IA.</span>
-                        <button @click="loadAI()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
-                    </div>
-                </template>
-                <p class="text-gray-700" x-text="ai.summary || (ai.summaryError ? '' : 'Chargement du résumé...')"></p>
-            </div>
+            
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h4 class="font-semibold text-gray-900 mb-1">Prédiction de ventes</h4>
-                    <template x-if="ai.forecastError">
-                        <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
-                            <span class="mr-2">Erreur lors du chargement de la prévision de ventes.</span>
-                            <button @click="loadAI()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
+                <button @click="loadStockPredictions()" class="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
+                    <i class="fas fa-chart-line text-blue-600 mb-2"></i>
+                    <h4 class="font-medium">Prédictions Stock</h4>
+                    <p class="text-xs text-gray-500">Alertes de rupture</p>
+                </button>
+
+                <button @click="loadSalesForecast()" class="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
+                    <i class="fas fa-crystal-ball text-green-600 mb-2"></i>
+                    <h4 class="font-medium">Prévisions Ventes</h4>
+                    <p class="text-xs text-gray-500">Tendances futures</p>
+                </button>
+
+                <button @click="loadRestockSuggestions()" class="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
+                    <i class="fas fa-truck text-purple-600 mb-2"></i>
+                    <h4 class="font-medium">Suggestions Réappro</h4>
+                    <p class="text-xs text-gray-500">Optimisation stock</p>
+                </button>
+            </div>
+        </div>
+
+        <!-- AI Results -->
+        <div x-show="aiResults.type" class="bg-white rounded-lg shadow p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900" x-text="aiResults.title">Résultats IA</h3>
+                <span class="text-xs text-gray-500" x-text="aiResults.generated_at">Généré le</span>
+            </div>
+            
+            <!-- Stock Predictions -->
+            <div x-show="aiResults.type === 'stock_predictions'">
+                <div class="space-y-4">
+                    <template x-for="prediction in aiResults.data" :key="prediction.product_id">
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-medium text-gray-900" x-text="prediction.product_name"></h4>
+                                    <p class="text-sm text-gray-600" x-text="prediction.recommendation"></p>
+                                </div>
+                                <span class="px-2 py-1 text-xs font-medium rounded-full"
+                                      :class="{
+                                          'bg-red-100 text-red-800': prediction.alert_level === 'critical',
+                                          'bg-yellow-100 text-yellow-800': prediction.alert_level === 'warning',
+                                          'bg-blue-100 text-blue-800': prediction.alert_level === 'info'
+                                      }"
+                                      x-text="prediction.days_until_stockout + ' jours'">
+                                </span>
+                            </div>
+                            <div class="mt-2 text-xs text-gray-500">
+                                Stock actuel: <span x-text="prediction.current_stock"></span> | 
+                                Consommation: <span x-text="prediction.daily_consumption"></span>/jour |
+                                Confiance: <span x-text="Math.round(prediction.confidence * 100)"></span>%
+                            </div>
                         </div>
                     </template>
-                    <p class="text-sm text-gray-600">Prévision sur <span x-text="ai.forecastDays"></span> jours</p>
-                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.forecastSummary || 'Chargement...' "></p>
-                </div>
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h4 class="font-semibold text-gray-900 mb-1">Produits à réapprovisionner</h4>
-                    <p class="text-sm text-gray-600">Basé sur la demande et le stock</p>
-                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.restockSuggestions.length" id="forecastText">...></p>
-                    <button @click="ai.showRestock = !ai.showRestock" class="mt-2 text-blue-600 underline text-sm">Voir les suggestions</button>
-                    <div x-show="ai.showRestock" class="mt-2">
-                        <template x-if="ai.restockError">
-                            <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
-                                <span class="mr-2">Erreur lors du chargement des suggestions de réapprovisionnement.</span>
-                                <button @click="loadRestockSuggestions()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
-                            </div>
-                        </template>
-                        <ul>
-                            <template x-for="(sugg, idx) in ai.restockSuggestions" :key="sugg.id ?? idx">
-                                <li class="mb-1 flex items-center justify-between">
-                                    <span x-text="sugg.product_name"></span>
-                                    <button class="ml-2 bg-green-500 text-white px-2 py-1 rounded text-xs" @click="acceptRestockSuggestion(sugg)">Accepter</button>
-                                    <button class="ml-2 bg-gray-400 text-white px-2 py-1 rounded text-xs" @click="rejectRestockSuggestion(sugg)">Rejeter</button>
-                                </li>
-                            </template>
-                            <li x-show="ai.restockSuggestions.length === 0 && !ai.restockError" class="text-gray-400 text-xs">Aucune suggestion</li>
-                        </ul>
-                    </div>
-                </div>
-                <div class="bg-white rounded-lg shadow p-6">
-                    <h4 class="font-semibold text-gray-900 mb-1">Ajustements de prix suggérés</h4>
-                    <p class="text-sm text-gray-600">Optimisation des marges</p>
-                    <p class="mt-2 text-2xl font-bold text-indigo-600" x-text="ai.priceSuggestions.length"></p>
-                    <button @click="ai.showPrice = !ai.showPrice" class="mt-2 text-blue-600 underline text-sm">Voir les suggestions</button>
-                    <div x-show="ai.showPrice" class="mt-2">
-                        <template x-if="ai.priceError">
-                            <div class="bg-red-100 text-red-700 p-2 rounded mb-2 flex items-center">
-                                <span class="mr-2">Erreur lors du chargement des suggestions de prix.</span>
-                                <button @click="loadPriceSuggestions()" class="ml-auto bg-red-600 text-white px-2 py-1 rounded text-xs">Réessayer</button>
-                            </div>
-                        </template>
-                        <ul>
-                            <template x-for="(sugg, idx) in ai.priceSuggestions" :key="sugg.id ?? idx">
-                                <li class="mb-1 flex items-center justify-between">
-                                    <span x-text="sugg.product_name + ': ' + sugg.suggested_price + ' ' + (window.AppConfig?.currentCurrency || 'MRU')"></span>
-                                    <button class="ml-2 bg-green-500 text-white px-2 py-1 rounded text-xs" @click="acceptPriceSuggestion(sugg)">Accepter</button>
-                                    <button class="ml-2 bg-gray-400 text-white px-2 py-1 rounded text-xs" @click="rejectPriceSuggestion(sugg)">Rejeter</button>
-                                </li>
-                            </template>
-                            <li x-show="ai.priceSuggestions.length === 0 && !ai.priceError" class="text-gray-400 text-xs">Aucune suggestion</li>
-                        </ul>
-                    </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Inventory Report -->
-        <div x-show="activeReport === 'inventory'" class="space-y-8">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-boxes text-2xl text-blue-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Total Produits</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.total_products ?? 0">0</p>
-                        </div>
-                    </div>
+            <!-- Sales Forecast -->
+            <div x-show="aiResults.type === 'sales_forecast'">
+                <div class="mb-4">
+                    <p class="text-gray-600" x-text="aiResults.data.summary"></p>
                 </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-exclamation-triangle text-2xl text-red-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Stock Faible</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.low_stock ?? 0">0</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-ban text-2xl text-gray-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Rupture Stock</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="reportData.inventory.out_of_stock ?? 0">0</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="bg-white rounded-lg shadow p-6">
-                    <div class="flex items-center">
-                        <div class="flex-shrink-0">
-                            <i class="fas fa-dollar-sign text-2xl text-green-600"></i>
-                        </div>
-                        <div class="ml-4">
-                            <h3 class="text-sm font-medium text-gray-500">Valeur Stock</h3>
-                            <p class="text-2xl font-bold text-gray-900" x-text="window.formatCurrency ? window.formatCurrency(reportData.inventory.stock_value ?? 0) : ((reportData.inventory.stock_value ?? 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))">0 {{ current_currency }}</p>
-                        </div>
-                    </div>
+                <div class="chart-container">
+                    <canvas id="forecastChart"></canvas>
                 </div>
             </div>
-        </div>
 
-        <!-- Export Options -->
-    <div class="bg-white rounded-lg shadow p-6 mt-8" x-show="canExport">
-            <h3 class="text-lg font-medium text-gray-900 mb-4">Options d'Export</h3>
-            <div class="flex flex-wrap gap-4">
-                <button @click="exportToPDF()" :disabled="!canExport" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="fas fa-file-pdf mr-2"></i>
-                    Exporter PDF
-                </button>
-                <button @click="exportToExcel()" :disabled="!canExport" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="fas fa-file-excel mr-2"></i>
-                    Exporter Excel
-                </button>
-                <button @click="exportToCSV()" :disabled="!canExport" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="fas fa-file-csv mr-2"></i>
-                    Exporter CSV
-                </button>
-                <button @click="scheduleReport()" :disabled="!canExport" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg flex items-center disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="fas fa-clock mr-2"></i>
-                    Programmer Rapport
-                </button>
+            <!-- Restock Suggestions -->
+            <div x-show="aiResults.type === 'restock_suggestions'">
+                <div class="space-y-4">
+                    <template x-for="suggestion in aiResults.data" :key="suggestion.product_id">
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h4 class="font-medium text-gray-900" x-text="suggestion.product_name"></h4>
+                                    <p class="text-sm text-gray-600" x-text="suggestion.reasoning"></p>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-lg font-bold text-gray-900" x-text="suggestion.suggested_quantity + ' unités'"></div>
+                                    <div class="text-sm text-gray-500" x-text="formatCurrency(suggestion.investment_required)"></div>
+                                </div>
+                            </div>
+                            <div class="mt-2 flex justify-between text-xs text-gray-500">
+                                <span>Priorité: <span x-text="suggestion.priority"></span></span>
+                                <span>Ventes: <span x-text="suggestion.daily_sales_rate"></span>/jour</span>
+                                <span>Profit: <span x-text="formatCurrency(suggestion.profit_per_unit)"></span>/unité</span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
             </div>
         </div>
-    </main>
+    </div>
+
+    <!-- Report Filters -->
+    <div x-show="activeTab === 'filters'" class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-lg font-medium text-gray-900 mb-4" data-i18n="reports_filters">Filtres de Rapport</h3>
+        
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Date de début</label>
+                <input type="date" x-model="reportFilters.start_date" class="w-full border border-gray-300 rounded-md px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Date de fin</label>
+                <input type="date" x-model="reportFilters.end_date" class="w-full border border-gray-300 rounded-md px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Grouper par</label>
+                <select x-model="reportFilters.group_by" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                    <option value="day">Jour</option>
+                    <option value="week">Semaine</option>
+                    <option value="month">Mois</option>
+                </select>
+            </div>
+        </div>
+        
+        <div class="flex justify-end mt-6">
+            <button @click="generateCustomReport()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md" data-i18n="reports_generate_report">
+                <i class="fas fa-chart-bar mr-2"></i>Générer Rapport
+            </button>
+        </div>
+    </div>
+</main>
 {% endblock %}
 
-    <!-- Footer -->
-    <footer class="bg-slate-800 text-white py-4 mt-12">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-            <p>&copy; {{ current_year }} SME Management v{{ app_version }}</p>
-            <div class="flex items-center space-x-4">
-                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
-                <span>Mode: {{ user_role|title }}</span>
-                <span>Utilisateur: {{ current_user }}</span>
-            </div>
-        </div>
-    </footer>
 {% block extra_scripts %}
-    <script>
-    function reportsManager() {
-    console.log('reportsManager initialized');
+<script>
+function reportsManager() {
     return {
-        get canExport() {
-            // Only allow export for supported tabs: sales, inventory, financial
-            return ['sales', 'inventory', 'financial'].includes(this.activeReport);
+        activeTab: 'analytics',
+        dateRange: {
+            start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            end: new Date().toISOString().split('T')[0]
         },
-            updateSalesChart(labels, amounts) {
-                // Only update if chart is initialized and datasets exist
-                if (this.salesChart && this.salesChart.data && Array.isArray(this.salesChart.data.datasets) && this.salesChart.data.datasets[0]) {
-                    this.salesChart.data.labels = labels;
-                    this.salesChart.data.datasets[0].data = amounts;
-                    try {
-                        this.salesChart.update();
-                    } catch (e) {
-                        console.error('Chart update error:', e);
-                    }
-                }
-            },
-            activeReport: 'sales',
-            filters: {
-                period: 'today',
-                start_date: '',
-                end_date: ''
-            },
-            prevPeriod: 'today', // Track previous period for x-effect
-            isLoading: false, // For loading spinner
-            hasSalesData: false, // For chart and message visibility
-            activities: [],
-            ai: {
-                summary: '',
-                summaryError: false,
-                restockSuggestions: [],
-                restockError: false,
-                priceSuggestions: [],
-                priceError: false,
-                forecastDays: 7,
-                forecastSummary: '',
-                forecastError: false,
-                showRestock: false,
-                showPrice: false
-            },
-                reportData: {
-                    sales: {
-                        total_sales: 0,
-                        revenue: 0,
-                        average_sale: 0,
-                        best_day: '-',
-                        top_products: []
-                    },
-                    inventory: {
-                        total_products: 0,
-                        low_stock: 0,
-                        out_of_stock: 0,
-                        stock_value: 0
-                    },
-                    financial: {
-                        total_revenue: 0,
-                        total_expenses: 0,
-                        net_profit: 0
-                    }
-                },
-                salesChart: null,
-                
-                init() {
-            // Remove watcher to prevent infinite loop
-            // Honor ?tab=... query parameter for deep links
-            const params = new URLSearchParams(window.location.search);
-            const tab = params.get('tab');
-            if (tab && ['sales','inventory','financial','customers','activities','ai_insights'].includes(tab)) {
-                this.activeReport = tab;
-            }
-
-            // Only set default period if not already set (preserve custom)
-            if (!this.filters.period) {
-                this.filters.period = 'today';
-            }
-            // Only set default dates if not custom
-            if (this.filters.period !== 'custom') {
-                const now = new Date();
-                this.filters.start_date = now.toISOString().split('T')[0];
-                this.filters.end_date = now.toISOString().split('T')[0];
-            }
-
-            this.loadReportData().then(() => {
-                if (this.activeReport === 'sales') {
-                    this.initCharts();
-                }
-                if (this.activeReport === 'activities') this.loadActivities();
-                if (this.activeReport === 'ai_insights') this.loadAI();
-            });
-                },
-
-                setActiveReport(type) {
-            if (this.salesChart && typeof this.salesChart.destroy === 'function') {
-                this.salesChart.destroy();
-                this.salesChart = null;
-            }
-            this.activeReport = type;
-            // Do not reset custom date range when switching tabs
-            this.loadReportData().then(() => {
-                if (type === 'sales') {
-                    this.initCharts();
-                }
-            });
-},
-                
-                loadReportData() {
-            console.log('loadReportData called, activeReport:', this.activeReport);
-            this.isLoading = true;
-            // Get date range based on selected period
-            let dateParams = this.getDateRangeParams();
-            const tasks = [];
-
-            if (this.activeReport === 'sales') {
-                const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
-                    ? `${this.filters.start_date} au ${this.filters.end_date}`
-                    : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
-                tasks.push(
-                            apiFetch(`/api/reports/sales-report?start_date=${dateParams.startDate}&end_date=${dateParams.endDate}`)
-                                .then(data => {
-                                    console.log('DEBUG sales report:', data);
-                                    if (data.success) {
-                                        const stats = data.report.overall_statistics;
-                                        const periods = data.report.sales_by_period || [];
-                                        let bestDay = '-';
-                                        if (periods.length > 0) {
-                                            const maxEntry = periods.reduce((prev, curr) =>
-                                                Number(curr.total_revenue) > Number(prev.total_revenue) ? curr : prev
-                                            );
-                                            bestDay = maxEntry.period;
-                                        }
-                                        this.reportData.sales = {
-                                            total_sales: stats.total_sales || 0,
-                                            revenue: stats.total_revenue || 0,
-                                            average_sale: stats.avg_sale_amount || 0,
-                                            best_day: bestDay,
-                                            top_products: data.report.top_products || [],
-                                            sales_by_period: data.report.sales_by_period || []
-                                        };
-                                        const dataSourceElement = document.getElementById('data-source-info');
-                                        if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${dateLabel}`;
-                                        }
-                                        let labels = (data.report.sales_by_period || []).map(p => p.period);
-                                        let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
-                                        this.updateSalesChart(labels, amounts);
-                                    }
-                                })
-                                .catch(error => {
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Erreur lors du chargement du rapport de ventes.', 'error');
-                                    }
-                                    console.error('Error loading sales report:', error);
-                                })
-                        );
-                    }
-
-                    if (this.activeReport === 'inventory') {
-                        const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
-                            ? `${this.filters.start_date} au ${this.filters.end_date}`
-                            : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
-                        tasks.push(
-                            apiFetch('/api/inventory/stats')
-                                .then(data => {
-                                    if (data.success) {
-                                        this.reportData.inventory = {
-                                            total_products: Number(data.stats.total || 0),
-                                            low_stock: Number(data.stats.low_stock || 0),
-                                            out_of_stock: Number(data.stats.out_of_stock || 0),
-                                            stock_value: Number((data.stats.inventory_value || data.stats.total_value) ?? 0)
-                                        };
-                                        const dataSourceElement = document.getElementById('data-source-info');
-                                        if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Données d'inventaire - ${dateLabel}`;
-                                        }
-                                    }
-                                })
-                                .catch(error => {
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Erreur lors du chargement du rapport d\'inventaire.', 'error');
-                                    }
-                                    console.error('Error loading inventory report:', error);
-                                })
-                        );
-                    }
-
-                    if (this.activeReport === 'financial') {
-                        const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
-                            ? `${this.filters.start_date} au ${this.filters.end_date}`
-                            : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
-                        tasks.push(
-                            apiFetch('/api/finance/financial-summary')
-                                .then(data => {
-                                    if (data.success) {
-                                        const fs = data.financial_summary || {};
-                                        const totalRev = Number(fs.total_revenue || 0);
-                                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses || 0) : (Number(fs.total_business_expenses || 0) + Number(fs.total_personal_expenses || 0));
-                                        this.reportData.financial = {
-                                            total_revenue: totalRev,
-                                            total_expenses: totalExp,
-                                            net_profit: totalRev - totalExp
-                                        };
-                                        const dataSourceElement = document.getElementById('data-source-info');
-                                        if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Résumé financier - ${dateLabel}`;
-                                        }
-                                    }
-                                })
-                                .catch(error => {
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Erreur lors du chargement du rapport financier.', 'error');
-                                    }
-                                    console.error('Error loading financial report:', error);
-                                })
-                        );
-                    }
-
-            return Promise.all(tasks)
-                .finally(() => {
-                    if (this.activeReport === 'activities') this.loadActivities();
-                    if (this.activeReport === 'ai_insights') this.loadAI();
-                    this.isLoading = false;
-                });
-                },
-                loadActivities() {
-                        apiFetch('/api/dashboard/activities?limit=50')
-                            .then(data => {
-                                if (data?.success) {
-                                    this.activities = data.activities || [];
-                                } else {
-                                    this.activities = [];
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Aucune activité trouvée ou erreur lors du chargement.', 'warning');
-                                    }
-                                }
-                            })
-                            .catch(err => {
-                                this.activities = [];
-                                if (typeof window.showNotification === 'function') {
-                                    window.showNotification('Erreur lors du chargement des activités.', 'error');
-                                }
-                                console.error('Error loading activities', err);
-                            });
-                },
-                loadAI() {
-                    // Sales forecast summary (expected revenue)
-                    this.ai.forecastError = false;
-                    apiFetch('/api/ai/sales-forecast')
-                        .then(d => {
-                            if (d?.success && d.forecast && d.forecast.summary) {
-                                this.ai.forecastSummary = d.forecast.summary;
-                                this.ai.forecastDays = d.forecast.days || 7;
-                            } else {
-                                this.ai.forecastSummary = '';
-                                this.ai.forecastError = true;
-                            }
-                        })
-                        .catch(()=>{ this.ai.forecastError = true; });
-                    // Summary
-                    this.ai.summaryError = false;
-                    apiFetch('/api/ai/summary-assistant?period=week')
-                        .then(d => { if (d?.success) this.ai.summary = d.summary?.text || ''; else this.ai.summaryError = true; })
-                        .catch(()=>{ this.ai.summaryError = true; });
-                    // Restock suggestions
-                    this.loadRestockSuggestions();
-                    // Price suggestions
-                    this.loadPriceSuggestions();
-                },
-                loadRestockSuggestions() {
-                    this.ai.restockError = false;
-                    apiFetch('/api/ai/restock-suggestions')
-                        .then(d => { if (d?.success) this.ai.restockSuggestions = d.suggestions || []; else this.ai.restockError = true; })
-                        .catch(()=>{ this.ai.restockError = true; });
-                },
-                loadPriceSuggestions() {
-                    this.ai.priceError = false;
-                    apiFetch('/api/ai/price-suggestions')
-                        .then(d => {
-                            if (d?.success) {
-                                this.ai.priceSuggestions = (d.suggestions || []).filter(s => s.suggested_price != s.current_price);
-                            } else {
-                                this.ai.priceError = true;
-                            }
-                        })
-                        .catch(()=>{ this.ai.priceError = true; });
-                },
-                async acceptRestockSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/restock-suggestions/accept', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de réapprovisionnement acceptée.', 'success');
-                            }
-                            // Remove from list
-                            this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors de l\'acceptation: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                async rejectRestockSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/restock-suggestions/reject', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de réapprovisionnement rejetée.', 'info');
-                            }
-                            this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors du rejet: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                async acceptPriceSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/price-suggestions/accept', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de prix acceptée.', 'success');
-                            }
-                            this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors de l\'acceptation: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                async rejectPriceSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/price-suggestions/reject', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de prix rejetée.', 'info');
-                            }
-                            this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors du rejet: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                
-                initCharts() {
-                    // Sales Chart
-                    const salesCtx = document.getElementById('salesChart');
-                    if (salesCtx) {
-                        if (this.salesChart && typeof this.salesChart.destroy === 'function') {
-                            this.salesChart.destroy();
-                        }
-                        // Use last loaded data if available
-                        let labels = [];
-                        let amounts = [];
-                        if (this.reportData && this.reportData.sales && Array.isArray(this.reportData.sales.top_products)) {
-                            // If sales_by_period is available, use it for the chart
-                            if (Array.isArray(this.reportData.sales.sales_by_period)) {
-                                labels = this.reportData.sales.sales_by_period.map(p => p.period);
-                                amounts = this.reportData.sales.sales_by_period.map(p => p.total_revenue);
-                            }
-                        }
-                        this.salesChart = new Chart(salesCtx.getContext('2d'), {
-                            type: 'line',
-                            data: {
-                                labels: labels,
-                                datasets: [{
-                                    label: `Ventes (${window.AppConfig?.currentCurrency || 'MRU'})`,
-                                    data: amounts,
-                                    borderColor: 'rgb(59, 130, 246)',
-                                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                    tension: 0.4,
-                                    fill: true
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                    y: {
-                                        beginAtZero: true,
-                                        ticks: {
-                                            callback: function(value) {
-                                                return window.formatCurrency ? window.formatCurrency(value) : (value + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
-                                            }
-                                        }
-                                    }
-                                },
-                                plugins: {
-                                    legend: {
-                                        display: true,
-                                        position: 'top'
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Évolution des ventes',
-                                        font: { size: 18 },
-                                        padding: { top: 10, bottom: 20 }
-                                    }
-                                }
-                            }
-                        });
-                    }
-                },
-                
-                getDateRangeParams() {
-                    const today = new Date();
-                    let startDate = new Date();
-                    let endDate = new Date();
-                    
-                    // Calculate date range based on selected period
-                    switch(this.filters.period) {
-                        case 'today':
-                            // Just today
-                            break;
-                        case 'week':
-                            // Last 7 days
-                            startDate.setDate(today.getDate() - 7);
-                            break;
-                        case 'month':
-                            // Current month
-                            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                            break;
-                        case 'quarter':
-                            // Current quarter (3 months)
-                            startDate.setMonth(today.getMonth() - 3);
-                            break;
-                        case 'year':
-                            // Current year
-                            startDate = new Date(today.getFullYear(), 0, 1);
-                            break;
-                        case 'custom':
-                            // Use custom dates
-                            if (this.filters.start_date) {
-                                startDate = new Date(this.filters.start_date);
-                            }
-                            if (this.filters.end_date) {
-                                endDate = new Date(this.filters.end_date);
-                            }
-                            break;
-                        default:
-                            // Default to today
-                            break;
-                    }
-                    
-                    // Format dates as YYYY-MM-DD
-                    const formatDate = (date) => {
-                        return date.toISOString().split('T')[0];
-                    };
-                    
-                    return {
-                        startDate: formatDate(startDate),
-                        endDate: formatDate(endDate)
-                    };
-                },
-
-                updateReport() {
-                    this.loadReportData();
-                    if (this.salesChart) {
-                        this.salesChart.update();
-                    }
-                },
-                
-                generateReport() {
-                    if (this.filters.period === 'custom') {
-                        if (!this.filters.start_date || !this.filters.end_date || this.filters.start_date > this.filters.end_date) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Veuillez sélectionner une période personnalisée valide (date de début avant date de fin).', 'error');
-                            }
-                            return;
-                        }
-                    }
-                    if (typeof window.showNotification === 'function') {
-                        window.showNotification(`Génération du rapport ${this.activeReport} pour la période ${this.filters.period}...`, 'info');
-                    }
-                    this.loadReportData();
-                },
-                
-                exportToPDF() {
-                    // Simple print to PDF using browser
-                    window.print();
-                },
-                
-                exportToExcel() {
-                    // Use CSV exports; Excel can open CSV files
-                    this.exportWithFilters();
-                },
-
-                exportToCSV() {
-                    this.exportWithFilters();
-                },
-
-                exportWithFilters() {
-                    const params = new URLSearchParams({
-                        period: this.filters.period,
-                        start_date: this.filters.start_date || '',
-                        end_date: this.filters.end_date || ''
-                    }).toString();
-                    let endpoint;
-                    switch (this.activeReport) {
-                        case 'sales':
-                            endpoint = '/api/reports/export/sales';
-                            break;
-                        case 'inventory':
-                            endpoint = '/api/reports/export/products';
-                            break;
-                        case 'financial':
-                            endpoint = '/api/reports/export/expenses';
-                            break;
-                        default:
-                            endpoint = '/api/reports/export/sales';
-                    }
-                    try {
-                        window.open(`${endpoint}?${params}`, '_blank');
-                    } catch (e) {
-                        console.error('Error exporting report', e);
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors de l\'export du rapport.', 'error');
-                        }
-                    }
-                },
-                
-                scheduleReport() {
-                    if (typeof window.showNotification === 'function') {
-                        window.showNotification('Programmation du rapport...', 'info');
-                    }
-                }
-            }
-        }
+        reportFilters: {
+            start_date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            end_date: new Date().toISOString().split('T')[0],
+            group_by: 'day'
+        },
+        aiResults: {
+            type: null,
+            title: '',
+            data: [],
+            generated_at: ''
+        },
+        salesAnalyticsChart: null,
+        topProductsChart: null,
+        forecastChart: null,
         
-        function changeLanguage(lang) {
-            window.location.href = `/set-language/${lang}`;
+        init() {
+            this.$nextTick(() => {
+                this.initializeCharts();
+                this.loadAnalytics();
+            });
+        },
+        
+        async initializeCharts() {
+            if (typeof Chart === 'undefined') {
+                console.warn('Chart.js not available');
+                return;
+            }
+            
+            // Sales Analytics Chart
+            const salesCtx = document.getElementById('salesAnalyticsChart');
+            if (salesCtx) {
+                this.salesAnalyticsChart = new Chart(salesCtx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Ventes',
+                            data: [],
+                            borderColor: 'rgb(59, 130, 246)',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return window.formatCurrency ? window.formatCurrency(value) : value;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Top Products Chart
+            const topProductsCtx = document.getElementById('topProductsChart');
+            if (topProductsCtx) {
+                this.topProductsChart = new Chart(topProductsCtx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            data: [],
+                            backgroundColor: [
+                                '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+                                '#06B6D4', '#84CC16', '#F97316', '#EC4899', '#6366F1'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+        },
+        
+        async loadAnalytics() {
+            try {
+                const params = new URLSearchParams({
+                    start_date: this.dateRange.start,
+                    end_date: this.dateRange.end
+                });
+                
+                const response = await apiFetch(`/api/reports/dashboard-analytics?${params}`);
+                if (response.success && response.analytics) {
+                    this.updateAnalyticsCharts(response.analytics);
+                }
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                this.showNotification('Erreur lors du chargement des analytics', 'error');
+            }
+        },
+        
+        updateAnalyticsCharts(analytics) {
+            // Update sales trend chart
+            if (this.salesAnalyticsChart && analytics.sales_trend) {
+                const salesData = analytics.sales_trend;
+                this.salesAnalyticsChart.data.labels = salesData.map(item => this.formatDate(item.date));
+                this.salesAnalyticsChart.data.datasets[0].data = salesData.map(item => item.revenue);
+                this.salesAnalyticsChart.update();
+            }
+            
+            // Update top products chart
+            if (this.topProductsChart && analytics.product_performance) {
+                const topProducts = analytics.product_performance.slice(0, 10);
+                this.topProductsChart.data.labels = topProducts.map(item => item.name);
+                this.topProductsChart.data.datasets[0].data = topProducts.map(item => item.revenue);
+                this.topProductsChart.update();
+            }
+        },
+        
+        async generateReport(type) {
+            try {
+                const params = new URLSearchParams({
+                    start_date: this.reportFilters.start_date,
+                    end_date: this.reportFilters.end_date,
+                    group_by: this.reportFilters.group_by
+                });
+                
+                let endpoint = '';
+                switch (type) {
+                    case 'sales':
+                        endpoint = `/api/reports/sales-report?${params}`;
+                        break;
+                    case 'inventory':
+                        endpoint = `/api/reports/inventory-report?${params}`;
+                        break;
+                    case 'financial':
+                        endpoint = `/api/reports/financial-report?${params}`;
+                        break;
+                    case 'customers':
+                        endpoint = `/api/reports/customer-analysis?${params}`;
+                        break;
+                    case 'profit':
+                        endpoint = `/api/reports/profit-analysis?${params}`;
+                        break;
+                    default:
+                        throw new Error('Type de rapport invalide');
+                }
+                
+                window.open(endpoint, '_blank');
+            } catch (error) {
+                console.error('Error generating report:', error);
+                this.showNotification('Erreur lors de la génération du rapport', 'error');
+            }
+        },
+        
+        async generateCustomReport() {
+            try {
+                const params = new URLSearchParams(this.reportFilters);
+                window.open(`/api/reports/sales-report?${params}`, '_blank');
+            } catch (error) {
+                console.error('Error generating custom report:', error);
+                this.showNotification('Erreur lors de la génération du rapport personnalisé', 'error');
+            }
+        },
+        
+        async exportData(type) {
+            try {
+                const params = new URLSearchParams({
+                    start_date: this.reportFilters.start_date,
+                    end_date: this.reportFilters.end_date
+                });
+                
+                window.open(`/api/reports/export/${type}?${params}`, '_blank');
+                this.showNotification(`Export ${type} démarré`, 'success');
+            } catch (error) {
+                console.error('Error exporting data:', error);
+                this.showNotification('Erreur lors de l\'export', 'error');
+            }
+        },
+        
+        async refreshAIInsights() {
+            this.aiResults = { type: null, title: '', data: [], generated_at: '' };
+            this.showNotification('Insights IA actualisés', 'info');
+        },
+        
+        async loadStockPredictions() {
+            try {
+                const response = await apiFetch('/api/ai/stock-predictions');
+                if (response.success) {
+                    this.aiResults = {
+                        type: 'stock_predictions',
+                        title: 'Prédictions de Stock',
+                        data: response.predictions || [],
+                        generated_at: this.formatDate(response.generated_at)
+                    };
+                }
+            } catch (error) {
+                console.error('Error loading stock predictions:', error);
+                this.showNotification('Erreur lors du chargement des prédictions', 'error');
+            }
+        },
+        
+        async loadSalesForecast() {
+            try {
+                const response = await apiFetch('/api/ai/sales-forecast?days_ahead=14');
+                if (response.success) {
+                    this.aiResults = {
+                        type: 'sales_forecast',
+                        title: 'Prévisions de Ventes',
+                        data: response.forecast,
+                        generated_at: this.formatDate(response.generated_at)
+                    };
+                    
+                    // Update forecast chart
+                    this.$nextTick(() => {
+                        this.updateForecastChart(response.forecast);
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading sales forecast:', error);
+                this.showNotification('Erreur lors du chargement des prévisions', 'error');
+            }
+        },
+        
+        async loadRestockSuggestions() {
+            try {
+                const response = await apiFetch('/api/ai/restock-suggestions');
+                if (response.success) {
+                    this.aiResults = {
+                        type: 'restock_suggestions',
+                        title: 'Suggestions de Réapprovisionnement',
+                        data: response.suggestions || [],
+                        generated_at: this.formatDate(response.generated_at)
+                    };
+                }
+            } catch (error) {
+                console.error('Error loading restock suggestions:', error);
+                this.showNotification('Erreur lors du chargement des suggestions', 'error');
+            }
+        },
+        
+        updateForecastChart(forecast) {
+            if (!this.forecastChart && typeof Chart !== 'undefined') {
+                const ctx = document.getElementById('forecastChart');
+                if (ctx) {
+                    this.forecastChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: [],
+                            datasets: [{
+                                label: 'Prévisions',
+                                data: [],
+                                borderColor: 'rgb(168, 85, 247)',
+                                backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return window.formatCurrency ? window.formatCurrency(value) : value;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+            
+            if (this.forecastChart && forecast.forecast) {
+                this.forecastChart.data.labels = forecast.forecast.map(item => this.formatDate(item.date));
+                this.forecastChart.data.datasets[0].data = forecast.forecast.map(item => item.predicted_revenue);
+                this.forecastChart.update();
+            }
+        },
+        
+        formatCurrency(amount) {
+            return window.formatCurrency ? window.formatCurrency(amount) : `${amount} MRU`;
+        },
+        
+        formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('fr-FR');
+        },
+        
+        showNotification(message, type = 'info') {
+            if (window.showNotification) {
+                window.showNotification(message, type);
+            } else {
+                alert(message);
+            }
         }
-    </script>
-    
-    <style>
-        [x-cloak] { display: none !important; }
-    </style>
+    };
+}
+</script>
+<style>
+[x-cloak] { display: none !important; }
+</style>
 {% endblock %}
