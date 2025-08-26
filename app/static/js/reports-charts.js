@@ -7,51 +7,69 @@
             const s = document.createElement('script');
             s.src = '/static/js/chart.umd.min.js';
             s.onload = () => resolve();
-            s.onerror = () => {
-                // fallback to CDN
-                const c = document.createElement('script');
-                c.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js';
-                c.onload = () => resolve();
-                c.onerror = () => resolve();
-                document.head.appendChild(c);
+            s.onerror = () => { console.warn('Failed to load local Chart.js UMD'); resolve(); };
+            try { if (document.head) document.head.appendChild(s); else document.documentElement.appendChild(s); } catch (e) { try { document.documentElement.appendChild(s); } catch (e2) { resolve(); } }
+        });
+    }
+
+    // wait for an element to appear in the DOM (defensive for race conditions)
+    function waitForEl(id, maxAttempts = 40, delay = 50) {
+        return new Promise(resolve => {
+            let attempts = 0;
+            const tick = () => {
+                const el = document.getElementById(id);
+                if (el) return resolve(el);
+                attempts++;
+                if (attempts >= maxAttempts) return resolve(null);
+                setTimeout(tick, delay);
             };
-            document.head.appendChild(s);
+            tick();
         });
     }
 
     async function init(manager) {
         await ensureChartJs();
-        // create or refresh charts
+        // create or refresh charts (defensive: wait for canvases and chart lib)
         try {
+            if (!window.Chart) {
+                console.warn('Chart.js not available after injection');
+                return;
+            }
+
             // sales
-            const sEl = document.getElementById('salesChart');
+            const sEl = await waitForEl('salesChart');
             if (sEl) {
                 if (manager.salesChart && typeof manager.salesChart.destroy === 'function') manager.salesChart.destroy();
-                manager.salesChart = new Chart(sEl.getContext('2d'), { type:'line', data:{ labels:[], datasets:[{ label:`Ventes (${window.AppConfig?.currentCurrency||'MRU'})`, data:[], borderColor:'rgb(59,130,246)', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.4 }] }, options:{ responsive:true, maintainAspectRatio:false } });
+                const ctx = sEl.getContext && sEl.getContext('2d');
+                if (ctx) manager.salesChart = new Chart(ctx, { type:'line', data:{ labels:[], datasets:[{ label:`Ventes (${window.AppConfig?.currentCurrency||'MRU'})`, data:[], borderColor:'rgb(59,130,246)', backgroundColor:'rgba(59,130,246,0.1)', fill:true, tension:0.4 }] }, options:{ responsive:true, maintainAspectRatio:false } });
             }
 
-            const prodEl = document.getElementById('productPerformanceChart');
+            const prodEl = await waitForEl('productPerformanceChart');
             if (prodEl) {
                 if (manager.productChart && typeof manager.productChart.destroy === 'function') manager.productChart.destroy();
-                manager.productChart = new Chart(prodEl.getContext('2d'), { type:'bar', data:{ labels:[], datasets:[{ label:'Quantité vendue', data:[], backgroundColor:'rgba(99,102,241,0.8)'}] }, options:{ responsive:true, maintainAspectRatio:false } });
+                const ctx = prodEl.getContext && prodEl.getContext('2d');
+                if (ctx) manager.productChart = new Chart(ctx, { type:'bar', data:{ labels:[], datasets:[{ label:'Quantité vendue', data:[], backgroundColor:'rgba(99,102,241,0.8)'}] }, options:{ responsive:true, maintainAspectRatio:false } });
             }
 
-            const catEl = document.getElementById('categoryDistributionChart');
+            const catEl = await waitForEl('categoryDistributionChart');
             if (catEl) {
                 if (manager.categoryChart && typeof manager.categoryChart.destroy === 'function') manager.categoryChart.destroy();
-                manager.categoryChart = new Chart(catEl.getContext('2d'), { type:'doughnut', data:{ labels:[], datasets:[{ data:[], backgroundColor:['#60A5FA','#34D399','#FBBF24','#F87171','#A78BFA'] }] }, options:{ responsive:true, maintainAspectRatio:false } });
+                const ctx = catEl.getContext && catEl.getContext('2d');
+                if (ctx) manager.categoryChart = new Chart(ctx, { type:'doughnut', data:{ labels:[], datasets:[{ data:[], backgroundColor:['#60A5FA','#34D399','#FBBF24','#F87171','#A78BFA'] }] }, options:{ responsive:true, maintainAspectRatio:false } });
             }
 
-            const pfEl = document.getElementById('profitOverTimeChart');
+            const pfEl = await waitForEl('profitOverTimeChart');
             if (pfEl) {
                 if (manager.profitChart && typeof manager.profitChart.destroy === 'function') manager.profitChart.destroy();
-                manager.profitChart = new Chart(pfEl.getContext('2d'), { type:'line', data:{ labels:[], datasets:[{ label:'Profit', data:[], borderColor:'#10B981', backgroundColor:'rgba(16,185,129,0.08)', fill:true }] }, options:{ responsive:true, maintainAspectRatio:false } });
+                const ctx = pfEl.getContext && pfEl.getContext('2d');
+                if (ctx) manager.profitChart = new Chart(ctx, { type:'line', data:{ labels:[], datasets:[{ label:'Profit', data:[], borderColor:'#10B981', backgroundColor:'rgba(16,185,129,0.08)', fill:true }] }, options:{ responsive:true, maintainAspectRatio:false } });
             }
 
-            const clEl = document.getElementById('customerLTVChart');
+            const clEl = await waitForEl('customerLTVChart');
             if (clEl) {
                 if (manager.customerChart && typeof manager.customerChart.destroy === 'function') manager.customerChart.destroy();
-                manager.customerChart = new Chart(clEl.getContext('2d'), { type:'bar', data:{ labels:[], datasets:[{ label:'LTV', data:[], backgroundColor:'#F59E0B' }] }, options:{ responsive:true, maintainAspectRatio:false } });
+                const ctx = clEl.getContext && clEl.getContext('2d');
+                if (ctx) manager.customerChart = new Chart(ctx, { type:'bar', data:{ labels:[], datasets:[{ label:'LTV', data:[], backgroundColor:'#F59E0B' }] }, options:{ responsive:true, maintainAspectRatio:false } });
             }
 
         } catch (e) {

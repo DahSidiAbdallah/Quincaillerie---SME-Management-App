@@ -97,7 +97,7 @@
             <div class="bg-white rounded-lg shadow p-6">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-medium text-gray-900">Évolution des Revenus</h3>
-                    <select x-model="chartPeriod" @change="updateCharts()" class="border border-gray-300 rounded-md px-3 py-1 text-sm">
+                    <select x-model="chartPeriod" @change="scheduleUpdateCharts()" class="border border-gray-300 rounded-md px-3 py-1 text-sm">
                         <option value="week">7 derniers jours</option>
                         <option value="month">30 derniers jours</option>
                         <option value="year">12 derniers mois</option>
@@ -547,6 +547,21 @@
                     alert(result.join('\n'));
                   });
             },
+            safeChartUpdate(chart) {
+                if (!chart) return false;
+                try {
+                    if (!chart.canvas || !chart.canvas.getContext) {
+                        console.warn('safeChartUpdate: chart.canvas missing or not ready', chart);
+                        return false;
+                    }
+                    if (typeof chart.update !== 'function') return false;
+                    chart.update();
+                    return true;
+                } catch (e) {
+                    console.warn('safeChartUpdate: chart.update() threw', e);
+                    return false;
+                }
+            },
             chartsInitialized: false,
             chartError: null,
             activeTab: 'summary',
@@ -686,6 +701,7 @@
             chartPeriod: 'month',
             revenueChart: null,
             expenseChart: null,
+            _chartRecreateLock: false,
             // Loading flags
             isLoadingSummary: true,
             isLoadingTransactions: true,
@@ -724,15 +740,25 @@
                             !window.Chart.version ||
                             !window.Chart.version.startsWith('4.4.');
 
-                        const afterInit = () => {
-                            this.initCharts();
-                            this.updateCharts();
+                        const afterInit = async () => {
+                            await this.initCharts();
+                            // initial immediate load
+                            this.scheduleUpdateCharts(true);
                         };
                         if (needsPinnedChart) {
+                            // Load our local chart loader which will safely inject the proper UMD only once
                             const s = document.createElement('script');
-                            s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js';
+                            s.src = '/static/js/chart.umd.min.js';
                             s.onload = afterInit;
-                            document.head.appendChild(s);
+                            // Be defensive: append to head if present, otherwise fallback to documentElement
+                            try {
+                                if (document.head) document.head.appendChild(s);
+                                else if (document.getElementsByTagName && document.getElementsByTagName('head')[0]) document.getElementsByTagName('head')[0].appendChild(s);
+                                else document.documentElement.appendChild(s);
+                            } catch (e) {
+                                // last resort
+                                document.documentElement.appendChild(s);
+                            }
                         } else {
                             afterInit();
                         }
@@ -927,9 +953,64 @@
                 this.showToast('success', 'Transactions exportées en CSV');
             },
             // Charts
-            initCharts() {
-                const revCanvas = document.getElementById('revenueChart');
-                const expCanvas = document.getElementById('expenseChart');
+            // Normalize various backend response shapes into a simple structure
+            normalizeCharts(raw) {
+                const payload = raw?.charts || raw?.chart_data || raw || {};
+                // revenue labels and data
+                let rLabels = [];
+                let rData = [];
+                if (payload.revenue) {
+                    const rev = payload.revenue;
+                    if (Array.isArray(rev.labels) && Array.isArray(rev.data)) {
+                        rLabels = rev.labels.slice();
+                        rData = rev.data.map(v => Number(v || 0));
+                    } else if (Array.isArray(rev) && !Array.isArray(rev.labels)) {
+                        // legacy: revenue is array of numbers, labels may be top-level
+                        rData = rev.map(v => Number(v || 0));
+                    }
+                }
+                if ((!rLabels.length) && Array.isArray(payload.labels)) {
+                    rLabels = payload.labels.slice();
+                }
+                if ((!rData.length) && Array.isArray(payload.revenue) && !Array.isArray((payload.revenue||{}).labels)) {
+                    rData = payload.revenue.map(v => Number(v || 0));
+                }
+
+                // expense breakdown (doughnut)
+                let eLabels = [];
+                let eData = [];
+                if (payload.expense_breakdown) {
+                    eLabels = Array.isArray(payload.expense_breakdown.categories) ? payload.expense_breakdown.categories.slice() : [];
+                    eData = Array.isArray(payload.expense_breakdown.values) ? payload.expense_breakdown.values.map(v => Number(v || 0)) : [];
+                } else if (payload.expense) {
+                    const exp = payload.expense;
+                    if (Array.isArray(exp.categories) && Array.isArray(exp.data)) {
+                        eLabels = exp.categories.slice();
+                        eData = exp.data.map(v => Number(v || 0));
+                    } else if (Array.isArray(exp.labels) && Array.isArray(exp.data)) {
+                        eLabels = exp.labels.slice();
+                        eData = exp.data.map(v => Number(v || 0));
+                    }
+                }
+
+                return { rLabels, rData, eLabels, eData };
+            },
+            async initCharts() {
+                // Wait for canvases to exist (some environments may run init before DOM fully settles)
+                const waitForEl = (id, maxAttempts = 40, delay = 50) => new Promise(resolve => {
+                    let attempts = 0;
+                    const tick = () => {
+                        const el = document.getElementById(id);
+                        if (el) return resolve(el);
+                        attempts++;
+                        if (attempts >= maxAttempts) return resolve(null);
+                        setTimeout(tick, delay);
+                    };
+                    tick();
+                });
+
+                const revCanvas = await waitForEl('revenueChart');
+                const expCanvas = await waitForEl('expenseChart');
                 if (!revCanvas || !expCanvas || !window.Chart) {
                     this.chartError = 'Graph canvases not found';
                     return;
@@ -939,28 +1020,26 @@
                 if (this.revenueChart) this.revenueChart.destroy();
                 if (this.expenseChart) this.expenseChart.destroy();
 
-                const revenueCtx = revCanvas.getContext('2d');
-                const expenseCtx = expCanvas.getContext('2d');
+                const revenueCtx = (revCanvas && revCanvas.getContext && revCanvas.getContext('2d')) || null;
+                const expenseCtx = (expCanvas && expCanvas.getContext && expCanvas.getContext('2d')) || null;
+
+                if (!revenueCtx || !expenseCtx) {
+                    // Defensive: if for some reason the canvas context isn't available, set error and bail out
+                    this.chartError = 'Graph context not available';
+                    return;
+                }
 
                 // Create new charts
                 // Use Alpine.raw to keep chart instances out of reactivity proxies
-                this.revenueChart = Alpine.raw(new Chart(revenueCtx, {
+                this.revenueChart = Alpine.raw(new Chart(revCanvas, {
                     type: 'line',
                     data: { labels: [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
                     options: {
+                        animation: false,
                         responsive: true,
                         maintainAspectRatio: false,
                         scales: { y: { beginAtZero: true } },
-                        plugins: {
-                            legend: { display: true },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return `Revenus: ${context.parsed.y.toLocaleString('fr-FR', {minimumFractionDigits:2})} ${(window.AppConfig?.currentCurrency || 'MRU')}`;
-                                    }
-                                }
-                            }
-                        },
+                        plugins: { legend: { display: true }, tooltip: { enabled: false } },
                         onClick: (e, elements) => {
                             if (elements && elements.length > 0) {
                                 const idx = elements[0].index;
@@ -970,20 +1049,17 @@
                         }
                     }
                 }));
-                this.expenseChart = Alpine.raw(new Chart(expenseCtx, {
+                this.expenseChart = Alpine.raw(new Chart(expCanvas, {
                     type: 'doughnut',
                     data: { labels: [], datasets: [{ data: [], backgroundColor: [] }] },
                     options: {
+                        animation: false,
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
                                 position: 'bottom',
-                                labels: {
-                                    boxWidth: 24,
-                                    font: { size: 16, weight: 'bold' },
-                                    padding: 20,
-                                },
+                                labels: { boxWidth: 24, font: { size: 16, weight: 'bold' }, padding: 20 },
                                 onClick: (e, legendItem, legend) => {
                                     const labels = legend.chart?.data?.labels || [];
                                     const category = labels[legendItem.index] ?? '';
@@ -1000,15 +1076,7 @@
                                     }
                                 }
                             },
-                            tooltip: {
-                                callbacks: {
-                                    label: (context) => {
-                                        const label = context.label ?? '';
-                                        const value = context.parsed ?? 0;
-                                        return `${label}: ${value.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${window.AppConfig?.currentCurrency || 'MRU'}`;
-                                    },
-                                },
-                            },
+                            tooltip: { enabled: false }
                         },
                     }
                 }));
@@ -1016,69 +1084,161 @@
                 // Do NOT call updateCharts() here to avoid infinite recursion/stack overflow
             },
 
-            updateCharts() {
+            async updateCharts() {
                 this.isLoadingCharts = true;
                 this.chartError = null;
-                console.log('[updateCharts] called, chartsInitialized:', this.chartsInitialized, 'revenueChart:', !!this.revenueChart, 'expenseChart:', !!this.expenseChart);
                 try {
                     const u = new URL(window.location);
                     u.searchParams.set('period', this.chartPeriod);
                     window.history.replaceState(null, '', u.toString());
                 } catch (e) {}
-                const periodParam = this.chartPeriod;
-                apiFetch(`/api/finance/charts?period=${periodParam}`)
-                    .then(data => {
+
+                const normalizePayload = (data) => {
+                    // Support multiple shapes: { charts: {...} } or legacy { chart_data: ... } or raw
+                    return data?.charts || data?.chart_data || data || {};
+                };
+
+                const getRevenue = (payload) => {
+                    const rev = payload.revenue || {};
+                    let labels = [];
+                    let values = [];
+                    if (Array.isArray(rev.labels)) labels = rev.labels;
+                    else if (Array.isArray(payload.labels)) labels = payload.labels;
+
+                    if (Array.isArray(rev.data)) values = rev.data.map(v => Number(v || 0));
+                    else if (Array.isArray(payload.revenue)) values = payload.revenue.map(v => Number(v || 0));
+                    else if (Array.isArray(payload.revenue?.data)) values = payload.revenue.data.map(v => Number(v || 0));
+
+                    return { labels: labels.length ? labels : ['Aucune donnée'], values: values.length ? values : [0] };
+                };
+
+                const getExpenses = (payload) => {
+                    const exp = payload.expense_breakdown || payload.expense || {};
+                    let labels = [];
+                    let values = [];
+                    if (Array.isArray(exp.categories)) labels = exp.categories;
+                    else if (Array.isArray(exp.labels)) labels = exp.labels;
+
+                    if (Array.isArray(exp.values)) values = exp.values.map(v => Number(v || 0));
+                    else if (Array.isArray(exp.data)) values = exp.data.map(v => Number(v || 0));
+
+                    const bg = labels.length
+                        ? labels.map((_, i) => `hsl(${(i * 53) % 360} 85% 55%)`)
+                        : ['#9CA3AF'];
+
+                    return { labels: labels.length ? labels : ['Aucune dépense'], values: values.length ? values : [0], background: bg };
+                };
+
+                // NOTE: chart instances will be recreated on each update to avoid Chart.js internal lifecycle bugs
+                // If update fails repeatedly, destroy and recreate charts with the provided data to avoid hitting Chart.js internal inconsistent state
+                const recreateChartsWithData = async (revLabels, revValues, expLabels, expValues, expBg) => {
+                    if (this._chartRecreateLock) {
+                        console.log('recreateChartsWithData: deferred because a recreate is already in progress');
+                        await new Promise(r => setTimeout(r, 100));
+                        if (this._chartRecreateLock) return false;
+                    }
+                    this._chartRecreateLock = true;
+                    try {
+                        // Stop/clear/destroy existing chart instances if present
+                        try {
+                            if (this.revenueChart) {
+                                if (typeof this.revenueChart.stop === 'function') try { this.revenueChart.stop(); } catch(e){}
+                                if (typeof this.revenueChart.clear === 'function') try { this.revenueChart.clear(); } catch(e){}
+                                if (typeof this.revenueChart.destroy === 'function') try { this.revenueChart.destroy(); } catch(e){}
+                            }
+                        } catch (e) { console.warn('Failed to cleanup revenueChart', e); }
+                        try {
+                            if (this.expenseChart) {
+                                if (typeof this.expenseChart.stop === 'function') try { this.expenseChart.stop(); } catch(e){}
+                                if (typeof this.expenseChart.clear === 'function') try { this.expenseChart.clear(); } catch(e){}
+                                if (typeof this.expenseChart.destroy === 'function') try { this.expenseChart.destroy(); } catch(e){}
+                            }
+                        } catch (e) { console.warn('Failed to cleanup expenseChart', e); }
+
+                        // Replace canvas DOM nodes with fresh elements to ensure no stale references remain
+                        const revOld = document.getElementById('revenueChart');
+                        const expOld = document.getElementById('expenseChart');
+                        if (!revOld || !expOld) {
+                            this.chartError = 'Cannot recreate charts: canvases missing';
+                            return false;
+                        }
+
+                        const makeFreshCanvas = (oldEl) => {
+                            const n = document.createElement('canvas');
+                            // copy common attributes (id, classes, inline styles)
+                            if (oldEl.id) n.id = oldEl.id;
+                            if (oldEl.className) n.className = oldEl.className;
+                            if (oldEl.style && oldEl.style.cssText) n.style.cssText = oldEl.style.cssText;
+                            // preserve width/height attributes if present
+                            if (oldEl.getAttribute && oldEl.getAttribute('width')) n.setAttribute('width', oldEl.getAttribute('width'));
+                            if (oldEl.getAttribute && oldEl.getAttribute('height')) n.setAttribute('height', oldEl.getAttribute('height'));
+                            return n;
+                        };
+
+                        const revNew = makeFreshCanvas(revOld);
+                        const expNew = makeFreshCanvas(expOld);
+                        try { revOld.parentNode.replaceChild(revNew, revOld); } catch(e){ console.warn('Failed to replace revenue canvas', e); }
+                        try { expOld.parentNode.replaceChild(expNew, expOld); } catch(e){ console.warn('Failed to replace expense canvas', e); }
+
+                        // Allow microtasks and any scheduled callbacks to settle
+                        await new Promise(r => setTimeout(r, 150));
+
+                        // Create charts on the fresh canvases
+                        try {
+                            this.revenueChart = Alpine.raw(new Chart(revNew, {
+                                type: 'line',
+                                data: { labels: revLabels || [], datasets: [{ label: `Revenus (${window.AppConfig?.currentCurrency || 'MRU'})`, data: revValues || [], borderColor: 'rgb(59, 130, 246)', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, pointRadius: 2, fill: true }] },
+                                options: { animation: false, responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+                            }));
+
+                            this.expenseChart = Alpine.raw(new Chart(expNew, {
+                                type: 'doughnut',
+                                data: { labels: expLabels || [], datasets: [{ data: expValues || [], backgroundColor: expBg || [] }] },
+                                options: { animation: false, responsive: true, maintainAspectRatio: false }
+                            }));
+
+                            this.chartsInitialized = true;
+                            return true;
+                        } catch (e) {
+                            console.error('Failed to create charts on fresh canvases', e);
+                            return false;
+                        }
+                    } catch (e) {
+                        console.error('Failed to recreate charts', e);
+                        return false;
+                    } finally {
+                        this._chartRecreateLock = false;
+                    }
+                };
+
+                apiFetch(`/api/finance/charts?period=${this.chartPeriod}`)
+                    .then(async (data) => {
                         if (!data || data.success === false) {
                             this.chartError = 'Données de graphique indisponibles';
                             this.showToast && this.showToast('error', 'API: Données de graphique indisponibles');
-                            console.warn('[updateCharts] API returned no data or success=false', data);
                             this.isLoadingCharts = false;
                             return;
                         }
-                        // Ensure charts exist before updating
+
                         if (!this.chartsInitialized || !this.revenueChart || !this.expenseChart) {
                             this.chartError = 'Erreur: Les graphiques ne sont pas initialisés.';
                             this.isLoadingCharts = false;
                             return;
                         }
-                        // Defensive: check chart data structure
-                        const chart = data?.chart_data || data || {};
-                        const rev = chart.revenue || {};
-                        const rLabels = Array.isArray(rev.labels) ? rev.labels : [];
-                        const rData = Array.isArray(rev.data) ? rev.data.map(v=>Number(v||0)) : [];
-                        this.revenueChart.data.labels = rLabels.length ? rLabels : ['Aucune donnée'];
-                        if (this.revenueChart.data.datasets && this.revenueChart.data.datasets[0]) {
-                            this.revenueChart.data.datasets[0].data = rData.length ? rData : [0];
-                        } else {
-                            this.revenueChart.data.datasets = [{ label: 'Revenus', data: [0] }];
+
+                        const payload = normalizePayload(data);
+                        const rev = getRevenue(payload);
+                        const exp = getExpenses(payload);
+
+                        // For robustness avoid calling Chart.update() (has caused internal lifecycle crashes). Always recreate charts on fresh canvases.
+                        const recreated = await recreateChartsWithData(rev.labels, rev.values, exp.labels, exp.values, exp.background);
+                        if (!recreated) {
+                            this.showToast && this.showToast('error', 'Failed to recreate charts with latest data');
+                            this.isLoadingCharts = false;
+                            return;
                         }
-                        if (typeof this.revenueChart.update === 'function') {
-                            this.revenueChart.update();
-                        } else {
-                            this.showToast && this.showToast('error', 'revenueChart.update() missing');
-                            console.warn('[updateCharts] revenueChart.update() missing');
-                        }
-                        // Defensive: Expense
-                        const exp = chart.expense || {};
-                        const eLabels = Array.isArray(exp.categories) ? exp.categories : [];
-                        const eData = Array.isArray(exp.data) ? exp.data.map(v=>Number(v||0)) : [];
-                        this.expenseChart.data.labels = eLabels.length ? eLabels : ['Aucune dépense'];
-                        if (this.expenseChart.data.datasets && this.expenseChart.data.datasets[0]) {
-                            this.expenseChart.data.datasets[0].data = eLabels.length ? eData : [0];
-                            this.expenseChart.data.datasets[0].backgroundColor = eLabels.length
-                                ? eLabels.map((_,i)=>`hsl(${(i*53)%360} 85% 55%)`)
-                                : ['#9CA3AF'];
-                        } else {
-                            this.expenseChart.data.datasets = [{ data: [0], backgroundColor: ['#9CA3AF'] }];
-                        }
-                        if (typeof this.expenseChart.update === 'function') {
-                            this.expenseChart.update();
-                        } else {
-                            this.showToast && this.showToast('error', 'expenseChart.update() missing');
-                            console.warn('[updateCharts] expenseChart.update() missing');
-                        }
-                        this.showToast && this.showToast('success', 'Charts updated successfully');
-                        console.log('[updateCharts] charts updated successfully');
+
+                        this.showToast && this.showToast('success', 'Charts updated successfully (recreated)');
                         this.isLoadingCharts = false;
                     })
                     .catch(err => {

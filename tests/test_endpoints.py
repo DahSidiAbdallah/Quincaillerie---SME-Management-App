@@ -87,6 +87,8 @@ def test_finance_charts_endpoint(monkeypatch, client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data['success'] is True
-    assert 'revenue' in data['chart_data']
-    assert 'expense' in data['chart_data']
+    assert 'charts' in data
+    assert 'revenue' in data['charts']
+    assert 'expenses' in data['charts']
+    assert 'profit' in data['charts']
 

@@ -16,21 +16,16 @@
         function loadScript(src, cb){
             var s = document.createElement('script');
             s.src = src; s.async = true; s.onload = cb; s.onerror = cb;
-            document.head.appendChild(s);
+            try { if (document.head) document.head.appendChild(s); else document.documentElement.appendChild(s); } catch (e) { document.documentElement.appendChild(s); }
         }
 
-        // Try local first (bundled file), then CDN
-        var chartLocal = '/static/js/chart.umd.min.js';
-        // check existence by attempting to fetch (lightweight)
-        fetch(chartLocal, {method: 'HEAD'}).then(function(resp){
-            if (resp.ok) {
+        // Load the pinned local Chart.js UMD bundle to avoid remote CDN load/race conditions.
+        (function(){
+            var chartLocal = '/static/js/chart.umd.min.js';
+            if (typeof Chart === 'undefined') {
                 loadScript(chartLocal, function(){ console.log('Loaded local Chart.js'); });
-            } else {
-                loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js', function(){ console.log('Loaded Chart.js from CDN'); });
             }
-        }).catch(function(){
-            loadScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js', function(){ console.log('Loaded Chart.js from CDN (fallback)'); });
-        });
+        })();
 
         // Accessibility: ensure report type buttons have click handlers if Alpine not available
         if (!window.Alpine) {

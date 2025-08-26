@@ -25,8 +25,153 @@
     <!-- Icons (Font Awesome) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
     
-    <!-- Chart.js for analytics -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js for analytics (pinned local UMD to avoid remote changes and enable runtime guards) -->
+    <script src="{{ url_for('static', filename='js/chart.umd.min.js') }}"></script>
+    <script>
+        // Lightweight Chart error forwarder: capture unhandled exceptions during Chart operations
+        window.addEventListener('error', function(ev) {
+            try {
+                if (ev && ev.filename && ev.filename.indexOf('/static/js/chart.umd.min.js') !== -1) {
+                    console.warn('[ChartMonitor] Captured error originating in Chart.js', ev.message, ev.error && ev.error.stack);
+                }
+            } catch (e) {}
+        });
+        window.addEventListener('unhandledrejection', function(ev) {
+            try {
+                var reason = ev && ev.reason && ev.reason.stack ? ev.reason.stack : (ev && ev.reason ? ev.reason : null);
+                if (reason && String(reason).indexOf('chart.umd.min.js') !== -1) {
+                    console.warn('[ChartMonitor] Unhandled rejection related to Chart.js', reason);
+                }
+            } catch (e) {}
+        });
+        // Install detailed Chart lifecycle instrumentation to capture creation/destroy/draw stacks
+        (function installChartLifecycleInstrumentation() {
+            function install() {
+                try {
+                    if (typeof Chart === 'undefined') {
+                        setTimeout(install, 50);
+                        return;
+                    }
+                    // Guard update and notifyPlugins to avoid internal calls when canvas is missing
+                    try {
+                        if (Chart.prototype && typeof Chart.prototype.update === 'function') {
+                            var origUpdate = Chart.prototype.update;
+                            Chart.prototype.update = function() {
+                                try {
+                                    if (!this || !this.canvas || typeof this.canvas.getContext !== 'function') {
+                                        console.warn('[ChartGuard] Skipping update: canvas missing', { id: this && this.id, canvas: this && this.canvas });
+                                        return;
+                                    }
+                                } catch (e) { console.warn('[ChartGuard] error checking canvas before update', e); return; }
+                                return origUpdate.apply(this, arguments);
+                            };
+                        }
+                    } catch (e) {}
+                    try {
+                        if (Chart.prototype && typeof Chart.prototype.notifyPlugins === 'function') {
+                            var origNotify = Chart.prototype.notifyPlugins;
+                            Chart.prototype.notifyPlugins = function(hook, args) {
+                                try {
+                                    if (!this || !this.canvas || typeof this.canvas.getContext !== 'function') {
+                                        console.warn('[ChartGuard] Skipping notifyPlugins:', hook, { id: this && this.id, canvas: this && this.canvas });
+                                        return;
+                                    }
+                                } catch (e) { console.warn('[ChartGuard] error checking canvas before notifyPlugins', e); return; }
+                                return origNotify.apply(this, arguments);
+                            };
+                        }
+                    } catch (e) {}
+
+                    // global map to track chart metadata
+                    window.__chartLifecycle = window.__chartLifecycle || { byId: {}, byCanvas: new WeakMap() };
+
+                    // Wrap constructor: log creation stack and canvas
+                    var OrigChart = Chart;
+                    function WrappedChart(ctxOrNode, config) {
+                        // capture stack
+                        var stack = (new Error()).stack;
+                        try {
+                            var canvasEl = null;
+                            try {
+                                // If first arg is a canvas or context, normalize
+                                if (ctxOrNode && ctxOrNode.canvas) canvasEl = ctxOrNode.canvas;
+                                else if (ctxOrNode && ctxOrNode.getContext) canvasEl = ctxOrNode;
+                            } catch (e) {}
+                            var instance = new OrigChart(ctxOrNode, config);
+                            try {
+                                var id = instance && instance.id;
+                                window.__chartLifecycle.byId[id] = { createdAt: Date.now(), stack: stack, canvas: canvasEl };
+                                if (canvasEl) window.__chartLifecycle.byCanvas.set(canvasEl, { id: id, createdAt: Date.now(), stack: stack });
+                                console.log('[ChartLifecycle] created', { id: id, canvas: canvasEl, stack: stack && stack.split('\n')[1] });
+                            } catch (e) {
+                                console.warn('[ChartLifecycle] created (failed to record metadata)', e);
+                            }
+                            return instance;
+                        } catch (err) {
+                            console.error('[ChartLifecycle] Error creating Chart instance', err, { stack: stack });
+                            throw err;
+                        }
+                    }
+                    // copy static properties
+                    Object.keys(OrigChart).forEach(function(k){ try { WrappedChart[k] = OrigChart[k]; } catch(e){} });
+                    WrappedChart.prototype = OrigChart.prototype;
+                    Chart = WrappedChart; // reassign global Chart
+
+                    // Wrap destroy to log
+                    if (Chart.prototype && typeof Chart.prototype.destroy === 'function') {
+                        var origDestroy = Chart.prototype.destroy;
+                        Chart.prototype.destroy = function() {
+                            try {
+                                var id = this && this.id;
+                                var canvas = this && this.canvas;
+                                console.log('[ChartLifecycle] destroy called', { id: id, canvas: canvas });
+                                if (canvas && window.__chartLifecycle && window.__chartLifecycle.byCanvas) {
+                                    try { window.__chartLifecycle.byCanvas.set(canvas, { destroyedAt: Date.now(), id: id }); } catch(e){}
+                                }
+                            } catch (e) {}
+                            return origDestroy.apply(this, arguments);
+                        };
+                    }
+
+                    // Wrap draw to guard and log more context when skipping
+                    if (Chart.prototype && typeof Chart.prototype.draw === 'function') {
+                        var origDraw = Chart.prototype.draw;
+                        Chart.prototype.draw = function() {
+                            try {
+                                var canvas = this && this.canvas;
+                                var ok = canvas && typeof canvas.getContext === 'function';
+                                if (!ok) {
+                                    var id = this && this.id;
+                                    var meta = (canvas && window.__chartLifecycle && window.__chartLifecycle.byCanvas && window.__chartLifecycle.byCanvas.get(canvas)) || null;
+                                    console.warn('[ChartDrawGuard] Skipping draw: canvas or getContext missing', { id: id, canvas: canvas, meta: meta });
+                                    // also try to surface a creation stack for this id if available
+                                    try {
+                                        if (id && window.__chartLifecycle && window.__chartLifecycle.byId && window.__chartLifecycle.byId[id]) {
+                                            console.warn('[ChartDrawGuard] creation stack:', window.__chartLifecycle.byId[id].stack);
+                                        }
+                                    } catch (e) {}
+                                    return;
+                                }
+                            } catch (e) {
+                                console.warn('[ChartDrawGuard] error while checking canvas before draw', e);
+                                return;
+                            }
+                            try {
+                                return origDraw.apply(this, arguments);
+                            } catch (err) {
+                                console.error('[ChartDrawGuard] Error during Chart.draw()', err, { id: this && this.id, canvas: this && this.canvas });
+                                throw err;
+                            }
+                        };
+                    }
+
+                } catch (e) {
+                    console.error('[ChartLifecycle] failed to install instrumentation', e);
+                }
+            }
+            install();
+        })();
+    </script>
     
     <!-- Alpine.js for reactive components -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>

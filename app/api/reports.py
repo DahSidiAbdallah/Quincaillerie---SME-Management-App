@@ -14,6 +14,8 @@ import csv
 from datetime import datetime, date, timedelta
 import tempfile
 import os
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 
 logger = logging.getLogger(__name__)
 
@@ -251,6 +253,78 @@ def generate_inventory_report():
     except Exception as e:
         logger.error(f"Error generating inventory report: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération du rapport inventaire'}), 500
+
+
+@reports_bp.route('/export/pdf/<report_type>', methods=['GET'])
+def export_report_pdf(report_type):
+    """Generate a simple PDF export for the given report_type (sales, products, expenses, customers).
+    Uses ReportLab to create a minimal PDF in-memory.
+    """
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        # Basic metadata and date range
+        start_date = request.args.get('start_date', '')
+        end_date = request.args.get('end_date', '')
+
+        # Gather a small summary depending on report_type to include in PDF
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+        lines = []
+        lines.append(f'Report type: {report_type}')
+        if start_date or end_date:
+            lines.append(f'Date range: {start_date} to {end_date}')
+        lines.append(f'Generated at: {datetime.now().isoformat()}')
+
+        if report_type == 'sales':
+            cursor.execute('SELECT COUNT(*), COALESCE(SUM(total_amount),0) FROM sales WHERE DATE(sale_date) BETWEEN ? AND ?', (start_date or '2000-01-01', end_date or date.today().isoformat()))
+            cnt, tot = cursor.fetchone()
+            lines.append(f'Total sales: {cnt}')
+            lines.append(f'Total revenue: {tot}')
+        elif report_type == 'products' or report_type == 'inventory':
+            cursor.execute('SELECT COUNT(*), COALESCE(SUM(current_stock),0) FROM products')
+            cnt, qty = cursor.fetchone()
+            lines.append(f'Product count: {cnt}')
+            lines.append(f'Total stock quantity: {qty}')
+        elif report_type == 'expenses' or report_type == 'financial':
+            cursor.execute('SELECT COUNT(*), COALESCE(SUM(amount),0) FROM expenses WHERE DATE(expense_date) BETWEEN ? AND ?', (start_date or '2000-01-01', end_date or date.today().isoformat()))
+            cnt, tot = cursor.fetchone()
+            lines.append(f'Expense entries: {cnt}')
+            lines.append(f'Total expenses: {tot}')
+        elif report_type == 'customers':
+            cursor.execute('SELECT COUNT(*) FROM customers')
+            cnt = cursor.fetchone()[0]
+            lines.append(f'Customer count: {cnt}')
+
+        conn.close()
+
+        # Create PDF in-memory
+        pdf_buffer = io.BytesIO()
+        p = canvas.Canvas(pdf_buffer, pagesize=letter)
+        width, height = letter
+        y = height - 50
+        p.setFont('Helvetica-Bold', 14)
+        p.drawString(50, y, f'Quincaillerie - {report_type.capitalize()} Report')
+        y -= 30
+        p.setFont('Helvetica', 10)
+        for l in lines:
+            p.drawString(50, y, str(l))
+            y -= 18
+            if y < 50:
+                p.showPage()
+                y = height - 50
+        p.showPage()
+        p.save()
+        pdf_buffer.seek(0)
+
+        filename = f'{report_type}_report_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf'
+        return send_file(pdf_buffer, mimetype='application/pdf', download_name=filename, as_attachment=True)
+
+    except Exception as e:
+        logger.error(f"Error exporting PDF report: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la génération du PDF'}), 500
 
 @reports_bp.route('/financial-report', methods=['GET'])
 def generate_financial_report():

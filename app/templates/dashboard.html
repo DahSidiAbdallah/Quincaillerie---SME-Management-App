@@ -358,7 +358,18 @@
         const initialLabels = hasInitialDaily ? initial.daily.labels : defaultDailyLabels;
         const initialData = hasInitialDaily ? initial.daily.data : [0, 0, 0, 0, 0, 0, 0];
 
-        const ctx = document.getElementById('salesChart').getContext('2d');
+        const salesCanvas = document.getElementById('salesChart');
+        if (!salesCanvas) {
+            console.warn('salesChart canvas not found. Skipping chart initialization.');
+            salesChartReady = false;
+            return;
+        }
+        const ctx = (salesCanvas.getContext && salesCanvas.getContext('2d')) || null;
+        if (!ctx) {
+            console.warn('salesChart.getContext returned null. Skipping chart initialization.');
+            salesChartReady = false;
+            return;
+        }
         salesChart = new Chart(ctx, {
             type: 'line',
             data: {

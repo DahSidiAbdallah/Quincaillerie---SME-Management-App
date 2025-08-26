@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from db.database import DatabaseManager
 import logging
 import os
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -843,6 +843,163 @@ def get_financial_summary():
     except Exception as e:
         logger.error(f"Error fetching financial summary: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la génération du résumé financier'}), 500
+
+
+@finance_bp.route('/charts', methods=['GET'])
+def get_finance_charts():
+    """Return aggregated series for revenue, profit and expenses.
+    Accepts either start_date/end_date or period (today, week, month, quarter, year).
+    """
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        # Determine date range
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        period = request.args.get('period')
+
+        today_dt = date.today()
+        if not start_date or not end_date:
+            # derive from period if provided
+            if period == 'today' or not period:
+                start = today_dt
+                end = today_dt
+            elif period == 'week':
+                start = today_dt - timedelta(days=7)
+                end = today_dt
+            elif period == 'month':
+                start = today_dt.replace(day=1)
+                end = today_dt
+            elif period == 'quarter':
+                start = (today_dt.replace(day=1) - timedelta(days=90))
+                end = today_dt
+            elif period == 'year':
+                start = date(today_dt.year, 1, 1)
+                end = today_dt
+            else:
+                # default to last 30 days
+                start = today_dt - timedelta(days=30)
+                end = today_dt
+            start_date = start.isoformat()
+            end_date = end.isoformat()
+
+        # Decide grouping: by day if range <= 90 days else by month
+        try:
+            sd = datetime.fromisoformat(start_date).date()
+            ed = datetime.fromisoformat(end_date).date()
+        except Exception:
+            sd = datetime.strptime(start_date, '%Y-%m-%d').date() if start_date else today_dt - timedelta(days=30)
+            ed = datetime.strptime(end_date, '%Y-%m-%d').date() if end_date else today_dt
+
+        days_range = (ed - sd).days if ed >= sd else 0
+        group_monthly = days_range > 90
+
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        # Revenue series
+        if group_monthly:
+            cursor.execute('''
+                SELECT strftime('%Y-%m', sale_date) as period, SUM(total_amount) as revenue
+                FROM sales
+                WHERE DATE(sale_date) BETWEEN ? AND ?
+                GROUP BY strftime('%Y-%m', sale_date)
+                ORDER BY period
+            ''', (start_date, end_date))
+        else:
+            cursor.execute('''
+                SELECT DATE(sale_date) as period, SUM(total_amount) as revenue
+                FROM sales
+                WHERE DATE(sale_date) BETWEEN ? AND ?
+                GROUP BY DATE(sale_date)
+                ORDER BY period
+            ''', (start_date, end_date))
+        revenue_rows = {r[0]: r[1] or 0 for r in cursor.fetchall()}
+
+        # Profit series (from sale_items joined to sales)
+        if group_monthly:
+            cursor.execute('''
+                SELECT strftime('%Y-%m', s.sale_date) as period, SUM(si.profit_margin) as profit
+                FROM sale_items si
+                JOIN sales s ON si.sale_id = s.id
+                WHERE DATE(s.sale_date) BETWEEN ? AND ?
+                GROUP BY strftime('%Y-%m', s.sale_date)
+                ORDER BY period
+            ''', (start_date, end_date))
+        else:
+            cursor.execute('''
+                SELECT DATE(s.sale_date) as period, SUM(si.profit_margin) as profit
+                FROM sale_items si
+                JOIN sales s ON si.sale_id = s.id
+                WHERE DATE(s.sale_date) BETWEEN ? AND ?
+                GROUP BY DATE(s.sale_date)
+                ORDER BY period
+            ''', (start_date, end_date))
+        profit_rows = {r[0]: r[1] or 0 for r in cursor.fetchall()}
+
+        # Expenses series
+        if group_monthly:
+            cursor.execute('''
+                SELECT strftime('%Y-%m', expense_date) as period, SUM(amount) as expenses
+                FROM expenses
+                WHERE DATE(expense_date) BETWEEN ? AND ?
+                GROUP BY strftime('%Y-%m', expense_date)
+                ORDER BY period
+            ''', (start_date, end_date))
+        else:
+            cursor.execute('''
+                SELECT DATE(expense_date) as period, SUM(amount) as expenses
+                FROM expenses
+                WHERE DATE(expense_date) BETWEEN ? AND ?
+                GROUP BY DATE(expense_date)
+                ORDER BY period
+            ''', (start_date, end_date))
+        expense_rows = {r[0]: r[1] or 0 for r in cursor.fetchall()}
+
+        # Expense breakdown by category for doughnut chart
+        cursor.execute('''
+            SELECT COALESCE(category, 'Sans catégorie') as category, SUM(amount) as total
+            FROM expenses
+            WHERE DATE(expense_date) BETWEEN ? AND ?
+            GROUP BY category
+            ORDER BY total DESC
+            LIMIT 20
+        ''', (start_date, end_date))
+        expense_breakdown_rows = cursor.fetchall()
+        expense_categories = [r[0] for r in expense_breakdown_rows]
+        expense_categories_values = [float(r[1] or 0) for r in expense_breakdown_rows]
+
+        conn.close()
+
+        # Build unified labels (sorted)
+        labels = sorted(set(list(revenue_rows.keys()) + list(profit_rows.keys()) + list(expense_rows.keys())))
+
+        revenue_series = [float(revenue_rows.get(l, 0) or 0) for l in labels]
+        profit_series = [float(profit_rows.get(l, 0) or 0) for l in labels]
+        expenses_series = [float(expense_rows.get(l, 0) or 0) for l in labels]
+
+        return jsonify({
+            'success': True,
+            'charts': {
+                'labels': labels,
+                'revenue': revenue_series,
+                'profit': profit_series,
+                'expenses': expenses_series,
+                'expense_breakdown': {
+                    'categories': expense_categories,
+                    'values': expense_categories_values
+                },
+                'generated_at': datetime.now().isoformat(),
+                'start_date': start_date,
+                'end_date': end_date
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching finance charts: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération des données de graphiques'}), 500
 
 @finance_bp.route('/summary', methods=['GET'])
 def get_summary():

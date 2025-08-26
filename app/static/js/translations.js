@@ -355,22 +355,38 @@ window.translations = {
 
 // Add a loading overlay for language switching UX
 if (!document.getElementById('lang-loading-overlay')) {
-    const overlay = document.createElement('div');
-    overlay.id = 'lang-loading-overlay';
-    overlay.style.position = 'fixed';
-    overlay.style.top = 0;
-    overlay.style.left = 0;
-    overlay.style.width = '100vw';
-    overlay.style.height = '100vh';
-    overlay.style.background = 'rgba(255,255,255,0.7)';
-    overlay.style.display = 'none';
-    overlay.style.zIndex = 9999;
-    overlay.innerHTML = '<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:2rem;color:#333;"><span class="lang-spinner" style="display:inline-block;width:2rem;height:2rem;border:3px solid #ccc;border-top:3px solid #333;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:1rem;"></span><div id="lang-loading-text">Loading...</div></div>';
-    document.body.appendChild(overlay);
-    // Add spinner animation
-    const style = document.createElement('style');
-    style.textContent = '@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}';
-    document.head.appendChild(style);
+    (function createLangOverlay() {
+        const attach = () => {
+            try {
+                if (document.getElementById('lang-loading-overlay')) return;
+                const overlay = document.createElement('div');
+                overlay.id = 'lang-loading-overlay';
+                overlay.style.position = 'fixed';
+                overlay.style.top = 0;
+                overlay.style.left = 0;
+                overlay.style.width = '100vw';
+                overlay.style.height = '100vh';
+                overlay.style.background = 'rgba(255,255,255,0.7)';
+                overlay.style.display = 'none';
+                overlay.style.zIndex = 9999;
+                overlay.innerHTML = `
+                    <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:2rem;color:#333;">
+                        <span class="lang-spinner" style="display:inline-block;width:2rem;height:2rem;border:3px solid #ccc;border-top:3px solid #333;border-radius:50%;animation:spin 1s linear infinite;margin-bottom:1rem;"></span>
+                        <div id="lang-loading-text">Loading...</div>
+                    </div>
+                `;
+                if (document.body) document.body.appendChild(overlay);
+                // Add spinner animation
+                const style = document.createElement('style');
+                style.textContent = `@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`;
+                if (document.head) document.head.appendChild(style);
+            } catch (err) {
+                // If DOM isn't ready, schedule for DOMContentLoaded
+                try { window.addEventListener && window.addEventListener('DOMContentLoaded', attach); } catch (e) { /* ignore */ }
+            }
+        };
+        attach();
+    })();
 }
 
 
