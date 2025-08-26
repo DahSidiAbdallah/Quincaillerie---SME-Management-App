@@ -1,701 +1,910 @@
-{% extends "base.html" %}
+{% extends 'base.html' %}
 
 {% block title %}Paramètres - SME Management{% endblock %}
 
 {% block extra_head %}
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-<style>
-    .settings-card {
-        transition: all 0.3s ease;
-    }
-    
-    .settings-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.15);
-    }
-    
-    .profile-photo {
-        width: 80px;
-        height: 80px;
-        border-radius: 50%;
-        object-fit: cover;
-        border: 3px solid #e5e7eb;
-    }
-    
-    .activity-item {
-        border-left: 3px solid #3b82f6;
-        padding-left: 1rem;
-    }
-</style>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 {% endblock %}
 
 {% block content %}
-<main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8" x-data="settingsManager()">
-    <!-- Page Header -->
-    <div class="mb-8">
-        <h1 class="text-3xl font-bold text-gray-900">Paramètres Utilisateur</h1>
-        <p class="text-gray-600 mt-2">Gérez votre profil, préférences et sécurité</p>
-    </div>
-
-    <!-- Tab Navigation -->
-    <div class="bg-white rounded-lg shadow mb-8">
-        <div class="border-b border-gray-200">
-            <nav class="-mb-px flex space-x-8 px-6">
-                <button @click="activeTab = 'profile'" 
-                        :class="activeTab === 'profile' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    <i class="fas fa-user mr-2"></i>Profil
-                </button>
-                <button @click="activeTab = 'preferences'" 
-                        :class="activeTab === 'preferences' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    <i class="fas fa-cog mr-2"></i>Préférences
-                </button>
-                <button @click="activeTab = 'security'" 
-                        :class="activeTab === 'security' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    <i class="fas fa-shield-alt mr-2"></i>Sécurité
-                </button>
-                <button @click="activeTab = 'notifications'" 
-                        :class="activeTab === 'notifications' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'"
-                        class="whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm">
-                    <i class="fas fa-bell mr-2"></i>Notifications
-                </button>
-            </nav>
+<main class="max-w-7xl mx-auto py-6 px-2 sm:px-4 lg:px-8" x-data="settingsManager()" x-init="init()">
+        <!-- Page Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-gray-900 dark:text-white">Paramètres Utilisateur</h1>
+            <p class="text-gray-600 dark:text-gray-300 mt-2">Personnalisez votre expérience et gérez votre profil</p>
         </div>
-    </div>
+        
+        <!-- Loading State -->
+        <div x-show="isLoading" class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+            <div class="bg-white p-4 rounded-lg shadow-xl flex flex-col items-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-2"></div>
+                <p class="text-gray-700">Chargement des paramètres...</p>
+            </div>
+        </div>
+        
+        <!-- Error Message -->
+        <div x-show="errorMessage" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6" role="alert">
+            <p class="font-bold">Erreur</p>
+            <p x-text="errorMessage"></p>
+        </div>
 
-    <!-- Profile Tab -->
-    <div x-show="activeTab === 'profile'" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <!-- Profile Information -->
-        <div class="lg:col-span-2">
-            <div class="settings-card bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-6">Informations du Profil</h3>
+        <!-- Settings Tabs -->
+    <div class="bg-white dark:bg-slate-800 rounded-lg shadow mb-8">
+            <div class="border-b border-gray-200 dark:border-slate-700">
+                <nav class="-mb-px flex space-x-2 sm:space-x-8 px-2 sm:px-6 overflow-x-auto no-scrollbar" style="scrollbar-width: none;">
+                    <button @click="activeTab = 'profile'" 
+                            :class="activeTab === 'profile' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
+                            class="whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm focus:outline-none">
+                        <i class="fas fa-user mr-2"></i>Profil
+                    </button>
+                    <button @click="activeTab = 'preferences'" 
+                            :class="activeTab === 'preferences' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
+                            class="whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm focus:outline-none">
+                        <i class="fas fa-cog mr-2"></i>Préférences
+                    </button>
+                    <button @click="activeTab = 'security'" 
+                            :class="activeTab === 'security' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
+                            class="whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm focus:outline-none">
+                        <i class="fas fa-shield-alt mr-2"></i>Sécurité
+                    </button>
+                    <button @click="activeTab = 'notifications'" 
+                            :class="activeTab === 'notifications' ? 'border-blue-400 text-blue-300 dark:text-blue-300' : 'border-transparent text-gray-400 dark:text-gray-400 hover:text-gray-200 hover:border-gray-500'"
+                            class="whitespace-nowrap py-3 px-2 border-b-2 font-medium text-sm focus:outline-none">
+                        <i class="fas fa-bell mr-2"></i>Notifications
+                    </button>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Profile Settings -->
+        <div x-show="activeTab === 'profile'" class="space-y-8">
+            <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-6">Informations du Profil</h3>
                 
                 <form @submit.prevent="updateProfile()">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Prénom</label>
-                            <input type="text" x-model="profile.first_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-8">
+                        <!-- Profile Photo -->
+                        <div class="flex flex-col items-center">
+                            <img :src="profile.photo_url || '/static/images/user-placeholder.svg'" class="h-20 w-20 sm:h-24 sm:w-24 rounded-full object-cover mb-4 bg-gray-100" alt="Photo de profil">
+                            <input type="file" id="photoInput" class="hidden" accept="image/*" @change="uploadPhoto">
+                            <button type="button" onclick="document.getElementById('photoInput').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm w-full sm:w-auto mt-2">
+                                <i class="fas fa-camera mr-2"></i>
+                                Changer Photo
+                            </button>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Nom</label>
-                            <input type="text" x-model="profile.last_name" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                        
+                        <!-- Profile Form -->
+                        <div class="md:col-span-1 lg:col-span-2 space-y-6 w-full">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Nom d'utilisateur</label>
+                                    <input type="text" x-model="profile.username" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100" readonly>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Rôle</label>
+                                    <input type="text" x-model="profile.role" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100" readonly>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Prénom</label>
+                                    <input type="text" x-model="profile.first_name" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Nom de famille</label>
+                                    <input type="text" x-model="profile.last_name" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Email</label>
+                                    <input type="email" x-model="profile.email" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Téléphone</label>
+                                    <input type="tel" x-model="profile.phone" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                </div>
+                            </div>
+                            
+                            <div class="flex flex-col sm:flex-row justify-end gap-2">
+                                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md dark:bg-blue-700 dark:hover:bg-blue-800 w-full sm:w-auto">
+                                    <i class="fas fa-save mr-2"></i>
+                                    Sauvegarder
+                                </button>
+                            </div>
                         </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                            <input type="email" x-model="profile.email" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Téléphone</label>
-                            <input type="text" x-model="profile.phone" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        </div>
-                    </div>
-                    
-                    <div class="flex justify-end mt-6">
-                        <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
-                            <i class="fas fa-save mr-2"></i>Enregistrer
-                        </button>
                     </div>
                 </form>
             </div>
         </div>
 
-        <!-- Profile Photo & Activity -->
-        <div class="space-y-6">
-            <!-- Profile Photo -->
-            <div class="settings-card bg-white rounded-lg shadow p-6 text-center">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Photo de Profil</h3>
-                
-                <div class="mb-4">
-                    <img :src="profile.photo_url || '/static/default-user.png'" 
-                         :alt="profile.first_name + ' ' + profile.last_name"
-                         class="profile-photo mx-auto">
+        <!-- Preferences Settings -->
+        <div x-show="activeTab === 'preferences'" class="space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
+                <!-- Language & Display -->
+                <div class="bg-white dark:bg-slate-800 rounded-lg shadow p-4 sm:p-6">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Affichage et Langue</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Langue d'interface</label>
+                            <select x-model="preferences.language" @change="changeLanguage(preferences.language)" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                <option value="fr">Français</option>
+                                <option value="ar">العربية</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Format de date</label>
+                            <select x-model="preferences.date_format" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                <option value="dd/mm/yyyy">DD/MM/YYYY</option>
+                                <option value="mm/dd/yyyy">MM/DD/YYYY</option>
+                                <option value="yyyy-mm-dd">YYYY-MM-DD</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-2">Fuseau horaire</label>
+                            <select x-model="preferences.timezone" class="w-full border border-gray-300 dark:border-slate-700 rounded-md px-3 py-2 bg-gray-50 dark:bg-slate-900 dark:text-gray-100">
+                                <option value="Africa/Casablanca">GMT+1 (Casablanca)</option>
+                                <option value="Europe/Paris">GMT+1 (Paris)</option>
+                                <option value="UTC">GMT+0 (UTC)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="preferences.dark_mode" @change="applyTheme(preferences.dark_mode)" class="rounded border-gray-300 dark:border-slate-700">
+                                <span class="ml-2 text-sm text-gray-700 dark:text-gray-200">Mode sombre</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="space-y-3">
-                    <input type="file" id="photoInput" accept="image/*" @change="uploadPhoto($event)" class="hidden">
-                    <button @click="$refs.photoInput.click()" class="w-full bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded-md">
-                        <i class="fas fa-camera mr-2"></i>Changer la photo
-                    </button>
+
+                <!-- Dashboard Preferences -->
+                <div class="bg-white rounded-lg shadow p-4 sm:p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Tableau de Bord</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Page d'accueil par défaut</label>
+                            <select x-model="preferences.default_page" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="dashboard">Tableau de bord</option>
+                                <option value="inventory">Inventaire</option>
+                                <option value="sales">Ventes</option>
+                                <option value="finance">Finance</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Éléments par page</label>
+                            <select x-model="preferences.items_per_page" class="w-full border border-gray-300 rounded-md px-3 py-2">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="preferences.auto_refresh" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Actualisation automatique</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="preferences.show_tips" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Afficher les conseils</span>
+                            </label>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <!-- User Info -->
-            <div class="settings-card bg-white rounded-lg shadow p-6">
-                <h3 class="text-lg font-medium text-gray-900 mb-4">Informations Utilisateur</h3>
-                
-                <div class="space-y-3 text-sm">
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Nom d'utilisateur:</span>
-                        <span class="font-medium" x-text="user.username"></span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Rôle:</span>
-                        <span class="px-2 py-1 text-xs font-medium rounded-full"
-                              :class="{
-                                  'bg-red-100 text-red-800': user.role === 'admin',
-                                  'bg-blue-100 text-blue-800': user.role === 'manager',
-                                  'bg-green-100 text-green-800': user.role === 'employee'
-                              }"
-                              x-text="user.role">
-                        </span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Membre depuis:</span>
-                        <span x-text="user.created_at_formatted"></span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">Dernière connexion:</span>
-                        <span x-text="user.last_login_formatted || 'Jamais'"></span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Preferences Tab -->
-    <div x-show="activeTab === 'preferences'" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Language & Display -->
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Langue et Affichage</h3>
-            
-            <form @submit.prevent="updatePreferences()">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Langue</label>
-                        <select x-model="preferences.language" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <option value="fr">Français</option>
-                            <option value="ar">العربية</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Devise</label>
-                        <select x-model="preferences.currency" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <option value="MRU">Ouguiya (MRU)</option>
-                            <option value="EUR">Euro (€)</option>
-                            <option value="USD">Dollar ($)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Décimales</label>
-                        <select x-model="preferences.decimal_places" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <option value="0">0 décimale</option>
-                            <option value="2">2 décimales</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Thème</label>
-                        <select x-model="preferences.theme" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                            <option value="light">Clair</option>
-                            <option value="dark">Sombre</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="flex justify-end mt-6">
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
-                        <i class="fas fa-save mr-2"></i>Enregistrer
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Interface Preferences -->
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Préférences Interface</h3>
-            
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Sauvegarde automatique</label>
-                        <p class="text-xs text-gray-500">Sauvegarder automatiquement les modifications</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="preferences.auto_save" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Afficher les info-bulles</label>
-                        <p class="text-xs text-gray-500">Afficher l'aide contextuelle</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="preferences.show_tooltips" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Vue compacte</label>
-                        <p class="text-xs text-gray-500">Réduire l'espacement des éléments</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="preferences.compact_view" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-            </div>
-            
-            <div class="flex justify-end mt-6">
-                <button @click="updatePreferences()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
-                    <i class="fas fa-save mr-2"></i>Enregistrer
+            <div class="flex flex-col sm:flex-row justify-end gap-2">
+                <button @click="savePreferences()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md w-full sm:w-auto">
+                    <i class="fas fa-save mr-2"></i>
+                    Sauvegarder les Préférences
                 </button>
             </div>
         </div>
-    </div>
 
-    <!-- Security Tab -->
-    <div x-show="activeTab === 'security'" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Change PIN -->
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Changer le PIN</h3>
-            
-            <form @submit.prevent="updatePin()">
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">PIN actuel</label>
-                        <input type="password" x-model="pinForm.current_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Nouveau PIN</label>
-                        <input type="password" x-model="pinForm.new_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le nouveau PIN</label>
-                        <input type="password" x-model="pinForm.confirm_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
-                    </div>
-                </div>
-                
-                <div class="flex justify-end mt-6">
-                    <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-md">
-                        <i class="fas fa-key mr-2"></i>Changer le PIN
-                    </button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Security Preferences -->
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Préférences de Sécurité</h3>
-            
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Déconnexion automatique</label>
-                        <p class="text-xs text-gray-500">Se déconnecter après inactivité</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="security.auto_logout" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div x-show="security.auto_logout">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Délai (minutes)</label>
-                    <select x-model="security.auto_logout_time" class="w-full border border-gray-300 rounded-md px-3 py-2">
-                        <option value="15">15 minutes</option>
-                        <option value="30">30 minutes</option>
-                        <option value="60">1 heure</option>
-                        <option value="120">2 heures</option>
-                    </select>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Notifications de connexion</label>
-                        <p class="text-xs text-gray-500">Être notifié des nouvelles connexions</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="security.login_notifications" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Journal d'activité</label>
-                        <p class="text-xs text-gray-500">Enregistrer toutes les actions</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="security.activity_log" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-            </div>
-            
-            <div class="flex justify-end mt-6">
-                <button @click="updateSecurity()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
-                    <i class="fas fa-save mr-2"></i>Enregistrer
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Notifications Tab -->
-    <div x-show="activeTab === 'notifications'" class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Email Notifications -->
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Notifications Email</h3>
-            
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Alertes de stock faible</label>
-                        <p class="text-xs text-gray-500">Recevoir des emails pour les stocks faibles</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="notifications.email.low_stock_alerts" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Rapports de ventes</label>
-                        <p class="text-xs text-gray-500">Recevoir les rapports quotidiens</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="notifications.email.sales_reports" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Alertes système</label>
-                        <p class="text-xs text-gray-500">Notifications d'erreurs et mises à jour</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="notifications.email.system_alerts" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Browser Notifications -->
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Notifications Navigateur</h3>
-            
-            <div class="space-y-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Notifications push</label>
-                        <p class="text-xs text-gray-500">Recevoir des notifications dans le navigateur</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="notifications.browser.push_notifications" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-                
-                <div class="flex items-center justify-between">
-                    <div>
-                        <label class="text-sm font-medium text-gray-700">Sons de notification</label>
-                        <p class="text-xs text-gray-500">Jouer un son pour les notifications</p>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input type="checkbox" x-model="notifications.sound.enabled" class="sr-only peer">
-                        <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                    </label>
-                </div>
-            </div>
-            
-            <div class="flex justify-end mt-6">
-                <button @click="updateNotifications()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
-                    <i class="fas fa-save mr-2"></i>Enregistrer
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Activity (shown in profile tab) -->
-    <div x-show="activeTab === 'profile'" class="mt-8">
-        <div class="settings-card bg-white rounded-lg shadow p-6">
-            <h3 class="text-lg font-medium text-gray-900 mb-6">Activité Récente</h3>
-            
-            <div class="space-y-4">
-                <template x-for="activity in recentActivities" :key="activity.id">
-                    <div class="activity-item">
-                        <div class="flex justify-between items-start">
+        <!-- Security Settings -->
+        <div x-show="activeTab === 'security'" class="space-y-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
+                <!-- Change PIN -->
+                <div class="bg-white rounded-lg shadow p-4 sm:p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Changer le PIN</h3>
+                    <form @submit.prevent="changePin()">
+                        <div class="space-y-4">
                             <div>
-                                <p class="text-sm font-medium text-gray-900" x-text="activity.action_type"></p>
-                                <p class="text-xs text-gray-500" x-text="activity.description"></p>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">PIN actuel</label>
+                                <input type="password" x-model="security.current_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
                             </div>
-                            <div class="text-right">
-                                <span class="text-xs text-gray-500" x-text="activity.formatted_time"></span>
-                                <span class="ml-2 px-2 py-1 text-xs font-medium rounded-full"
-                                      :class="{
-                                          'bg-green-100 text-green-800': activity.status === 'success',
-                                          'bg-red-100 text-red-800': activity.status === 'error',
-                                          'bg-yellow-100 text-yellow-800': activity.status === 'warning'
-                                      }"
-                                      x-text="activity.status">
-                                </span>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Nouveau PIN</label>
+                                <input type="password" x-model="security.new_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Confirmer le nouveau PIN</label>
+                                <input type="password" x-model="security.confirm_pin" class="w-full border border-gray-300 rounded-md px-3 py-2" required>
+                            </div>
+                            <div class="flex justify-end">
+                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md">
+                                    <i class="fas fa-key mr-2"></i>
+                                    Changer PIN
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Security Options -->
+                <div class="bg-white rounded-lg shadow p-4 sm:p-6">
+                    <h3 class="text-lg font-medium text-gray-900 mb-4">Options de Sécurité</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="security.auto_logout" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Déconnexion automatique après inactivité</span>
+                            </label>
+                        </div>
+                        <div x-show="security.auto_logout" class="ml-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Délai (minutes)</label>
+                            <input type="number" x-model="security.auto_logout_time" min="5" max="120" class="w-32 border border-gray-300 rounded-md px-3 py-2">
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="security.login_notifications" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Notification des connexions</span>
+                            </label>
+                        </div>
+                        <div>
+                            <label class="flex items-center">
+                                <input type="checkbox" x-model="security.activity_log" class="rounded border-gray-300">
+                                <span class="ml-2 text-sm text-gray-700">Journal d'activité personnel</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end mt-6">
+                        <button @click="saveSecurity()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md">
+                            <i class="fas fa-save mr-2"></i>
+                            Sauvegarder la sécurité
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <div class="bg-white rounded-lg shadow p-4 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-4">Activité Récente</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Statut</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200" x-show="!isLoading">
+                            <template x-if="recentActivity.length === 0">
+                                <tr>
+                                    <td colspan="4" class="px-6 py-4 text-center text-gray-500">
+                                        Aucune activité récente à afficher
+                                    </td>
+                                </tr>
+                            </template>
+                            <template x-for="activity in recentActivity" :key="activity.id">
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="activity.date"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="activity.action"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="activity.description"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                                              :class="activity.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'"
+                                              x-text="activity.status === 'success' ? 'Succès' : 'Échec'">
+                                        </span>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                        <tbody x-show="isLoading">
+                            <tr>
+                                <td colspan="4" class="px-6 py-4 text-center">
+                                    <div class="flex justify-center">
+                                        <div class="animate-pulse flex space-x-4">
+                                            <div class="h-3 bg-gray-200 rounded w-full"></div>
+                                        </div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Notifications Settings -->
+        <div x-show="activeTab === 'notifications'" class="space-y-8">
+            <div class="bg-white rounded-lg shadow p-4 sm:p-6">
+                <h3 class="text-lg font-medium text-gray-900 mb-6">Préférences de Notification</h3>
+                
+                <div class="space-y-6">
+                    <!-- Email Notifications -->
+                    <div class="border-b border-gray-200 pb-6">
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Notifications par Email</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Stock faible</label>
+                                    <p class="text-xs text-gray-500">Recevoir un email quand un produit atteint le stock minimum</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.email.low_stock" class="rounded border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Ventes importantes</label>
+                                    <p class="text-xs text-gray-500">Notification pour les ventes supérieures à un montant défini</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.email.large_sales" class="rounded border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Rapports quotidiens</label>
+                                    <p class="text-xs text-gray-500">Résumé quotidien des activités</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.email.daily_reports" class="rounded border-gray-300">
                             </div>
                         </div>
                     </div>
-                </template>
-                
-                <div x-show="recentActivities.length === 0" class="text-center text-gray-500 py-4">
-                    Aucune activité récente
+
+                    <!-- Browser Notifications -->
+                    <div class="border-b border-gray-200 pb-6">
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Notifications Navigateur</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Nouvelles ventes</label>
+                                    <p class="text-xs text-gray-500">Notification instantanée pour chaque nouvelle vente</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.browser.new_sales" class="rounded border-gray-300">
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <label class="text-sm font-medium text-gray-700">Erreurs système</label>
+                                    <p class="text-xs text-gray-500">Alertes pour les erreurs critiques</p>
+                                </div>
+                                <input type="checkbox" x-model="notifications.browser.system_errors" class="rounded border-gray-300">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sound Settings -->
+                    <div>
+                        <h4 class="text-md font-medium text-gray-900 mb-4">Paramètres Audio</h4>
+                        <div class="space-y-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-sm font-medium text-gray-700">Sons de notification</label>
+                                <input type="checkbox" x-model="notifications.sound.enabled" class="rounded border-gray-300">
+                            </div>
+                            <div x-show="notifications.sound.enabled" class="ml-6">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Volume</label>
+                                <input type="range" x-model="notifications.sound.volume" min="0" max="100" class="w-full">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row justify-end gap-2 mt-6">
+                    <button @click="saveNotifications()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-md w-full sm:w-auto">
+                        <i class="fas fa-save mr-2"></i>
+                        Sauvegarder
+                    </button>
                 </div>
             </div>
         </div>
-    </div>
-</main>
+    </main>
 {% endblock %}
 
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-white py-4 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row justify-between items-center gap-2 text-sm">
+            <p class="mb-2 sm:mb-0">&copy; {{ current_year }} SME Management v{{ app_version }}</p>
+            <div class="flex flex-col sm:flex-row items-center gap-1 sm:gap-4">
+                <span class="text-green-400"><i class="fas fa-circle text-xs"></i> En ligne</span>
+                <span>Mode: {{ user_role|title }}</span>
+                <span>Utilisateur: {{ current_user }}</span>
+            </div>
+        </div>
+    </footer>
 {% block extra_scripts %}
-<script>
-function settingsManager() {
-    return {
-        activeTab: 'profile',
-        user: {},
-        profile: {
-            first_name: '',
-            last_name: '',
-            email: '',
-            phone: '',
-            photo_url: ''
-        },
-        preferences: {
-            language: 'fr',
-            currency: 'MRU',
-            decimal_places: 2,
-            theme: 'light',
-            auto_save: true,
-            show_tooltips: true,
-            compact_view: false
-        },
-        security: {
-            auto_logout: false,
-            auto_logout_time: 30,
-            login_notifications: true,
-            activity_log: true
-        },
-        notifications: {
-            email: {
-                low_stock_alerts: true,
-                sales_reports: true,
-                system_alerts: true
-            },
-            browser: {
-                push_notifications: false
-            },
-            sound: {
-                enabled: false
-            }
-        },
-        pinForm: {
-            current_pin: '',
-            new_pin: '',
-            confirm_pin: ''
-        },
-        recentActivities: [],
-        
-        init() {
-            this.loadUserInfo();
-            this.loadPreferences();
-            this.loadNotifications();
-        },
-        
-        async loadUserInfo() {
-            try {
-                const response = await apiFetch('/api/settings/user-info');
-                if (response.success) {
-                    this.user = response.user;
-                    this.profile = {
-                        first_name: response.user.first_name || '',
-                        last_name: response.user.last_name || '',
-                        email: response.user.email || '',
-                        phone: response.user.phone || '',
-                        photo_url: response.user.photo_url || ''
-                    };
-                    this.recentActivities = response.activities || [];
-                }
-            } catch (error) {
-                console.error('Error loading user info:', error);
-            }
-        },
-        
-        async loadPreferences() {
-            try {
-                const response = await apiFetch('/api/settings/preferences');
-                if (response.success) {
-                    this.preferences = { ...this.preferences, ...response.preferences };
-                }
-            } catch (error) {
-                console.error('Error loading preferences:', error);
-            }
-        },
-        
-        async loadNotifications() {
-            try {
-                const response = await apiFetch('/api/settings/notifications');
-                if (response.success) {
-                    this.notifications = { ...this.notifications, ...response.notifications };
-                }
-            } catch (error) {
-                console.error('Error loading notifications:', error);
-            }
-        },
-        
-        async updateProfile() {
-            try {
-                const response = await apiFetch('/api/settings/update-profile', {
-                    method: 'POST',
-                    body: this.profile
-                });
+    <script>
+        function settingsManager() {
+            return {
+                activeTab: 'profile',
+                profile: {
+                    username: '{{ current_user }}',
+                    role: '{{ user_role }}',
+                    first_name: '',
+                    last_name: '',
+                    email: '',
+                    phone: '',
+                    photo_url: ''
+                },
+                preferences: {
+                    language: '{{ current_language }}',
+                    date_format: 'dd/mm/yyyy',
+                    timezone: 'Africa/Casablanca',
+                    dark_mode: false,
+                    default_page: 'dashboard',
+                    items_per_page: 25,
+                    auto_refresh: true,
+                    show_tips: true
+                },
+                security: {
+                    current_pin: '',
+                    new_pin: '',
+                    confirm_pin: '',
+                    auto_logout: true,
+                    auto_logout_time: 30,
+                    login_notifications: true,
+                    activity_log: true
+                },
+                notifications: {
+                    email: {
+                        low_stock: true,
+                        large_sales: true,
+                        daily_reports: false
+                    },
+                    browser: {
+                        new_sales: true,
+                        system_errors: true
+                    },
+                    sound: {
+                        enabled: true,
+                        volume: 50
+                    }
+                },
+                recentActivity: [],
+                isLoading: true,
+                errorMessage: '',
                 
-                if (response.success) {
-                    this.showNotification('Profil mis à jour avec succès', 'success');
-                } else {
-                    this.showNotification(response.error || 'Erreur lors de la mise à jour', 'error');
-                }
-            } catch (error) {
-                console.error('Error updating profile:', error);
-                this.showNotification('Erreur lors de la mise à jour du profil', 'error');
-            }
-        },
-        
-        async updatePreferences() {
-            try {
-                const response = await apiFetch('/api/settings/update-preferences', {
-                    method: 'POST',
-                    body: this.preferences
-                });
+                init() {
+                    // Bootstrap theme from localStorage early
+                    try {
+                        const saved = localStorage.getItem('theme');
+                        if (saved === 'dark') {
+                            this.preferences.dark_mode = true;
+                            this.applyTheme(true);
+                        }
+                    } catch (e) {}
+                    this.loadSettings();
+                },
                 
-                if (response.success) {
-                    this.showNotification('Préférences mises à jour avec succès', 'success');
+                loadSettings() {
+                    this.isLoading = true;
+                    // Fetch user information from API
+                    apiFetch('/api/settings/user-info')
+                        .then(data => {
+                            if (data.success) {
+                                // Update profile info
+                                this.profile.username = data.user.username || '{{ current_user }}';
+                                this.profile.role = data.user.role || '{{ user_role }}';
+                                this.profile.first_name = data.user.first_name || '';
+                                this.profile.last_name = data.user.last_name || '';
+                                this.profile.email = data.user.email || '';
+                                this.profile.phone = data.user.phone || '';
+                                this.profile.photo_url = data.user.photo_url || '';
+                                
+                                // Update preferences
+                                this.preferences.language = data.user.language || '{{ current_language }}';
+                                
+                                // Format activities
+                                if (data.activities && Array.isArray(data.activities)) {
+                                    this.recentActivity = data.activities.map((activity, index) => {
+                                        return {
+                                            id: index + 1,
+                                            date: activity.formatted_time || activity.created_at,
+                                            action: activity.action_type,
+                                            description: activity.description,
+                                            ip: activity.ip_address || '-',
+                                            status: activity.status || 'success'
+                                        };
+                                    });
+                                }
+
+                                // Hydrate security prefs if present
+                                if (data.user.preferences && data.user.preferences.security) {
+                                    this.security = Object.assign({}, this.security, data.user.preferences.security);
+                                }
+                            } else {
+                                console.error('Failed to load user settings:', data.error);
+                                this.errorMessage = data.error || 'Failed to load user settings';
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error loading user settings:', error);
+                            this.errorMessage = 'Error connecting to server';
+                        })
+                        .finally(() => {
+                            // Load additional preferences and notifications
+                            Promise.all([
+                                apiFetch('/api/settings/preferences').catch(() => null),
+                                apiFetch('/api/settings/notifications').catch(() => null)
+                            ]).then(([prefsData, notifData]) => {
+                                if (prefsData && prefsData.success && prefsData.preferences) {
+                                    this.preferences = Object.assign({}, this.preferences, prefsData.preferences);
+                                    // Map theme key to dark_mode if provided by API
+                                    if (prefsData.preferences.theme) {
+                                        this.preferences.dark_mode = prefsData.preferences.theme === 'dark';
+                                        this.applyTheme(this.preferences.dark_mode);
+                                    }
+                                }
+                                if (notifData && notifData.success && notifData.notifications) {
+                                    // Map to our UI structure
+                                    this.notifications.email.low_stock = !!notifData.notifications.low_stock_alerts;
+                                    this.notifications.email.daily_reports = !!notifData.notifications.daily_summary;
+                                    this.notifications.browser.system_errors = !!notifData.notifications.system_alerts;
+                                }
+                            }).finally(() => {
+                                this.isLoading = false;
+                            });
+                        });
+                },
+                
+                updateProfile() {
+                    // Show loading indicator
+                    const loadingToast = showToast('Mise à jour du profil...', 'info', -1);
                     
-                    // Apply language change if needed
-                    if (response.reload_required) {
-                        setTimeout(() => {
-                            window.location.reload();
-                        }, 1000);
+                    // Create the profile data to send
+                    const profileData = {
+                        first_name: this.profile.first_name,
+                        last_name: this.profile.last_name,
+                        email: this.profile.email,
+                        phone: this.profile.phone,
+                        // Always send the current photo_url/path to preserve it
+                        photo_path: this.profile.photo_url || ''
+                    };
+                    
+                    // Send the update request
+                    apiFetch('/api/settings/update-profile', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(profileData)
+                    })
+                    .then(data => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Profil mis à jour avec succès!', 'success');
+                        } else {
+                            showToast(data.error || 'Erreur lors de la mise à jour du profil', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        console.error('Error updating profile:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                savePreferences() {
+                    // Show loading indicator
+                    const loadingToast = showToast('Sauvegarde des préférences...', 'info', -1);
+                    
+                    // Prepare preferences data
+                    const preferencesData = {
+                        language: this.preferences.language,
+                        date_format: this.preferences.date_format,
+                        timezone: this.preferences.timezone,
+                        dark_mode: this.preferences.dark_mode,
+                        theme: this.preferences.dark_mode ? 'dark' : 'light',
+                        default_page: this.preferences.default_page,
+                        items_per_page: this.preferences.items_per_page,
+                        auto_refresh: this.preferences.auto_refresh,
+                        show_tips: this.preferences.show_tips
+                    };
+                    
+                    // Send the update request
+                    apiFetch('/api/settings/update-preferences', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(preferencesData)
+                    })
+                    .then(data => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Préférences sauvegardées avec succès!', 'success');
+                            // Persist theme locally and apply immediately
+                            this.applyTheme(this.preferences.dark_mode);
+                            
+                            // Update language if changed
+                            if (data.reload_required) {
+                                setTimeout(() => {
+                                    window.location.reload();
+                                }, 1500);
+                            }
+                        } else {
+                            showToast(data.error || 'Erreur lors de la sauvegarde des préférences', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        // Hide loading indicator
+                        hideToast(loadingToast);
+                        console.error('Error saving preferences:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                applyTheme(isDark) {
+                    try {
+                        if (isDark) {
+                            document.documentElement.setAttribute('data-theme', 'dark');
+                            document.documentElement.classList.add('dark');
+                            localStorage.setItem('theme', 'dark');
+                        } else {
+                            document.documentElement.removeAttribute('data-theme');
+                            document.documentElement.classList.remove('dark');
+                            localStorage.setItem('theme', 'light');
+                        }
+                    } catch (e) { /* no-op */ }
+                },
+                
+                changeLanguage(lang) {
+                    const loadingToast = showToast('Changement de langue...', 'info', -1);
+                    
+                    apiFetch('/api/settings/update-language', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ language: lang })
+                    })
+                    .then(data => {
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Langue mise à jour. Rechargement...', 'success');
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 1500);
+                        } else {
+                            showToast(data.error || 'Erreur lors du changement de langue', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        hideToast(loadingToast);
+                        console.error('Error changing language:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+                
+                changePin() {
+                    if (this.security.new_pin !== this.security.confirm_pin) {
+                        showToast('Les nouveaux PINs ne correspondent pas!', 'error');
+                        return;
                     }
-                } else {
-                    this.showNotification(response.error || 'Erreur lors de la mise à jour', 'error');
-                }
-            } catch (error) {
-                console.error('Error updating preferences:', error);
-                this.showNotification('Erreur lors de la mise à jour des préférences', 'error');
-            }
-        },
-        
-        async updateSecurity() {
-            try {
-                const response = await apiFetch('/api/settings/update-security', {
-                    method: 'POST',
-                    body: this.security
-                });
-                
-                if (response.success) {
-                    this.showNotification('Paramètres de sécurité mis à jour', 'success');
-                } else {
-                    this.showNotification(response.error || 'Erreur lors de la mise à jour', 'error');
-                }
-            } catch (error) {
-                console.error('Error updating security:', error);
-                this.showNotification('Erreur lors de la mise à jour des paramètres de sécurité', 'error');
-            }
-        },
-        
-        async updateNotifications() {
-            try {
-                const response = await apiFetch('/api/settings/update-notifications', {
-                    method: 'POST',
-                    body: this.notifications
-                });
-                
-                if (response.success) {
-                    this.showNotification('Préférences de notification mises à jour', 'success');
-                } else {
-                    this.showNotification(response.error || 'Erreur lors de la mise à jour', 'error');
-                }
-            } catch (error) {
-                console.error('Error updating notifications:', error);
-                this.showNotification('Erreur lors de la mise à jour des notifications', 'error');
-            }
-        },
-        
-        async updatePin() {
-            if (this.pinForm.new_pin !== this.pinForm.confirm_pin) {
-                this.showNotification('Les PINs ne correspondent pas', 'error');
-                return;
-            }
-            
-            if (this.pinForm.new_pin.length < 4) {
-                this.showNotification('Le PIN doit contenir au moins 4 chiffres', 'error');
-                return;
-            }
-            
-            try {
-                const response = await apiFetch('/api/settings/update-pin', {
-                    method: 'POST',
-                    body: {
-                        current_pin: this.pinForm.current_pin,
-                        new_pin: this.pinForm.new_pin
+                    
+                    if (this.security.new_pin.length < 4) {
+                        showToast('Le PIN doit contenir au moins 4 caractères!', 'error');
+                        return;
                     }
-                });
+                    
+                    const loadingToast = showToast('Mise à jour du PIN...', 'info', -1);
+                    
+                    apiFetch('/api/settings/update-pin', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            current_pin: this.security.current_pin,
+                            new_pin: this.security.new_pin
+                        })
+                    })
+                    .then(data => {
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('PIN changé avec succès!', 'success');
+                            this.security.current_pin = '';
+                            this.security.new_pin = '';
+                            this.security.confirm_pin = '';
+                        } else {
+                            showToast(data.error || 'Erreur lors du changement de PIN', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        hideToast(loadingToast);
+                        console.error('Error changing PIN:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+
+                uploadPhoto(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    const formData = new FormData();
+                    formData.append('photo', file);
+
+                    apiFetch('/api/settings/upload-photo', {
+                        method: 'POST',
+                        body: formData
+                    })
+                        .then(data => {
+                            if (data.success) {
+                                // Reload profile from backend to ensure persistence
+                                this.loadSettings();
+                                showToast('Photo de profil mise à jour !', 'success');
+                            } else {
+                                showToast(data.error || 'Erreur upload', 'error');
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Error uploading photo:', err);
+                            showToast('Erreur de connexion', 'error');
+                        });
+                },
                 
-                if (response.success) {
-                    this.pinForm = { current_pin: '', new_pin: '', confirm_pin: '' };
-                    this.showNotification('PIN mis à jour avec succès', 'success');
-                } else {
-                    this.showNotification(response.error || 'Erreur lors de la mise à jour', 'error');
+                saveNotifications() {
+                    const loadingToast = showToast('Sauvegarde des préférences de notification...', 'info', -1);
+                    
+                    apiFetch('/api/settings/update-notifications', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(this.notifications)
+                    })
+                    .then(data => {
+                        hideToast(loadingToast);
+                        
+                        if (data.success) {
+                            showToast('Préférences de notification sauvegardées!', 'success');
+                        } else {
+                            showToast(data.error || 'Erreur lors de la sauvegarde des préférences', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        hideToast(loadingToast);
+                        console.error('Error saving notification preferences:', error);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
+                },
+
+                saveSecurity() {
+                    const loadingToast = showToast('Sauvegarde des options de sécurité...', 'info', -1);
+                    const payload = {
+                        auto_logout: this.security.auto_logout,
+                        auto_logout_time: this.security.auto_logout_time,
+                        login_notifications: this.security.login_notifications,
+                        activity_log: this.security.activity_log
+                    };
+                    apiFetch('/api/settings/update-security', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    }).then(data => {
+                        hideToast(loadingToast);
+                        if (data.success) {
+                            showToast('Options de sécurité sauvegardées', 'success');
+                        } else {
+                            showToast(data.error || 'Erreur lors de la sauvegarde', 'error');
+                        }
+                    }).catch(err => {
+                        hideToast(loadingToast);
+                        console.error('Error saving security options:', err);
+                        showToast('Erreur de connexion au serveur', 'error');
+                    });
                 }
-            } catch (error) {
-                console.error('Error updating PIN:', error);
-                this.showNotification('Erreur lors de la mise à jour du PIN', 'error');
-            }
-        },
-        
-        async uploadPhoto(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const formData = new FormData();
-            formData.append('photo', file);
-            
-            try {
-                const response = await fetch('/api/settings/upload-photo', {
-                    method: 'POST',
-                    body: formData,
-                    credentials: 'same-origin'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    this.profile.photo_url = result.photo_url;
-                    this.showNotification('Photo mise à jour avec succès', 'success');
-                } else {
-                    this.showNotification(result.error || 'Erreur lors du téléchargement', 'error');
-                }
-            } catch (error) {
-                console.error('Error uploading photo:', error);
-                this.showNotification('Erreur lors du téléchargement de la photo', 'error');
-            }
-        },
-        
-        showNotification(message, type = 'info') {
-            if (window.showNotification) {
-                window.showNotification(message, type);
-            } else {
-                alert(message);
             }
         }
-    };
-}
-</script>
-<style>
-[x-cloak] { display: none !important; }
-</style>
+        
+        // Helper function for global language change
+        function changeLanguage(lang) {
+            const settingsApp = document.querySelector('[x-data="settingsManager()"]').__x.$data;
+            if (settingsApp) {
+                settingsApp.changeLanguage(lang);
+            } else {
+                window.location.href = `/set-language/${lang}`;
+            }
+        }
+        
+        // Toast notification system
+        function showToast(message, type = 'info', duration = 3000) {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-4 py-2 rounded-md text-white z-50 ${
+                type === 'success' ? 'bg-green-500' : 
+                type === 'error' ? 'bg-red-500' : 
+                type === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'
+            }`;
+            toast.innerHTML = message;
+            document.body.appendChild(toast);
+            
+            if (duration > 0) {
+                setTimeout(() => {
+                    toast.remove();
+                }, duration);
+            }
+            
+            return toast;
+        }
+        
+        function hideToast(toast) {
+            if (toast && document.body.contains(toast)) {
+                toast.remove();
+            }
+        }
+    </script>
+    
+    <style>
+        [x-cloak] { display: none !important; }
+        /* Hide scrollbars for tab nav on mobile */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* Loading spinner animation */
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Toast notification animations */
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+        .toast-enter { animation: slideIn 0.3s ease forwards; }
+        .toast-exit { animation: slideOut 0.3s ease forwards; }
+
+        /* Responsive tweaks for mobile UX */
+        @media (max-width: 640px) {
+            .rounded-lg { border-radius: 0.5rem !important; }
+            .shadow { box-shadow: 0 1px 4px 0 rgba(0,0,0,0.10) !important; }
+            .p-6 { padding: 1rem !important; }
+            .p-4 { padding: 0.75rem !important; }
+            .px-6 { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+            .py-6 { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+            .gap-8 { gap: 1rem !important; }
+            .gap-4 { gap: 0.5rem !important; }
+            .text-3xl { font-size: 1.5rem !important; }
+            .text-lg { font-size: 1.1rem !important; }
+            .text-md { font-size: 1rem !important; }
+            .space-x-8 > :not([hidden]) ~ :not([hidden]) { margin-left: 0.5rem !important; }
+            .flex-row { flex-direction: column !important; }
+            .items-center { align-items: stretch !important; }
+            .justify-end { justify-content: flex-start !important; }
+            .w-full { width: 100% !important; }
+            .min-w-full { min-width: 100% !important; }
+            .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+            table { font-size: 0.95rem !important; }
+            th, td { padding-left: 0.5rem !important; padding-right: 0.5rem !important; }
+        }
+        /* Make table horizontally scrollable on mobile */
+        @media (max-width: 480px) {
+            table, thead, tbody, th, td, tr { display: block; }
+            thead { display: none; }
+            tr { margin-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+            td { padding: 0.5rem 0.75rem; text-align: left; position: relative; }
+            td:before {
+                content: attr(data-label);
+                font-weight: 600;
+                display: block;
+                margin-bottom: 0.25rem;
+                color: #64748b;
+            }
+        }
+    </style>
 {% endblock %}
