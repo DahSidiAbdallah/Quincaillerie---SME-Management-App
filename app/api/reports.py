@@ -544,39 +544,42 @@ def export_report(report_type):
         
         rows = cursor.fetchall()
         conn.close()
-        
-        # Create CSV file
+
+        # Create CSV in-memory and return via send_file (avoid temp files on Windows)
         output = io.StringIO()
         writer = csv.writer(output)
-        
+
         # Write headers
         writer.writerow(headers)
-        
+
         # Write data rows
         for row in rows:
             writer.writerow([str(cell) if cell is not None else '' for cell in row])
-        
-        # Prepare file for download
+
         output.seek(0)
-        csv_data = output.getvalue().encode('utf-8-sig')  # UTF-8 with BOM for Excel
+        csv_text = output.getvalue()
         output.close()
-        
-        # Create temporary file
-        temp_file = tempfile.NamedTemporaryFile(mode='wb', delete=False, suffix='.csv')
-        temp_file.write(csv_data)
-        temp_file.close()
-        
+
+        # Use BytesIO and include UTF-8 BOM so Excel opens correctly
+        csv_bytes = io.BytesIO()
+        csv_bytes.write(csv_text.encode('utf-8-sig'))
+        csv_bytes.seek(0)
+
         filename = f'{report_type}_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
-        
+
         # Log the export (match DatabaseManager.log_user_action signature)
-        db_manager.log_user_action(
-            session['user_id'],
-            'export_report',
-            f'Export rapport {report_type}'
-        )
-        
+        try:
+            db_manager.log_user_action(
+                session.get('user_id'),
+                'export_report',
+                f'Export rapport {report_type}'
+            )
+        except Exception:
+            # Do not fail export if logging fails
+            pass
+
         return send_file(
-            temp_file.name,
+            csv_bytes,
             as_attachment=True,
             download_name=filename,
             mimetype='text/csv'
@@ -694,6 +697,104 @@ def get_dashboard_analytics():
     except Exception as e:
         logger.error(f"Error fetching dashboard analytics: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des analyses'}), 500
+
+
+@reports_bp.route('/profit-analysis', methods=['GET'])
+def profit_analysis():
+    """Return profit breakdowns by product and by period"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        # Date range
+        start_date = request.args.get('start_date', '2000-01-01')
+        end_date = request.args.get('end_date', date.today().isoformat())
+
+        # Profit by product
+        cursor.execute('''
+            SELECT p.id, p.name, COALESCE(p.category, 'Sans catégorie') as category,
+                   SUM(si.quantity) as quantity_sold,
+                   SUM(si.total_price) as revenue,
+                   SUM(si.profit_margin) as profit
+            FROM sale_items si
+            JOIN products p ON si.product_id = p.id
+            JOIN sales s ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY p.id
+            ORDER BY profit DESC
+            LIMIT 50
+        ''', (start_date, end_date))
+        profit_by_product = [dict(row) for row in cursor.fetchall()]
+
+        # Profit by period (monthly)
+        cursor.execute('''
+            SELECT strftime('%Y-%m', s.sale_date) as period,
+                   SUM(si.profit_margin) as profit,
+                   SUM(si.total_price) as revenue
+            FROM sale_items si
+            JOIN sales s ON si.sale_id = s.id
+            WHERE DATE(s.sale_date) BETWEEN ? AND ?
+            GROUP BY strftime('%Y-%m', s.sale_date)
+            ORDER BY period DESC
+            LIMIT 36
+        ''', (start_date, end_date))
+        profit_by_period = [dict(row) for row in cursor.fetchall()]
+
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'profit_by_product': profit_by_product,
+            'profit_by_period': profit_by_period,
+            'generated_at': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching profit analysis: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération de l\'analyse des profits'}), 500
+
+
+@reports_bp.route('/customer-analysis', methods=['GET'])
+def customer_analysis():
+    """Return customer lifetime value, orders count and recent activity"""
+    auth_check = require_auth()
+    if auth_check:
+        return auth_check
+
+    try:
+        conn = db_manager.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            SELECT c.id, c.name, c.phone, c.email,
+                   COUNT(s.id) as orders_count,
+                   COALESCE(SUM(s.total_amount), 0) as lifetime_value,
+                   COALESCE(AVG(s.total_amount), 0) as avg_order_value,
+                   MAX(s.sale_date) as last_order_date
+            FROM customers c
+            LEFT JOIN sales s ON s.customer_id = c.id
+            WHERE c.is_active = 1
+            GROUP BY c.id
+            ORDER BY lifetime_value DESC
+            LIMIT 100
+        ''')
+
+        customers = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'customers': customers,
+            'generated_at': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        logger.error(f"Error fetching customer analysis: {e}")
+        return jsonify({'success': False, 'message': 'Erreur lors de la récupération de l\'analyse clients'}), 500
 
 @reports_bp.route('/sales', methods=['GET'])
 def get_sales_report():

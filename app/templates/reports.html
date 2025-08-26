@@ -34,21 +34,21 @@
             </div>
             <div class="p-6">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
-                    <button @click="setActiveReport('sales')" 
+                    <button data-report-type="sales" @click="setActiveReport('sales')" 
                             :class="activeReport === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
                         <i class="fas fa-shopping-cart text-2xl mb-2"></i>
                         <span class="font-medium">Rapport de Ventes</span>
                     </button>
                     
-                    <button @click="setActiveReport('inventory')" 
+                    <button data-report-type="inventory" @click="setActiveReport('inventory')" 
                             :class="activeReport === 'inventory' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
                         <i class="fas fa-boxes text-2xl mb-2"></i>
                         <span class="font-medium">Rapport Inventaire</span>
                     </button>
                     
-                    <button @click="setActiveReport('financial')" 
+                    <button data-report-type="financial" @click="setActiveReport('financial')" 
                             :class="activeReport === 'financial' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
                         <i class="fas fa-chart-line text-2xl mb-2"></i>
@@ -57,14 +57,14 @@
                     
 
 
-                    <button @click="setActiveReport('activities')" 
+                    <button data-report-type="activities" @click="setActiveReport('activities')" 
                             :class="activeReport === 'activities' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
                         <i class="fas fa-clock text-2xl mb-2"></i>
                         <span class="font-medium">Activités</span>
                     </button>
 
-                    <button @click="setActiveReport('ai_insights')" 
+                    <button data-report-type="ai_insights" @click="setActiveReport('ai_insights')" 
                             :class="activeReport === 'ai_insights' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
                             class="p-4 rounded-lg flex flex-col items-center transition-colors">
                         <i class="fas fa-robot text-2xl mb-2"></i>
@@ -177,6 +177,36 @@
                 </template>
                 <div class="h-80 relative" x-show="hasSalesData">
                     <canvas id="salesChart"></canvas>
+                </div>
+                <!-- Additional analytics charts -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h4 class="text-sm font-medium mb-2">Top Produits (30 derniers jours)</h4>
+                        <div class="h-56 relative">
+                            <canvas id="productPerformanceChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h4 class="text-sm font-medium mb-2">Répartition par catégorie (30 derniers jours)</h4>
+                        <div class="h-56 relative">
+                            <canvas id="categoryDistributionChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <!-- Profit over time and Customer LTV -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h4 class="text-sm font-medium mb-2">Profit au fil du temps</h4>
+                        <div class="h-56 relative">
+                            <canvas id="profitOverTimeChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <h4 class="text-sm font-medium mb-2">Valeur client (LTV)</h4>
+                        <div class="h-56 relative">
+                            <canvas id="customerLTVChart"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -409,567 +439,213 @@
 {% block extra_scripts %}
     <script>
     function reportsManager() {
-    console.log('reportsManager initialized');
-    return {
-        get canExport() {
-            // Only allow export for supported tabs: sales, inventory, financial
-            return ['sales', 'inventory', 'financial'].includes(this.activeReport);
-        },
+        // Lightweight reports manager for Alpine x-data
+        return {
+            activeReport: 'sales',
+            filters: { period: 'today', start_date: '', end_date: '' },
+            isLoading: false,
+            hasSalesData: false,
+            reportData: { sales: {}, inventory: {}, financial: {} },
+            salesChart: null,
+            productChart: null,
+            categoryChart: null,
+            profitChart: null,
+            customerChart: null,
+
+            get canExport() {
+                return ['sales', 'inventory', 'financial'].includes(this.activeReport);
+            },
+
             updateSalesChart(labels, amounts) {
-                // Only update if chart is initialized and datasets exist
                 if (this.salesChart && this.salesChart.data && Array.isArray(this.salesChart.data.datasets) && this.salesChart.data.datasets[0]) {
                     this.salesChart.data.labels = labels;
                     this.salesChart.data.datasets[0].data = amounts;
-                    try {
-                        this.salesChart.update();
-                    } catch (e) {
-                        console.error('Chart update error:', e);
-                    }
+                    try { this.salesChart.update(); } catch (e) { console.error('Chart update error:', e); }
                 }
             },
-            activeReport: 'sales',
-            filters: {
-                period: 'today',
-                start_date: '',
-                end_date: ''
-            },
-            prevPeriod: 'today', // Track previous period for x-effect
-            isLoading: false, // For loading spinner
-            hasSalesData: false, // For chart and message visibility
-            activities: [],
-            ai: {
-                summary: '',
-                summaryError: false,
-                restockSuggestions: [],
-                restockError: false,
-                priceSuggestions: [],
-                priceError: false,
-                forecastDays: 7,
-                forecastSummary: '',
-                forecastError: false,
-                showRestock: false,
-                showPrice: false
-            },
-                reportData: {
-                    sales: {
-                        total_sales: 0,
-                        revenue: 0,
-                        average_sale: 0,
-                        best_day: '-',
-                        top_products: []
-                    },
-                    inventory: {
-                        total_products: 0,
-                        low_stock: 0,
-                        out_of_stock: 0,
-                        stock_value: 0
-                    },
-                    financial: {
-                        total_revenue: 0,
-                        total_expenses: 0,
-                        net_profit: 0
-                    }
-                },
-                salesChart: null,
-                
-                init() {
-            // Remove watcher to prevent infinite loop
-            // Honor ?tab=... query parameter for deep links
-            const params = new URLSearchParams(window.location.search);
-            const tab = params.get('tab');
-            if (tab && ['sales','inventory','financial','customers','activities','ai_insights'].includes(tab)) {
-                this.activeReport = tab;
-            }
 
-            // Only set default period if not already set (preserve custom)
-            if (!this.filters.period) {
-                this.filters.period = 'today';
-            }
-            // Only set default dates if not custom
-            if (this.filters.period !== 'custom') {
+            init() {
+                // read ?tab= for deep links
+                const params = new URLSearchParams(window.location.search);
+                const tab = params.get('tab');
+                if (tab) this.activeReport = tab;
+
                 const now = new Date();
-                this.filters.start_date = now.toISOString().split('T')[0];
-                this.filters.end_date = now.toISOString().split('T')[0];
-            }
+                if (!this.filters.start_date) this.filters.start_date = now.toISOString().split('T')[0];
+                if (!this.filters.end_date) this.filters.end_date = now.toISOString().split('T')[0];
 
-            this.loadReportData().then(() => {
-                if (this.activeReport === 'sales') {
-                    this.initCharts();
-                }
-                if (this.activeReport === 'activities') this.loadActivities();
-                if (this.activeReport === 'ai_insights') this.loadAI();
-            });
-                },
-
-                setActiveReport(type) {
-            if (this.salesChart && typeof this.salesChart.destroy === 'function') {
-                this.salesChart.destroy();
-                this.salesChart = null;
-            }
-            this.activeReport = type;
-            // Do not reset custom date range when switching tabs
-            this.loadReportData().then(() => {
-                if (type === 'sales') {
-                    this.initCharts();
-                }
-            });
-},
-                
-                loadReportData() {
-            console.log('loadReportData called, activeReport:', this.activeReport);
-            this.isLoading = true;
-            // Get date range based on selected period
-            let dateParams = this.getDateRangeParams();
-            const tasks = [];
-
-            if (this.activeReport === 'sales') {
-                const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
-                    ? `${this.filters.start_date} au ${this.filters.end_date}`
-                    : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
-                tasks.push(
-                            apiFetch(`/api/reports/sales-report?start_date=${dateParams.startDate}&end_date=${dateParams.endDate}`)
-                                .then(data => {
-                                    console.log('DEBUG sales report:', data);
-                                    if (data.success) {
-                                        const stats = data.report.overall_statistics;
-                                        const periods = data.report.sales_by_period || [];
-                                        let bestDay = '-';
-                                        if (periods.length > 0) {
-                                            const maxEntry = periods.reduce((prev, curr) =>
-                                                Number(curr.total_revenue) > Number(prev.total_revenue) ? curr : prev
-                                            );
-                                            bestDay = maxEntry.period;
-                                        }
-                                        this.reportData.sales = {
-                                            total_sales: stats.total_sales || 0,
-                                            revenue: stats.total_revenue || 0,
-                                            average_sale: stats.avg_sale_amount || 0,
-                                            best_day: bestDay,
-                                            top_products: data.report.top_products || [],
-                                            sales_by_period: data.report.sales_by_period || []
-                                        };
-                                        const dataSourceElement = document.getElementById('data-source-info');
-                                        if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Source des données: ${data.report.metadata?.report_type || 'Rapport de ventes'} - ${dateLabel}`;
-                                        }
-                                        let labels = (data.report.sales_by_period || []).map(p => p.period);
-                                        let amounts = (data.report.sales_by_period || []).map(p => p.total_revenue);
-                                        this.updateSalesChart(labels, amounts);
-                                    }
-                                })
-                                .catch(error => {
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Erreur lors du chargement du rapport de ventes.', 'error');
-                                    }
-                                    console.error('Error loading sales report:', error);
-                                })
-                        );
+                // Load initial data
+                this.loadReportData().then(async () => { 
+                    // Initialize charts via static script
+                    if (window.ReportsCharts && typeof window.ReportsCharts.init === 'function') {
+                        await window.ReportsCharts.init(this);
                     }
-
-                    if (this.activeReport === 'inventory') {
-                        const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
-                            ? `${this.filters.start_date} au ${this.filters.end_date}`
-                            : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
-                        tasks.push(
-                            apiFetch('/api/inventory/stats')
-                                .then(data => {
-                                    if (data.success) {
-                                        this.reportData.inventory = {
-                                            total_products: Number(data.stats.total || 0),
-                                            low_stock: Number(data.stats.low_stock || 0),
-                                            out_of_stock: Number(data.stats.out_of_stock || 0),
-                                            stock_value: Number((data.stats.inventory_value || data.stats.total_value) ?? 0)
-                                        };
-                                        const dataSourceElement = document.getElementById('data-source-info');
-                                        if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Données d'inventaire - ${dateLabel}`;
-                                        }
-                                    }
-                                })
-                                .catch(error => {
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Erreur lors du chargement du rapport d\'inventaire.', 'error');
-                                    }
-                                    console.error('Error loading inventory report:', error);
-                                })
-                        );
-                    }
-
-                    if (this.activeReport === 'financial') {
-                        const dateLabel = this.filters.period === 'custom' && this.filters.start_date && this.filters.end_date
-                            ? `${this.filters.start_date} au ${this.filters.end_date}`
-                            : (this.filters.period === 'today' ? "Aujourd'hui" : this.filters.period === 'week' ? 'Cette semaine' : this.filters.period === 'month' ? 'Ce mois' : this.filters.period === 'quarter' ? 'Ce trimestre' : 'Cette année');
-                        tasks.push(
-                            apiFetch('/api/finance/financial-summary')
-                                .then(data => {
-                                    if (data.success) {
-                                        const fs = data.financial_summary || {};
-                                        const totalRev = Number(fs.total_revenue || 0);
-                                        const totalExp = fs.total_expenses !== undefined ? Number(fs.total_expenses || 0) : (Number(fs.total_business_expenses || 0) + Number(fs.total_personal_expenses || 0));
-                                        this.reportData.financial = {
-                                            total_revenue: totalRev,
-                                            total_expenses: totalExp,
-                                            net_profit: totalRev - totalExp
-                                        };
-                                        const dataSourceElement = document.getElementById('data-source-info');
-                                        if (dataSourceElement) {
-                                            dataSourceElement.textContent = `Résumé financier - ${dateLabel}`;
-                                        }
-                                    }
-                                })
-                                .catch(error => {
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Erreur lors du chargement du rapport financier.', 'error');
-                                    }
-                                    console.error('Error loading financial report:', error);
-                                })
-                        );
-                    }
-
-            return Promise.all(tasks)
-                .finally(() => {
-                    if (this.activeReport === 'activities') this.loadActivities();
-                    if (this.activeReport === 'ai_insights') this.loadAI();
-                    this.isLoading = false;
+                    // in case ReportsCharts wasn't available, attempt to call existing initCharts if present
+                    if (!window.ReportsCharts && typeof this.initCharts === 'function') await this.initCharts();
                 });
-                },
-                loadActivities() {
-                        apiFetch('/api/dashboard/activities?limit=50')
-                            .then(data => {
-                                if (data?.success) {
-                                    this.activities = data.activities || [];
-                                } else {
-                                    this.activities = [];
-                                    if (typeof window.showNotification === 'function') {
-                                        window.showNotification('Aucune activité trouvée ou erreur lors du chargement.', 'warning');
-                                    }
-                                }
-                            })
-                            .catch(err => {
-                                this.activities = [];
-                                if (typeof window.showNotification === 'function') {
-                                    window.showNotification('Erreur lors du chargement des activités.', 'error');
-                                }
-                                console.error('Error loading activities', err);
-                            });
-                },
-                loadAI() {
-                    // Sales forecast summary (expected revenue)
-                    this.ai.forecastError = false;
-                    apiFetch('/api/ai/sales-forecast')
-                        .then(d => {
-                            if (d?.success && d.forecast && d.forecast.summary) {
-                                this.ai.forecastSummary = d.forecast.summary;
-                                this.ai.forecastDays = d.forecast.days || 7;
-                            } else {
-                                this.ai.forecastSummary = '';
-                                this.ai.forecastError = true;
-                            }
-                        })
-                        .catch(()=>{ this.ai.forecastError = true; });
-                    // Summary
-                    this.ai.summaryError = false;
-                    apiFetch('/api/ai/summary-assistant?period=week')
-                        .then(d => { if (d?.success) this.ai.summary = d.summary?.text || ''; else this.ai.summaryError = true; })
-                        .catch(()=>{ this.ai.summaryError = true; });
-                    // Restock suggestions
-                    this.loadRestockSuggestions();
-                    // Price suggestions
-                    this.loadPriceSuggestions();
-                },
-                loadRestockSuggestions() {
-                    this.ai.restockError = false;
-                    apiFetch('/api/ai/restock-suggestions')
-                        .then(d => { if (d?.success) this.ai.restockSuggestions = d.suggestions || []; else this.ai.restockError = true; })
-                        .catch(()=>{ this.ai.restockError = true; });
-                },
-                loadPriceSuggestions() {
-                    this.ai.priceError = false;
-                    apiFetch('/api/ai/price-suggestions')
-                        .then(d => {
-                            if (d?.success) {
-                                this.ai.priceSuggestions = (d.suggestions || []).filter(s => s.suggested_price != s.current_price);
-                            } else {
-                                this.ai.priceError = true;
-                            }
-                        })
-                        .catch(()=>{ this.ai.priceError = true; });
-                },
-                async acceptRestockSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/restock-suggestions/accept', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de réapprovisionnement acceptée.', 'success');
-                            }
-                            // Remove from list
-                            this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors de l\'acceptation: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                async rejectRestockSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/restock-suggestions/reject', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de réapprovisionnement rejetée.', 'info');
-                            }
-                            this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors du rejet: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                async acceptPriceSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/price-suggestions/accept', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de prix acceptée.', 'success');
-                            }
-                            this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors de l\'acceptation: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                async rejectPriceSuggestion(sugg) {
-                    try {
-                        const resp = await apiFetch('/api/ai/price-suggestions/reject', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ id: sugg.id })
-                        });
-                        if (resp.success) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Suggestion de prix rejetée.', 'info');
-                            }
-                            this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s => s.id !== sugg.id);
-                        } else {
-                            throw new Error(resp.message || 'Erreur inconnue');
-                        }
-                    } catch (e) {
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors du rejet: ' + (e.message || e), 'error');
-                        }
-                    }
-                },
-                
-                initCharts() {
-                    // Sales Chart
-                    const salesCtx = document.getElementById('salesChart');
-                    if (salesCtx) {
-                        if (this.salesChart && typeof this.salesChart.destroy === 'function') {
-                            this.salesChart.destroy();
-                        }
-                        // Use last loaded data if available
-                        let labels = [];
-                        let amounts = [];
-                        if (this.reportData && this.reportData.sales && Array.isArray(this.reportData.sales.top_products)) {
-                            // If sales_by_period is available, use it for the chart
-                            if (Array.isArray(this.reportData.sales.sales_by_period)) {
-                                labels = this.reportData.sales.sales_by_period.map(p => p.period);
-                                amounts = this.reportData.sales.sales_by_period.map(p => p.total_revenue);
-                            }
-                        }
-                        this.salesChart = new Chart(salesCtx.getContext('2d'), {
-                            type: 'line',
-                            data: {
-                                labels: labels,
-                                datasets: [{
-                                    label: `Ventes (${window.AppConfig?.currentCurrency || 'MRU'})`,
-                                    data: amounts,
-                                    borderColor: 'rgb(59, 130, 246)',
-                                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                    tension: 0.4,
-                                    fill: true
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                    y: {
-                                        beginAtZero: true,
-                                        ticks: {
-                                            callback: function(value) {
-                                                return window.formatCurrency ? window.formatCurrency(value) : (value + ' ' + (window.AppConfig?.currentCurrency || 'MRU'));
-                                            }
-                                        }
-                                    }
-                                },
-                                plugins: {
-                                    legend: {
-                                        display: true,
-                                        position: 'top'
-                                    },
-                                    title: {
-                                        display: true,
-                                        text: 'Évolution des ventes',
-                                        font: { size: 18 },
-                                        padding: { top: 10, bottom: 20 }
-                                    }
+            },
+
+            setActiveReport(type) {
+                this.activeReport = type;
+                this.loadReportData().then(async ()=>{
+                    if (window.ReportsCharts && typeof window.ReportsCharts.updateAll === 'function') await window.ReportsCharts.updateAll(this);
+                });
+            },
+
+            loadReportData() {
+                this.isLoading = true;
+                const dr = this.getDateRangeParams();
+                const tasks = [];
+
+                if (this.activeReport === 'sales') {
+                    tasks.push(apiFetch(`/api/reports/sales-report?start_date=${dr.startDate}&end_date=${dr.endDate}`)
+                        .then(data => {
+                            if (data?.success) {
+                                const stats = data.report.overall_statistics || {};
+                                this.reportData.sales = {
+                                    total_sales: stats.total_sales || 0,
+                                    revenue: stats.total_revenue || 0,
+                                    average_sale: stats.avg_sale_amount || 0,
+                                    best_day: (data.report.sales_by_period||[]).reduce((p,c)=> (Number(c.total_revenue||0) > Number(p.total_revenue||0) ? c : p), {period:'-' }).period,
+                                    top_products: data.report.top_products || [],
+                                    sales_by_period: data.report.sales_by_period || []
+                                };
+                                this.hasSalesData = (this.reportData.sales.sales_by_period||[]).length > 0;
+                                this.updateSalesChart((this.reportData.sales.sales_by_period||[]).map(p=>p.period), (this.reportData.sales.sales_by_period||[]).map(p=>p.total_revenue));
+                                // update static charts if available
+                                if (window.ReportsCharts && typeof window.ReportsCharts.updateAll === 'function') {
+                                    window.ReportsCharts.updateAll(this).catch(()=>{});
                                 }
                             }
-                        });
-                    }
-                },
-                
-                getDateRangeParams() {
-                    const today = new Date();
-                    let startDate = new Date();
-                    let endDate = new Date();
-                    
-                    // Calculate date range based on selected period
-                    switch(this.filters.period) {
-                        case 'today':
-                            // Just today
-                            break;
-                        case 'week':
-                            // Last 7 days
-                            startDate.setDate(today.getDate() - 7);
-                            break;
-                        case 'month':
-                            // Current month
-                            startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                            break;
-                        case 'quarter':
-                            // Current quarter (3 months)
-                            startDate.setMonth(today.getMonth() - 3);
-                            break;
-                        case 'year':
-                            // Current year
-                            startDate = new Date(today.getFullYear(), 0, 1);
-                            break;
-                        case 'custom':
-                            // Use custom dates
-                            if (this.filters.start_date) {
-                                startDate = new Date(this.filters.start_date);
-                            }
-                            if (this.filters.end_date) {
-                                endDate = new Date(this.filters.end_date);
-                            }
-                            break;
-                        default:
-                            // Default to today
-                            break;
-                    }
-                    
-                    // Format dates as YYYY-MM-DD
-                    const formatDate = (date) => {
-                        return date.toISOString().split('T')[0];
-                    };
-                    
-                    return {
-                        startDate: formatDate(startDate),
-                        endDate: formatDate(endDate)
-                    };
-                },
-
-                updateReport() {
-                    this.loadReportData();
-                    if (this.salesChart) {
-                        this.salesChart.update();
-                    }
-                },
-                
-                generateReport() {
-                    if (this.filters.period === 'custom') {
-                        if (!this.filters.start_date || !this.filters.end_date || this.filters.start_date > this.filters.end_date) {
-                            if (typeof window.showNotification === 'function') {
-                                window.showNotification('Veuillez sélectionner une période personnalisée valide (date de début avant date de fin).', 'error');
-                            }
-                            return;
-                        }
-                    }
-                    if (typeof window.showNotification === 'function') {
-                        window.showNotification(`Génération du rapport ${this.activeReport} pour la période ${this.filters.period}...`, 'info');
-                    }
-                    this.loadReportData();
-                },
-                
-                exportToPDF() {
-                    // Simple print to PDF using browser
-                    window.print();
-                },
-                
-                exportToExcel() {
-                    // Use CSV exports; Excel can open CSV files
-                    this.exportWithFilters();
-                },
-
-                exportToCSV() {
-                    this.exportWithFilters();
-                },
-
-                exportWithFilters() {
-                    const params = new URLSearchParams({
-                        period: this.filters.period,
-                        start_date: this.filters.start_date || '',
-                        end_date: this.filters.end_date || ''
-                    }).toString();
-                    let endpoint;
-                    switch (this.activeReport) {
-                        case 'sales':
-                            endpoint = '/api/reports/export/sales';
-                            break;
-                        case 'inventory':
-                            endpoint = '/api/reports/export/products';
-                            break;
-                        case 'financial':
-                            endpoint = '/api/reports/export/expenses';
-                            break;
-                        default:
-                            endpoint = '/api/reports/export/sales';
-                    }
-                    try {
-                        window.open(`${endpoint}?${params}`, '_blank');
-                    } catch (e) {
-                        console.error('Error exporting report', e);
-                        if (typeof window.showNotification === 'function') {
-                            window.showNotification('Erreur lors de l\'export du rapport.', 'error');
-                        }
-                    }
-                },
-                
-                scheduleReport() {
-                    if (typeof window.showNotification === 'function') {
-                        window.showNotification('Programmation du rapport...', 'info');
-                    }
+                        }).catch(err=>console.error('sales report load err', err)));
                 }
-            }
-        }
+
+                if (this.activeReport === 'inventory') {
+                    tasks.push(apiFetch('/api/inventory/stats').then(d=>{ if (d?.success) this.reportData.inventory = { total_products: Number(d.stats.total||0), low_stock: Number(d.stats.low_stock||0), out_of_stock: Number(d.stats.out_of_stock||0), stock_value: Number(d.stats.inventory_value||d.stats.total_value||0) }; }).catch(()=>{}));
+                }
+
+                if (this.activeReport === 'financial') {
+                    tasks.push(apiFetch('/api/finance/financial-summary').then(d=>{ if (d?.success) this.reportData.financial = d.financial_summary || {}; }).catch(()=>{}));
+                }
+
+                return Promise.all(tasks).finally(()=>{ this.isLoading = false; });
+            },
+
+            async initCharts() {
+                // delegate chart initialization to reports-charts.js if available
+                if (window.ReportsCharts && typeof window.ReportsCharts.init === 'function') {
+                    try { await window.ReportsCharts.init(this); } catch(e){ console.error('ReportsCharts.init failed', e); }
+                }
+            },
+
+            getDateRangeParams() {
+                const today = new Date();
+                let startDate = new Date(); let endDate = new Date();
+                switch(this.filters.period) {
+                    case 'week': startDate.setDate(today.getDate()-7); break;
+                    case 'month': startDate = new Date(today.getFullYear(), today.getMonth(), 1); break;
+                    case 'quarter': startDate.setMonth(today.getMonth()-3); break;
+                    case 'year': startDate = new Date(today.getFullYear(),0,1); break;
+                    case 'custom': if (this.filters.start_date) startDate = new Date(this.filters.start_date); if (this.filters.end_date) endDate = new Date(this.filters.end_date); break;
+                }
+                const fmt = d=>d.toISOString().split('T')[0];
+                return { startDate: fmt(startDate), endDate: fmt(endDate) };
+            },
+            // live data: activities and AI helpers
+            async loadActivities() {
+                try {
+                    const dr = this.getDateRangeParams();
+                    const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}&limit=100`;
+                    const data = await apiFetch('/api/dashboard/activities' + q).catch(()=>null);
+                    if (data?.success) this.activities = data.activities || [];
+                    else this.activities = [];
+                } catch (e) { console.error('loadActivities error', e); this.activities = []; }
+            },
+
+            async loadAI() {
+                try {
+                    const dr = this.getDateRangeParams();
+                    const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}`;
+                    // forecast
+                    const f = await apiFetch('/api/ai/sales-forecast' + q).catch(()=>null);
+                    if (f?.success && f.forecast) { this.ai.forecastSummary = f.forecast.summary || ''; this.ai.forecastDays = f.forecast.days || 7; } else { this.ai.forecastSummary = ''; }
+                    // summary
+                    const s = await apiFetch('/api/ai/summary-assistant' + q).catch(()=>null);
+                    if (s?.success) { this.ai.summary = s.summary?.text || ''; } else { this.ai.summary = this.ai.summary || ''; }
+                    // suggestions
+                    await this.loadRestockSuggestions();
+                    await this.loadPriceSuggestions();
+                } catch (e) { console.error('loadAI error', e); this.ai.summaryError = true; }
+            },
+
+            async loadRestockSuggestions() {
+                try {
+                    const dr = this.getDateRangeParams();
+                    const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}`;
+                    const d = await apiFetch('/api/ai/restock-suggestions' + q).catch(()=>null);
+                    if (d?.success) { this.ai.restockSuggestions = d.suggestions || []; this.ai.restockError = false; }
+                    else { this.ai.restockSuggestions = []; this.ai.restockError = true; }
+                } catch (e) { console.error('restock suggestions error', e); this.ai.restockError = true; }
+            },
+
+            async loadPriceSuggestions() {
+                try {
+                    const dr = this.getDateRangeParams();
+                    const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}`;
+                    const d = await apiFetch('/api/ai/price-suggestions' + q).catch(()=>null);
+                    if (d?.success) { this.ai.priceSuggestions = d.suggestions || []; this.ai.priceError = false; }
+                    else { this.ai.priceSuggestions = []; this.ai.priceError = true; }
+                } catch (e) { console.error('price suggestions error', e); this.ai.priceError = true; }
+            },
+
+            async acceptRestockSuggestion(sugg) {
+                try {
+                    const resp = await apiFetch('/api/ai/restock-suggestions/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: sugg.id }) });
+                    if (resp?.success) { this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s=>s.id !== sugg.id); }
+                } catch (e) { console.error('acceptRestockSuggestion error', e); }
+            },
+
+            async rejectRestockSuggestion(sugg) {
+                try {
+                    const resp = await apiFetch('/api/ai/restock-suggestions/reject', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: sugg.id }) });
+                    if (resp?.success) { this.ai.restockSuggestions = this.ai.restockSuggestions.filter(s=>s.id !== sugg.id); }
+                } catch (e) { console.error('rejectRestockSuggestion error', e); }
+            },
+
+            async acceptPriceSuggestion(sugg) {
+                try {
+                    const resp = await apiFetch('/api/ai/price-suggestions/accept', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: sugg.id }) });
+                    if (resp?.success) { this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s=>s.id !== sugg.id); }
+                } catch (e) { console.error('acceptPriceSuggestion error', e); }
+            },
+
+            async rejectPriceSuggestion(sugg) {
+                try {
+                    const resp = await apiFetch('/api/ai/price-suggestions/reject', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id: sugg.id }) });
+                    if (resp?.success) { this.ai.priceSuggestions = this.ai.priceSuggestions.filter(s=>s.id !== sugg.id); }
+                } catch (e) { console.error('rejectPriceSuggestion error', e); }
+            },
+
+            // export helpers (unchanged)
+            exportWithFilters() {
+                const params = new URLSearchParams({ period: this.filters.period, start_date: this.filters.start_date||'', end_date: this.filters.end_date||'' }).toString();
+                let endpoint = '/api/reports/export/sales';
+                if (this.activeReport==='inventory') endpoint = '/api/reports/export/products';
+                if (this.activeReport==='financial') endpoint = '/api/reports/export/expenses';
+                window.open(`${endpoint}?${params}`, '_blank');
+            },
+            exportToCSV(){ this.exportWithFilters(); },
+            exportToExcel(){ this.exportWithFilters(); },
+            exportToPDF(){ window.print(); },
+            scheduleReport(){ if (typeof window.showNotification === 'function') window.showNotification('Programmation du rapport...', 'info'); }
+        };
+    }
         
         function changeLanguage(lang) {
             window.location.href = `/set-language/${lang}`;
         }
     </script>
+    <script src="/static/js/reports-init.js"></script>
     
     <style>
         [x-cloak] { display: none !important; }
