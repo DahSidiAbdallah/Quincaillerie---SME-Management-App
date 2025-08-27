@@ -446,6 +446,20 @@
                 
                 <!-- Right side items -->
                 <div class="flex items-center space-x-4">
+                    <!-- Notification Bell -->
+                    <div class="relative">
+                        <button id="notificationBell" class="relative focus:outline-none px-2 py-1 rounded hover:bg-gray-700" title="Notifications">
+                            <i class="fa fa-bell text-xl"></i>
+                            <span id="notificationBadge" class="absolute -top-1 -right-1 bg-red-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[1.2em] text-center"></span>
+                        </button>
+                        <div id="notificationDropdown" class="hidden absolute right-0 mt-2 w-80 max-w-xs bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200 overflow-y-auto max-h-96">
+                        {% if user_role == 'admin' %}
+                            <div class="px-4 py-2 border-t border-gray-200">
+                                <button id="sendTestPushBtn" class="w-full bg-blue-600 text-white rounded px-3 py-1 text-sm hover:bg-blue-700">Envoyer une notification test</button>
+                            </div>
+                        {% endif %}
+                        </div>
+                    </div>
                     <!-- Sync Status -->
                     <div id="syncStatus" class="hidden sm:flex items-center text-sm">
                         <div id="syncIndicator" class="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
@@ -830,6 +844,28 @@
     
     {% block extra_scripts %}{% endblock %}
     </body>
+        <script>
+        // Send test push notification (admin only)
+        document.addEventListener('DOMContentLoaded', function() {
+                var btn = document.getElementById('sendTestPushBtn');
+                if (btn) {
+                        btn.addEventListener('click', function() {
+                                fetch('/api/push/test', {method: 'POST', credentials: 'same-origin'})
+                                    .then(r => r.json())
+                                    .then(data => {
+                                        alert(data.success ? 'Notification test envoyée !' : 'Erreur: ' + (data.message || ''));
+                                    });
+                        });
+                }
+        });
+        </script>
+        {% if config['VAPID_PUBLIC_KEY'] %}
+        <script>
+            window.PushVAPIDPublicKey = "{{ config['VAPID_PUBLIC_KEY'] }}";
+        </script>
+        {% endif %}
+    <script src="{{ url_for('static', filename='js/push-init.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/notifications-bell.js') }}"></script>
     <script>
     // --- Global Session Timeout Warning ---
     (function() {

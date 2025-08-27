@@ -20,6 +20,64 @@ logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
+    def create_notification(self, type, message, url=None, user_id=None):
+        """Create a new notification (global if user_id is None)."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO notifications (user_id, type, message, url, is_read, created_at)
+                VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP)
+            ''', (user_id, type, message, url))
+            conn.commit()
+            return {'success': True, 'notification_id': cursor.lastrowid}
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error creating notification: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            conn.close()
+
+    def get_notifications(self, user_id=None, unread_only=False, limit=20):
+        """Fetch notifications for a user (or global), most recent first."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            query = '''
+                SELECT * FROM notifications
+                WHERE (? IS NULL OR user_id = ? OR user_id IS NULL)
+            '''
+            params = [user_id, user_id]
+            if unread_only:
+                query += ' AND is_read = 0'
+            query += ' ORDER BY created_at DESC LIMIT ?'
+            params.append(limit)
+            cursor.execute(query, params)
+            rows = cursor.fetchall()
+            notifications = [dict(row) for row in rows]
+            return notifications
+        except Exception as e:
+            logger.error(f"Error fetching notifications: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def mark_notification_read(self, notification_id):
+        """Mark a notification as read."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute('''
+                UPDATE notifications SET is_read = 1 WHERE id = ?
+            ''', (notification_id,))
+            conn.commit()
+            return {'success': True}
+        except Exception as e:
+            conn.rollback()
+            logger.error(f"Error marking notification read: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            conn.close()
     def __init__(self, db_path=None):
         """Initialize with a consistent database path."""
         env_path = os.environ.get('DATABASE_URL') or os.environ.get('DATABASE_PATH')
@@ -62,6 +120,20 @@ class DatabaseManager:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_login TIMESTAMP,
                     is_active BOOLEAN DEFAULT 1
+                )
+            ''')
+
+            # Notifications table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS notifications (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    type TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    url TEXT,
+                    is_read BOOLEAN DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
 

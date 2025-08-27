@@ -197,6 +197,7 @@ def create_product():
         unit = data.get('unit') or None
         depot = data.get('depot') or data.get('location') or None
 
+
         cursor.execute('''
             INSERT INTO products 
             (name, description, purchase_price, sale_price, sku, barcode, category, supplier, current_stock, reorder_level, created_by, unit, depot)
@@ -207,6 +208,16 @@ def create_product():
 
         product_id = cursor.lastrowid
         conn.commit()
+
+        # --- Automated Notification: Product Added ---
+        try:
+            db_manager.create_notification(
+                type='product_added',
+                message=f"Nouveau produit ajouté: {name}",
+                url=f"/products/{product_id}"
+            )
+        except Exception:
+            pass
 
         # Log the creation
         db_manager.log_user_action(
@@ -474,9 +485,7 @@ def delete_product(product_id):
     if auth_check:
         return auth_check
 
-    # Only admin can delete products
-    if session.get('user_role') != 'admin':
-        return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
+
 
     conn = None
     try:
@@ -1324,9 +1333,7 @@ def batch_product_operation():
         
         op_info = operations[operation]
         
-        # Check admin permission if required
-        if op_info['admin_only'] and session.get('user_role') != 'admin':
-            return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
+
         
         # Execute operation for each product
         updated_count = 0

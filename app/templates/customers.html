@@ -56,9 +56,16 @@
                                         <button @click="showEditCustomerModal(customer.id)" class="text-indigo-600 hover:text-indigo-900">
                                             <i class="fas fa-edit"></i> Éditer
                                         </button>
-                                        <button @click="confirmDelete(customer.id)" class="text-red-600 hover:text-red-900">
-                                            <i class="fas fa-trash"></i> Supprimer
-                                        </button>
+                                        <template x-if="window.AppConfig?.userRole === 'admin'">
+                                            <button @click="confirmDelete(customer.id)" class="text-red-600 hover:text-red-900">
+                                                <i class="fas fa-trash"></i> Supprimer
+                                            </button>
+                                        </template>
+                                        <template x-if="window.AppConfig?.userRole !== 'admin'">
+                                            <button disabled class="text-gray-400 cursor-not-allowed">
+                                                <i class="fas fa-trash"></i> Supprimer
+                                            </button>
+                                        </template>
                                     </div>
                                 </td>
                             </tr>

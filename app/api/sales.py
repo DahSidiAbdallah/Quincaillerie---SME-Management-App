@@ -92,9 +92,11 @@ def create_sale():
         
         # Add sale items and update stock
         total_profit = 0
+        low_stock_products = []
+        stock_rupture_products = []
         for item in data['sale_items']:
             # Get product details
-            cursor.execute('SELECT purchase_price, sale_price, current_stock FROM products WHERE id = ?', 
+            cursor.execute('SELECT purchase_price, sale_price, current_stock, name, reorder_level FROM products WHERE id = ?', 
                           (item['product_id'],))
             product = cursor.fetchone()
             
@@ -131,6 +133,13 @@ def create_sale():
                 f'Vente à {data.get("customer_name", "Client")}',
                 session['user_id']
             ))
+
+            # Check for low stock and stock rupture
+            reorder_level = product[4] if product[4] is not None else 5
+            if new_stock <= reorder_level:
+                low_stock_products.append((item['product_id'], product[3], new_stock, reorder_level))
+            if new_stock == 0:
+                stock_rupture_products.append((item['product_id'], product[3]))
         
         # If it's a credit sale, create debt record
         if is_credit:
@@ -157,7 +166,40 @@ def create_sale():
             cursor.execute('UPDATE sales SET status = ? WHERE id = ?', ('paid', sale_id))
 
         conn.commit()
-        
+
+        # --- Automated Notifications ---
+        # 1. Sale made
+        try:
+            db_manager.create_notification(
+                type='sale',
+                message=f"Nouvelle vente #{sale_id} : {data['total_amount']} à {data.get('customer_name', 'Client')}",
+                url=f"/sales/{sale_id}"
+            )
+        except Exception:
+            pass
+
+        # 2. Low stock
+        for pid, pname, stock, reorder in low_stock_products:
+            try:
+                db_manager.create_notification(
+                    type='low_stock',
+                    message=f"Stock faible: {pname} (reste {stock}, seuil {reorder})",
+                    url=f"/products/{pid}"
+                )
+            except Exception:
+                pass
+
+        # 3. Stock rupture
+        for pid, pname in stock_rupture_products:
+            try:
+                db_manager.create_notification(
+                    type='stock_rupture',
+                    message=f"Rupture de stock: {pname}",
+                    url=f"/products/{pid}"
+                )
+            except Exception:
+                pass
+
         # Log the sale
         db_manager.log_user_action(
             session['user_id'],
@@ -165,22 +207,21 @@ def create_sale():
             # Include sale id in the human-readable log and current currency
             (lambda cur: f'Vente créée #{sale_id}: {data["total_amount"]} {cur} à {data.get("customer_name", "Client")}')( (db_manager.get_app_settings().get('currency') or 'MRU') ),
         )
-        
+
         # Add to sync queue
         try:
             db_manager.add_to_sync_queue('sales', sale_id, 'insert', data)
         except Exception:
             pass
-        
+
         conn.close()
-        
+
         return jsonify({
             'success': True,
             'sale_id': sale_id,
             'total_profit': total_profit,
             'message': 'Vente enregistrée avec succès'
         })
-        
     except Exception as e:
         logger.error(f"Error creating sale: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la création de la vente'}), 500
@@ -208,10 +249,24 @@ def get_sales():
         from datetime import datetime
         today = datetime.now().strftime('%Y-%m-%d')
         cursor.execute("""
-            UPDATE sales
-            SET status='retard'
+            SELECT id, customer_name, credit_due_date FROM sales
             WHERE is_credit=1 AND status='pending' AND credit_due_date IS NOT NULL AND credit_due_date < ?
         """, (today,))
+        overdue_sales = cursor.fetchall()
+        # Update status and send notification for each overdue
+        for row in overdue_sales:
+            sale_id = row['id'] if isinstance(row, dict) or hasattr(row, '__getitem__') else row[0]
+            customer_name = row['customer_name'] if isinstance(row, dict) or hasattr(row, '__getitem__') else row[1]
+            due_date = row['credit_due_date'] if isinstance(row, dict) or hasattr(row, '__getitem__') else row[2]
+            cursor.execute("UPDATE sales SET status='retard' WHERE id = ?", (sale_id,))
+            try:
+                db_manager.create_notification(
+                    type='payment_delay',
+                    message=f"Paiement en retard: Vente #{sale_id} à {customer_name} (échéance {due_date})",
+                    url=f"/sales/{sale_id}"
+                )
+            except Exception:
+                pass
         conn.commit()
 
         # Get query parameters
@@ -392,8 +447,7 @@ def update_sale(sale_id):
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    if session.get('user_role') != 'admin':
-        return jsonify({'success': False, 'message': 'Accès administrateur requis'}), 403
+
 
     data = request.get_json()
     if not data:

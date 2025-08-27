@@ -522,8 +522,8 @@
                         <option value="">Sélectionner une opération</option>
                         <option value="update_category">Modifier catégorie</option>
                         <option value="update_supplier">Modifier fournisseur</option>
-                        <option value="deactivate">Désactiver produits</option>
-                        <option value="activate">Activer produits</option>
+                        <option value="deactivate" :disabled="window.AppConfig?.userRole !== 'admin'">Désactiver produits</option>
+                        <option value="activate" :disabled="window.AppConfig?.userRole !== 'admin'">Activer produits</option>
                     </select>
                 </div>
                 
@@ -1305,6 +1305,7 @@
         const stockLevel = getStockLevel(currentStock, minStock);
         const stockClass = getStockClass(stockLevel);
         
+        const isAdmin = window.AppConfig?.userRole === 'admin';
         div.innerHTML = `
             <div class="flex items-start justify-between mb-3">
                 <div class="flex-1">
@@ -1318,9 +1319,9 @@
                     <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-800" title="Modifier">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-800" title="Supprimer">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    ${isAdmin
+                        ? `<button onclick=\"deleteProduct(${product.id})\" class=\"text-red-600 hover:text-red-800\" title=\"Supprimer\"><i class=\"fas fa-trash-alt\"></i></button>`
+                        : `<button disabled class=\"text-gray-400 cursor-not-allowed\" title=\"Action réservée à l'administrateur\"><i class=\"fas fa-trash-alt\"></i></button>`}
                 </div>
             </div>
             <div class="space-y-2 mb-2">
@@ -1434,9 +1435,9 @@
                         <button onclick="viewDetails(${product.id})" class="text-gray-600 hover:text-gray-900 flex items-center" title="Détails">
                             <i class="fas fa-info-circle mr-1"></i> Détails
                         </button>
-                        <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-900 flex items-center" title="Supprimer">
-                            <i class="fas fa-trash-alt mr-1"></i> Supprimer
-                        </button>
+                        ${window.AppConfig?.userRole === 'admin'
+                            ? `<button onclick=\"deleteProduct(${product.id})\" class=\"text-red-600 hover:text-red-900 flex items-center\" title=\"Supprimer\"><i class=\"fas fa-trash-alt mr-1\"></i> Supprimer</button>`
+                            : `<button disabled class=\"text-gray-400 flex items-center cursor-not-allowed\" title=\"Action réservée à l'administrateur\"><i class=\"fas fa-trash-alt mr-1\"></i> Supprimer</button>`}
                     </div>
                 </td>
             `;

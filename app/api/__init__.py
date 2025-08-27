@@ -8,3 +8,4 @@ Each module defines a Blueprint for a specific functionality area.
 from . import auth, dashboard, inventory, sales, finance, reports, ai_insights
 from . import settings
 from . import admin
+from . import notifications

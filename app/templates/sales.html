@@ -158,9 +158,16 @@
                                 <button x-show="sale.status === 'pending' || sale.status === 'retard'" @click="markSalePaid(sale)" class="text-emerald-600 hover:text-emerald-800 ml-3" :title="t('sales_mark_paid')">
                                     <i class="fas fa-check-circle"></i>
                                 </button>
-                                <button x-show="window.AppConfig?.userRole === 'admin'" @click="openDeleteSale(sale)" class="text-red-600 hover:text-red-800 ml-3" :title="t('sales_delete')">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                                <template x-if="window.AppConfig?.userRole === 'admin'">
+                                    <button @click="openDeleteSale(sale)" class="text-red-600 hover:text-red-800 ml-3" :title="t('sales_delete')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </template>
+                                <template x-if="window.AppConfig?.userRole !== 'admin'">
+                                    <button disabled class="text-gray-400 ml-3 cursor-not-allowed" :title="t('admin_only_action')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </template>
                             </td>
                         </tr>
                     </template>

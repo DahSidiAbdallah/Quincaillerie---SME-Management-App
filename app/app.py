@@ -35,6 +35,7 @@ import logging
 # Import availability flag (actual imports occur in init block below)
 MODULES_AVAILABLE = True
 
+
 # Initialize Flask app
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'quincaillerie-app-2025-secure-key')
@@ -42,6 +43,23 @@ app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 # Enable/disable debug and test pages via environment flag (default off)
 app.config['DEBUG_PAGES'] = os.environ.get('DEBUG_PAGES', '0') in ('1', 'true', 'True')
+
+# Load VAPID keys from environment or generate if missing
+import base64
+try:
+    from pywebpush import generate_vapid_private_key, generate_vapid_public_key
+    if not app.config.get('VAPID_PRIVATE_KEY'):
+        app.config['VAPID_PRIVATE_KEY'] = os.environ.get('VAPID_PRIVATE_KEY')
+    if not app.config.get('VAPID_PUBLIC_KEY'):
+        app.config['VAPID_PUBLIC_KEY'] = os.environ.get('VAPID_PUBLIC_KEY')
+    if not app.config['VAPID_PRIVATE_KEY'] or not app.config['VAPID_PUBLIC_KEY']:
+        priv = generate_vapid_private_key()
+        pub = generate_vapid_public_key(priv)
+        app.config['VAPID_PRIVATE_KEY'] = priv
+        app.config['VAPID_PUBLIC_KEY'] = pub
+except ImportError:
+    app.config['VAPID_PRIVATE_KEY'] = ''
+    app.config['VAPID_PUBLIC_KEY'] = ''
 
 # Ensure upload directory exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -59,6 +77,7 @@ sync_manager = None
 auth_bp = inventory_bp = sales_bp = customers_bp = finance_bp = reports_bp = ai_bp = dashboard_bp = settings_bp = admin_bp = None
 
 if MODULES_AVAILABLE:
+    from api.push import push_api
     try:
         # Initialize database manager first
         from db.database import DatabaseManager
@@ -72,6 +91,7 @@ if MODULES_AVAILABLE:
         from api.ai_insights import ai_bp
         from api.dashboard import dashboard_bp
         from api.settings import settings_bp, init_settings_routes
+        from api.notifications import notifications_api
         from models.ml_forecasting import StockPredictor, SalesForecaster
         from offline.sync_manager import SyncManager
         from autologin import register_autologin_blueprint
@@ -113,6 +133,8 @@ if MODULES_AVAILABLE:
         app.register_blueprint(ai_bp, url_prefix='/api/ai')
         app.register_blueprint(dashboard_bp, url_prefix='/api/dashboard')
         app.register_blueprint(admin_bp, url_prefix='/api/admin')
+        app.register_blueprint(notifications_api, url_prefix='/api')
+        app.register_blueprint(push_api, url_prefix='/api')
 
         # Register auto-login blueprint
         register_autologin_blueprint(app)

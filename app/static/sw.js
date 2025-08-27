@@ -1,3 +1,30 @@
+// Push Notification Event Handler
+self.addEventListener('push', function(event) {
+    let data = {};
+    try {
+        if (event.data) {
+            data = event.data.json();
+        }
+    } catch (e) {
+        data = { title: 'Notification', body: event.data ? event.data.text() : 'Nouvelle notification' };
+    }
+    const title = data.title || 'Notification';
+    const options = {
+        body: data.body || '',
+        icon: data.icon || '/static/icon-192x192.png',
+        badge: data.badge || '/static/icon-192x192.png',
+        data: data.url ? { url: data.url } : {},
+    };
+    event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+    const url = event.notification.data && event.notification.data.url;
+    if (url) {
+        event.waitUntil(clients.openWindow(url));
+    }
+});
 // Service Worker for Quincaillerie Management App
 const CACHE_NAME = 'quincaillerie-v1.2.0'; // bump version for improved caching
 const OFFLINE_URL = '/offline.html';

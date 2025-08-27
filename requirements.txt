@@ -1,3 +1,4 @@
+pywebpush>=1.14.0
 # Quincaillerie & SME Management App Dependencies - Full Features
 # Python 3.13 Compatible Versions
 
