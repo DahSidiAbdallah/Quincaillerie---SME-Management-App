@@ -488,7 +488,7 @@
             setActiveReport(type) {
                 this.activeReport = type;
                 this.loadReportData().then(async ()=>{
-                    if (window.ReportsCharts && typeof window.ReportsCharts.updateAll === 'function') await window.ReportsCharts.updateAll(this);
+                    if (window.ReportsCharts && typeof window.ReportsCharts.scheduleUpdateReportsCharts === 'function') await window.ReportsCharts.scheduleUpdateReportsCharts(this);
                 });
             },
 
@@ -513,8 +513,8 @@
                                 this.hasSalesData = (this.reportData.sales.sales_by_period||[]).length > 0;
                                 this.updateSalesChart((this.reportData.sales.sales_by_period||[]).map(p=>p.period), (this.reportData.sales.sales_by_period||[]).map(p=>p.total_revenue));
                                 // update static charts if available
-                                if (window.ReportsCharts && typeof window.ReportsCharts.updateAll === 'function') {
-                                    window.ReportsCharts.updateAll(this).catch(()=>{});
+                                if (window.ReportsCharts && typeof window.ReportsCharts.scheduleUpdateReportsCharts === 'function') {
+                                    window.ReportsCharts.scheduleUpdateReportsCharts(this);
                                 }
                             }
                         }).catch(err=>console.error('sales report load err', err)));

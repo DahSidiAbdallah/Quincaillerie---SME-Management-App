@@ -766,6 +766,46 @@
                 });
             },
 
+            // Chart update scheduler: debounce + min-interval
+            _chartUpdateScheduled: false,
+            _chartUpdateTimer: null,
+            _lastChartUpdateTs: 0,
+            // scheduleUpdateCharts(forceImmediate=false): if forceImmediate true, run immediately ignoring debounce but still respect minInterval
+            scheduleUpdateCharts(forceImmediate = false) {
+                const minInterval = 700; // ms between actual recreates to avoid thrash
+                const debounceMs = 250; // ms to debounce rapid calls
+                const now = Date.now();
+                const elapsed = now - (this._lastChartUpdateTs || 0);
+                const runNow = forceImmediate || elapsed >= minInterval;
+                if (runNow) {
+                    // cancel any pending
+                    if (this._chartUpdateTimer) { clearTimeout(this._chartUpdateTimer); this._chartUpdateTimer = null; }
+                    this._doScheduledUpdate();
+                    return;
+                }
+                // debounce and ensure minInterval
+                if (this._chartUpdateTimer) clearTimeout(this._chartUpdateTimer);
+                this._chartUpdateTimer = setTimeout(() => {
+                    // enforce minInterval
+                    const now2 = Date.now();
+                    if (now2 - (this._lastChartUpdateTs || 0) < minInterval) {
+                        // schedule remaining time
+                        const wait = minInterval - (now2 - (this._lastChartUpdateTs || 0));
+                        this._chartUpdateTimer = setTimeout(() => this._doScheduledUpdate(), wait);
+                    } else {
+                        this._doScheduledUpdate();
+                    }
+                }, debounceMs);
+            },
+            _doScheduledUpdate() {
+                try {
+                    this._lastChartUpdateTs = Date.now();
+                    this.updateCharts();
+                } finally {
+                    if (this._chartUpdateTimer) { clearTimeout(this._chartUpdateTimer); this._chartUpdateTimer = null; }
+                }
+            },
+
             // URL tab setter
             setTab(tab) {
                 this.activeTab = tab;
@@ -890,7 +930,7 @@
                 // Refresh summary, transactions, and charts
                 this.loadSummary();
                 this.loadTransactions();
-                this.updateCharts();
+                this.scheduleUpdateCharts();
                 if (this.activeTab === 'receivables') {
                     this.loadReceivables(true);
                 }
@@ -1277,7 +1317,7 @@
                             // Refresh everything to reflect new entry
                             this.loadTransactions();
                             this.loadSummary();
-                            this.updateCharts();
+                            this.scheduleUpdateCharts();
                             this.showTransactionModal = false;
                             this.newTransaction = {type: 'income', amount: '', description: '', category: ''};
                             this.showToast('success', 'Transaction créée avec succès');
@@ -1314,7 +1354,7 @@
                             this.showEditModal = false;
                 this.loadTransactions();
                 this.loadSummary();
-                this.updateCharts();
+                this.scheduleUpdateCharts();
                             this.showToast('success', 'Transaction mise à jour');
                         } else {
                             this.showToast('error', data.message || 'Erreur lors de la mise à jour');
@@ -1335,7 +1375,7 @@
                 this.totalIncome = this.transactions.filter(x=>x.type==='income').reduce((s,x)=>s+Number(x.amount||0),0);
                 this.totalExpense = this.transactions.filter(x=>x.type==='expense').reduce((s,x)=>s+Number(x.amount||0),0);
                             this.loadSummary();
-                this.updateCharts();
+                            this.scheduleUpdateCharts();
                             this.showToast('success', 'Transaction supprimée');
                         } else {
                             this.showToast('error', data.message || 'Erreur lors de la suppression');
