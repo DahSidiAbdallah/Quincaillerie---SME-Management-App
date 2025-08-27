@@ -12,15 +12,7 @@
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-gray-900" data-i18n="finance_header">Gestion Financière</h1>
             <p class="text-gray-600 mt-2" data-i18n="finance_description">Suivez vos revenus, dépenses et performance financière</p>
-        <!-- Tabs: Summary vs Receivables (visible so deep links are not confusing) -->
-        <div class="mt-4 flex items-center gap-2 text-sm">
-        <button @click="setTab('summary')"
-            :class="activeTab==='summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
-            class="px-3 py-1 rounded-md" data-i18n="finance_tab_summary">Résumé</button>
-        <button @click="setTab('receivables')"
-            :class="activeTab==='receivables' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
-            class="px-3 py-1 rounded-md" data-i18n="finance_tab_receivables">Créances en retard</button>
-        </div>
+    <!-- Tabs removed: show all finance sections together by default -->
         </div>
 
         <!-- Financial Summary Cards -->
@@ -172,8 +164,8 @@
             </button>
         </div>
 
-        <!-- Receivables (when navigated with tab=receivables) -->
-        <div x-show="activeTab==='receivables'" class="bg-white shadow rounded-lg overflow-hidden mb-8">
+    <!-- Receivables (always visible) -->
+    <div class="bg-white shadow rounded-lg overflow-hidden mb-8">
             <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
                 <h3 class="text-lg font-medium text-gray-900">Créances Clients (en retard)</h3>
                 <div class="flex gap-2">
@@ -722,15 +714,8 @@
                 const filter = params.get('filter');
                 const period = params.get('period');
                 if (period && ['week','month','year','all'].includes(period)) this.chartPeriod = period;
-                if (tab === 'receivables') {
-                    this.activeTab = 'receivables';
-                    this.loadReceivables(filter === 'overdue');
-                } else {
-                    // If no tab specified and the default UI is receivables, load overdue receivables
-                    if (!tab && this.activeTab === 'receivables') {
-                        this.loadReceivables(true);
-                    }
-                }
+                // Always load overdue receivables by default
+                this.loadReceivables(true);
 
                 // Bootstrap data in parallel
                 Promise.allSettled([
