@@ -157,14 +157,138 @@
             }
 
             // customer analysis
-            const ca = await apiFetch(`/api/reports/customer-analysis${q}`).catch((err)=>{ console.error('customer-analysis load error', err); return null; });
-            if (ca?.customers && manager.customerChart) {
-                const top = (ca.customers || []).slice(0,10);
-                const labels = top.map(c=>c.name||c.id);
-                const vals = top.map(c=>c.lifetime_value || c.orders_count || 0);
-                const ok = safeUpdate(manager.customerChart, ch => { ch.data.labels = labels; ch.data.datasets[0].data = vals; });
+            let ca = await apiFetch(`/api/reports/customer-analysis${q}`).catch((err)=>{ console.error('customer-analysis load error', err); return null; });
+                    if (ca?.customers && manager.customerChart) {
+                // If the server returned zero LTVs for the selected range, re-request an all-time aggregation
+                // This covers cases where customers are not linked to sales for the chosen period but historical data exists
+                try {
+                    const totalLtv = (ca.customers || []).reduce((s,c) => s + (Number(c.lifetime_value||0)), 0);
+                    if (totalLtv === 0 && !ca.fallback_all_time) {
+                        console.info('customer-analysis: date-range yielded zero total LTV, fetching all-time fallback from client');
+                        const caAll = await apiFetch('/api/reports/customer-analysis').catch((err)=>{ console.error('customer-analysis all-time load error', err); return null; });
+                        if (caAll?.customers) { ca = caAll; }
+                    }
+                } catch (e) { console.error('customer-analysis fallback attempt failed', e); }
+
+                
+                // Helper to parse numbers that may come formatted or with currency symbols
+                const parseNumeric = (v) => {
+                    if (v === null || v === undefined) return 0;
+                    if (typeof v === 'number') return v;
+                    // Remove common currency symbols, spaces used as thousand separators, and keep dot or comma for decimals
+                    try {
+                        let s = String(v).trim();
+                        // If it contains letters (e.g., "MRU") remove non-digit/sep chars
+                        s = s.replace(/[^0-9,\.\-]/g, '');
+                        // If comma used as decimal separator and dot present for thousands, normalize: replace dots, then comma -> dot
+                        const commaCount = (s.match(/,/g) || []).length;
+                        const dotCount = (s.match(/\./g) || []).length;
+                        if (commaCount > 0 && dotCount === 0) {
+                            s = s.replace(/\s+/g, '').replace(/,/g, '.');
+                        } else if (dotCount > 1 && commaCount === 0) {
+                            // multiple dots likely thousand separators: remove them
+                            s = s.replace(/\./g, '');
+                        } else {
+                            // remove spaces
+                            s = s.replace(/\s+/g, '');
+                        }
+                        const n = Number(s);
+                        return isNaN(n) ? 0 : n;
+                    } catch (e) { return 0; }
+                };
+
+                // Compute per-customer LTV robustly: prefer lifetime_value, fallback to orders_count * avg_order_value
+                const enriched = (ca.customers || []).map(c => {
+                    const orders = parseNumeric(c.orders_count || 0);
+                    const avg = parseNumeric(c.avg_order_value || 0);
+                    const lv = parseNumeric(c.lifetime_value || 0);
+                    const ltv = lv || (orders * avg) || 0;
+                    return { ...c, ltv };
+                });
+
+                // Sort by computed LTV descending and take top 10
+                enriched.sort((a,b)=> (Number(b.ltv||0) - Number(a.ltv||0)) );
+                const top = enriched.slice(0, 10);
+                const labels = top.map(c => c.name || c.id);
+                // Use parseNumeric to robustly convert values
+                const vals = top.map(c => parseNumeric(c.ltv || c.lifetime_value || 0));
+
+                // debug logging to help diagnose empty bars / numeric issues
+                console.log('customer-analysis response', ca);
+                console.log('customer-analysis: enriched top', top.map(t=>({ id: t.id, name: t.name, ltv_raw: t.ltv, ltv_num: parseNumeric(t.ltv) })));
+                console.log('customer-analysis: labels, vals', labels, vals);
+
+                // Show/hide fallback notice if present
+                try {
+                    const notice = document.getElementById('customerLTVFallbackNotice');
+                    if (notice) { notice.style.display = (ca && ca.fallback_all_time) ? 'block' : 'none'; }
+                } catch (e) { /* ignore */ }
+
+                // Update chart; ensure y-axis starts at zero and scale is appropriate
+                const ok = safeUpdate(manager.customerChart, ch => {
+                    ch.data.labels = labels;
+                    ch.data.datasets[0].data = vals;
+                    // ensure visible bar style even for small values
+                    const cols = labels.map((_,i)=> {
+                        // a palette of warm colors
+                        const palette = ['#F59E0B','#FB923C','#F97316','#EA580C','#FBBF24','#F87171','#60A5FA','#34D399','#A78BFA','#34D399'];
+                        return palette[i % palette.length];
+                    });
+                    ch.data.datasets[0].backgroundColor = cols;
+                    ch.data.datasets[0].borderColor = '#b45309';
+                    ch.data.datasets[0].borderWidth = 1;
+                    ch.data.datasets[0].barThickness = 26;
+                    // ensure numeric formatting and currency ticks
+                    ch.options = ch.options || {};
+                    ch.options.plugins = ch.options.plugins || {};
+                    ch.options.scales = ch.options.scales || {};
+                    ch.options.scales.y = ch.options.scales.y || {};
+                    ch.options.scales.y.beginAtZero = true;
+                    const maxVal = Math.max(1, ...(vals.length ? vals : [0]));
+                    ch.options.scales.y.suggestedMax = maxVal * 1.15;
+                    // tick formatter to display currency
+                    ch.options.scales.y.ticks = ch.options.scales.y.ticks || {};
+                    ch.options.scales.y.ticks.callback = function(value) {
+                        try {
+                            return (new Intl.NumberFormat('fr-FR', { style: 'currency', currency: (window.AppConfig?.currentCurrency || 'MRU') })).format(Number(value || 0));
+                        } catch (e) { return value; }
+                    };
+                    // plugin to draw value labels above bars for better visibility
+                    ch.options.plugins.valueLabel = ch.options.plugins.valueLabel || {};
+                });
+
                 if (!ok) {
-                    manager.customerChart = await recreateOnCanvas('customerLTVChart', (c)=> new Chart(c, { type:'bar', data:{ labels: labels, datasets:[{ label:'LTV', data: vals, backgroundColor:'#F59E0B' }] }, options:{ animation:false, responsive:true, maintainAspectRatio:false } }));
+                    const maxVal = Math.max(1, ...(vals.length ? vals : [0]));
+                    const cfg = {
+                        type: 'bar',
+                        data: {
+                            labels: labels,
+                            datasets: [{ label: `LTV (${window.AppConfig?.currentCurrency||'MRU'})`, data: vals, backgroundColor: '#F59E0B' }]
+                        },
+                        options: {
+                            animation: false,
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    suggestedMax: maxVal * 1.15,
+                                    ticks: {
+                                        callback: function(value) {
+                                            try {
+                                                return (new Intl.NumberFormat('fr-FR', { style: 'currency', currency: (window.AppConfig?.currentCurrency || 'MRU') })).format(Number(value || 0));
+                                            } catch (e) { return value; }
+                                        }
+                                    }
+                                }
+                            },
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: { enabled: true }
+                            }
+                        }
+                    };
+                    manager.customerChart = await recreateOnCanvas('customerLTVChart', (c)=> new Chart(c, cfg));
                 }
             }
         } catch (e) {

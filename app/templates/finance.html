@@ -1257,8 +1257,48 @@
                         const rev = getRevenue(payload);
                         const exp = getExpenses(payload);
 
+                        // Compute totals for revenue & expenses so we can show both as top-level segments
+                        const sumArray = (arr) => Array.isArray(arr) ? arr.reduce((s, v) => s + Number(v || 0), 0) : 0;
+                        const totalRev = sumArray(rev.values);
+                        const totalExp = sumArray(exp.values);
+
+                        // Build combined labels/data for the expense doughnut: show Revenu and Dépenses first, then expense categories
+                        const combinedExpLabels = [];
+                        const combinedExpValues = [];
+                        const combinedExpBg = [];
+
+                        // Only include totals if there's meaningful data (avoid showing zeros-only duplicates)
+                        if (totalRev || totalExp) {
+                            combinedExpLabels.push('Revenu');
+                            combinedExpValues.push(totalRev);
+                            combinedExpBg.push('hsl(140 60% 35%)'); // green-ish for revenue
+
+                            combinedExpLabels.push('Dépenses');
+                            combinedExpValues.push(totalExp);
+                            combinedExpBg.push('hsl(8 75% 45%)'); // red-ish for expenses
+                        }
+
+                        // Append existing expense category breakdown (if any)
+                        if (Array.isArray(exp.labels) && exp.labels.length) {
+                            for (let i = 0; i < exp.labels.length; i++) {
+                                const rawLabel = exp.labels[i] || '';
+                                const lbl = String(rawLabel).trim();
+                                const norm = lbl.toLowerCase();
+                                // Skip backend pseudo-categories like 'business' which duplicate totals
+                                if (norm === 'business' || norm === 'affaires' || norm === 'entreprise') continue;
+                                combinedExpLabels.push(lbl);
+                                combinedExpValues.push(exp.values[i] || 0);
+                                combinedExpBg.push((exp.background && exp.background[i]) || (`hsl(${(i * 53) % 360} 85% 55%)`));
+                            }
+                        } else {
+                            // If there were no category labels, preserve the fallback (no-op if empty)
+                            if (Array.isArray(exp.labels)) combinedExpLabels.push(...exp.labels);
+                            if (Array.isArray(exp.values)) combinedExpValues.push(...exp.values);
+                            if (Array.isArray(exp.background)) combinedExpBg.push(...exp.background);
+                        }
+
                         // For robustness avoid calling Chart.update() (has caused internal lifecycle crashes). Always recreate charts on fresh canvases.
-                        const recreated = await recreateChartsWithData(rev.labels, rev.values, exp.labels, exp.values, exp.background);
+                        const recreated = await recreateChartsWithData(rev.labels, rev.values, combinedExpLabels, combinedExpValues, combinedExpBg);
                         if (!recreated) {
                             this.showToast && this.showToast('error', 'Failed to recreate charts with latest data');
                             this.isLoadingCharts = false;

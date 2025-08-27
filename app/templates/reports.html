@@ -205,6 +205,7 @@
                         <h4 class="text-sm font-medium mb-2">Valeur client (LTV)</h4>
                         <div class="h-56 relative">
                             <canvas id="customerLTVChart"></canvas>
+                        <div id="customerLTVFallbackNotice" class="mt-2 text-xs text-gray-500" style="display:none">Les valeurs affichées proviennent d'une agrégation historique (tous les temps) car aucune donnée client n'a été trouvée pour la période sélectionnée.</div>
                         </div>
                     </div>
                 </div>
@@ -537,6 +538,10 @@
                     }
                     // in case ReportsCharts wasn't available, attempt to call existing initCharts if present
                     if (!window.ReportsCharts && typeof this.initCharts === 'function') await this.initCharts();
+                    // If we opened directly on sales, ensure charts populate immediately
+                    if (this.activeReport === 'sales' && window.ReportsCharts && typeof window.ReportsCharts.scheduleUpdateReportsCharts === 'function') {
+                        try { await window.ReportsCharts.scheduleUpdateReportsCharts(this, true); } catch(e){ console.error('initial scheduleUpdateReportsCharts failed', e); }
+                    }
                     // If the page opened directly on Activities or AI tab, load their data immediately
                     if (this.activeReport === 'activities') {
                         try { await this.loadActivities(); } catch(e){ console.error('initial loadActivities failed', e); }
@@ -550,7 +555,10 @@
             setActiveReport(type) {
                 this.activeReport = type;
                 this.loadReportData().then(async ()=>{
-                    if (window.ReportsCharts && typeof window.ReportsCharts.scheduleUpdateReportsCharts === 'function') await window.ReportsCharts.scheduleUpdateReportsCharts(this);
+                    // Ensure charts update when reports are switched; schedule only when ReportsCharts is available
+                    if (window.ReportsCharts && typeof window.ReportsCharts.scheduleUpdateReportsCharts === 'function') {
+                        try { await window.ReportsCharts.scheduleUpdateReportsCharts(this, true); } catch(e){ console.error('scheduleUpdateReportsCharts failed', e); }
+                    }
                     // load activities or AI insights when their tab is activated so they populate immediately
                     if (type === 'activities') {
                         try { await this.loadActivities(); } catch(e){ console.error('setActiveReport loadActivities failed', e); }
@@ -827,6 +835,7 @@
         }
     </script>
     <script src="/static/js/reports-init.js"></script>
+    <script src="/static/js/reports-charts.js"></script>
     
     <style>
         [x-cloak] { display: none !important; }

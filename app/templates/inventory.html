@@ -334,33 +334,24 @@
         
         <!-- List View -->
         <div id="listView" class="hidden bg-white rounded-lg shadow overflow-hidden">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Produit
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Code/Référence
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Catégorie
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Stock
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Prix
-                        </th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Actions
-                        </th>
-                    </tr>
-                </thead>
-                <tbody id="productTableBody" class="bg-white divide-y divide-gray-200">
-                    <!-- Table rows will be loaded here -->
-                </tbody>
-            </table>
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code/Référence</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Prix</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="productTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
     
@@ -1356,15 +1347,34 @@
         return div;
     }
     
-    // Display products in list view
+    // Display products in list view (defensive)
     function displayListView() {
-        const tbody = document.getElementById('productTableBody');
-        tbody.innerHTML = '';
-        
-        currentProducts.forEach(product => {
-            const row = createProductRow(product);
-            tbody.appendChild(row);
-        });
+        try {
+            const tbody = document.getElementById('productTableBody');
+            if (!tbody) {
+                console.error('displayListView: productTableBody not found');
+                showNotification('Impossible d\'afficher la liste: structure manquante', 'error');
+                return;
+            }
+
+            tbody.innerHTML = '';
+
+            currentProducts.forEach((product, idx) => {
+                try {
+                    const row = createProductRow(product);
+                    tbody.appendChild(row);
+                } catch (rowErr) {
+                    console.error(`Error creating row for product at index ${idx}:`, rowErr, product);
+                    // Insert a minimal fallback row so the table remains usable
+                    const fallback = document.createElement('tr');
+                    fallback.innerHTML = `<td class="px-6 py-4" colspan="7">Erreur lors de l\'affichage de ce produit</td>`;
+                    tbody.appendChild(fallback);
+                }
+            });
+        } catch (e) {
+            console.error('displayListView fatal error:', e);
+            showNotification('Erreur lors de l\'affichage des produits', 'error');
+        }
     }
     
     // Create product table row
@@ -1373,58 +1383,69 @@
             console.error('Attempted to create product row with undefined product');
             return document.createElement('tr'); // Return empty row
         }
-        
+
         const tr = document.createElement('tr');
         tr.className = 'table-row';
-        
-        // Make sure we have the required properties
-        const currentStock = product.current_stock || 0;
-        const minStock = product.min_stock_alert || 0;
-        
-        const stockLevel = getStockLevel(currentStock, minStock);
-        const stockClass = getStockClass(stockLevel);
-        
-        tr.innerHTML = `
-            <td class="px-6 py-4 whitespace-nowrap">
-                <div>
-                    <div class="text-sm font-medium text-gray-900">${product.name}</div>
-                    <div class="text-sm text-gray-500">${product.description || ''}</div>
-                </div>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                ${product.code || 'N/A'}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
-                    ${product.category}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-                <span class="text-sm font-medium ${stockClass} px-2 py-1 rounded-full">
-                    ${product.current_stock} ${product.unit}
-                </span>
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                ${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                <div class="flex space-x-2">
-                    <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-900 flex items-center" title="Modifier">
-                        <i class="fas fa-edit mr-1"></i> Modifier
-                    </button>
-                    <button onclick="adjustStock(${product.id})" class="text-green-600 hover:text-green-900 flex items-center" title="Ajuster Stock">
-                        <i class="fas fa-boxes mr-1"></i> Stock
-                    </button>
-                    <button onclick="viewDetails(${product.id})" class="text-gray-600 hover:text-gray-900 flex items-center" title="Détails">
-                        <i class="fas fa-info-circle mr-1"></i> Détails
-                    </button>
-                    <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-900 flex items-center" title="Supprimer">
-                        <i class="fas fa-trash-alt mr-1"></i> Supprimer
-                    </button>
-                </div>
-            </td>
-        `;
-        
+
+        try {
+            // Make sure we have the required properties
+            const currentStock = product.current_stock || 0;
+            const minStock = product.min_stock_alert || 0;
+
+            const stockLevel = getStockLevel(currentStock, minStock);
+            const stockClass = getStockClass(stockLevel);
+
+            tr.innerHTML = `
+                <td class="px-4 py-4">
+                    <div class="product-selection hidden" style="display:none;">
+                        <input type="checkbox" class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" onchange="selectProduct(${product.id}, this.checked)">
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <div>
+                        <div class="text-sm font-medium text-gray-900">${product.name}</div>
+                        <div class="text-sm text-gray-500">${product.description || ''}</div>
+                    </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    ${product.code || 'N/A'}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                        ${product.category || ''}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap">
+                    <span class="text-sm font-medium ${stockClass} px-2 py-1 rounded-full">
+                        ${product.current_stock} ${product.unit || ''}
+                    </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    ${window.formatCurrency ? window.formatCurrency(product.sale_price || 0) : ((product.sale_price || 0) + ' ' + (window.AppConfig?.currentCurrency || 'MRU'))}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div class="flex space-x-2">
+                        <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-900 flex items-center" title="Modifier">
+                            <i class="fas fa-edit mr-1"></i> Modifier
+                        </button>
+                        <button onclick="adjustStock(${product.id})" class="text-green-600 hover:text-green-900 flex items-center" title="Ajuster Stock">
+                            <i class="fas fa-boxes mr-1"></i> Stock
+                        </button>
+                        <button onclick="viewDetails(${product.id})" class="text-gray-600 hover:text-gray-900 flex items-center" title="Détails">
+                            <i class="fas fa-info-circle mr-1"></i> Détails
+                        </button>
+                        <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-900 flex items-center" title="Supprimer">
+                            <i class="fas fa-trash-alt mr-1"></i> Supprimer
+                        </button>
+                    </div>
+                </td>
+            `;
+        } catch (err) {
+            console.error('createProductRow error for product:', product, err);
+            // Return a minimal fallback row
+            tr.innerHTML = `<td class="px-6 py-4" colspan="7">Erreur lors de l\'affichage du produit</td>`;
+        }
+
         return tr;
     }
     
@@ -2246,21 +2267,40 @@
     let selectedProducts = [];
     
     function toggleSelectionMode() {
-        const isSelectionMode = document.getElementById('selectionModeToggle').checked;
-        
-        // Show/hide selection checkboxes
-        document.querySelectorAll('.product-selection').forEach(checkbox => {
-            checkbox.style.display = isSelectionMode ? 'block' : 'none';
+        const toggleEl = document.getElementById('selectionModeToggle');
+        const isSelectionMode = !!(toggleEl && toggleEl.checked);
+
+        // Show/hide selection checkboxes and keep class in sync
+        document.querySelectorAll('.product-selection').forEach(wrapper => {
+            try {
+                const input = wrapper.querySelector('input[type="checkbox"]');
+                if (isSelectionMode) {
+                    wrapper.style.display = 'block';
+                    wrapper.classList.remove('hidden');
+                } else {
+                    wrapper.style.display = 'none';
+                    wrapper.classList.add('hidden');
+                }
+
+                // When turning off, also clear individual checkbox state
+                if (!isSelectionMode && input) input.checked = false;
+            } catch (e) {
+                // ignore per-item errors
+            }
         });
-        
+
         // Clear selections when turning off
         if (!isSelectionMode) {
             selectedProducts = [];
             updateSelectedProductsCount();
         }
     }
-    
-    document.getElementById('selectionModeToggle').addEventListener('change', toggleSelectionMode);
+
+    // Safe binding: element may not exist in some edge cases
+    const __selectionModeToggleEl = document.getElementById('selectionModeToggle');
+    if (__selectionModeToggleEl) {
+        __selectionModeToggleEl.addEventListener('change', toggleSelectionMode);
+    }
     
     function selectProduct(productId, checked) {
         if (checked) {
@@ -2723,8 +2763,8 @@
     const originalCreateProductCard = createProductCard;
     createProductCard = function(product) {
         const card = originalCreateProductCard(product);
-        
-        // Add selection checkbox
+
+        // Add selection checkbox wrapper
         const selectionCheckbox = document.createElement('div');
         selectionCheckbox.className = 'product-selection absolute top-2 right-2 hidden';
         selectionCheckbox.innerHTML = `
@@ -2732,6 +2772,22 @@
                    onchange="selectProduct(${product.id}, this.checked)">
         `;
         card.style.position = 'relative';
+
+        // Ensure newly created cards respect current selection mode state
+        try {
+            const toggleEl = document.getElementById('selectionModeToggle');
+            const isSelectionMode = !!(toggleEl && toggleEl.checked);
+            if (isSelectionMode) {
+                selectionCheckbox.style.display = 'block';
+                selectionCheckbox.classList.remove('hidden');
+            } else {
+                selectionCheckbox.style.display = 'none';
+                selectionCheckbox.classList.add('hidden');
+            }
+        } catch (e) {
+            // ignore
+        }
+
         card.appendChild(selectionCheckbox);
         
         // Add image management

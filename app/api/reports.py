@@ -843,28 +843,64 @@ def customer_analysis():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
+        # Respect optional date range filters so LTV can be computed for the selected period
+        start_date = request.args.get('start_date', '2000-01-01')
+        end_date = request.args.get('end_date', date.today().isoformat())
+
         cursor.execute('''
             SELECT c.id, c.name, c.phone, c.email,
-                   COUNT(s.id) as orders_count,
-                   COALESCE(SUM(s.total_amount), 0) as lifetime_value,
-                   COALESCE(AVG(s.total_amount), 0) as avg_order_value,
-                   MAX(s.sale_date) as last_order_date
+                   -- orders within range
+                   COUNT(CASE WHEN DATE(s.sale_date) BETWEEN ? AND ? THEN s.id END) as orders_count,
+                   -- lifetime (period) value within range
+                   COALESCE(SUM(CASE WHEN DATE(s.sale_date) BETWEEN ? AND ? THEN s.total_amount ELSE 0 END), 0) as lifetime_value,
+                   -- average order value within range (NULLs ignored by AVG)
+                   COALESCE(AVG(CASE WHEN DATE(s.sale_date) BETWEEN ? AND ? THEN s.total_amount END), 0) as avg_order_value,
+                   MAX(CASE WHEN DATE(s.sale_date) BETWEEN ? AND ? THEN s.sale_date END) as last_order_date
             FROM customers c
             LEFT JOIN sales s ON s.customer_id = c.id
             WHERE c.is_active = 1
             GROUP BY c.id
             ORDER BY lifetime_value DESC
             LIMIT 100
-        ''')
+        ''', (start_date, end_date, start_date, end_date, start_date, end_date, start_date, end_date))
 
         customers = [dict(row) for row in cursor.fetchall()]
+
+        # If the selected date range yields no customer revenue (common when customers are not linked to sales),
+        # fall back to an all-time aggregation so the frontend can still show meaningful LTV values.
+        total_ltv = sum((c.get('lifetime_value') or 0) for c in customers)
+        used_full_range = False
+        if total_ltv == 0:
+            try:
+                cursor.execute('''
+                    SELECT c.id, c.name, c.phone, c.email,
+                           COUNT(s.id) as orders_count,
+                           COALESCE(SUM(s.total_amount), 0) as lifetime_value,
+                           COALESCE(AVG(s.total_amount), 0) as avg_order_value,
+                           MAX(s.sale_date) as last_order_date
+                    FROM customers c
+                    LEFT JOIN sales s ON s.customer_id = c.id
+                    WHERE c.is_active = 1
+                    GROUP BY c.id
+                    ORDER BY lifetime_value DESC
+                    LIMIT 100
+                ''')
+                customers = [dict(row) for row in cursor.fetchall()]
+                used_full_range = True
+            except Exception:
+                # keep original customers if fallback fails
+                pass
+
         conn.close()
 
-        return jsonify({
+        resp = {
             'success': True,
             'customers': customers,
             'generated_at': datetime.now().isoformat()
-        })
+        }
+        if used_full_range:
+            resp['fallback_all_time'] = True
+        return jsonify(resp)
 
     except Exception as e:
         logger.error(f"Error fetching customer analysis: {e}")
