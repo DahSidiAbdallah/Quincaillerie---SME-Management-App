@@ -1,0 +1,115 @@
+{
+  "success": true,
+  "transactions": [
+    {
+      "amount": 25000.0,
+      "category": "ventes",
+      "created_at": "2025-08-27 09:49:27",
+      "date": "2025-08-27",
+      "description": "Vente",
+      "id": 17,
+      "payment_status": "paid",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 1800.0,
+      "category": "ventes",
+      "created_at": "2025-08-19 13:26:37",
+      "date": "2025-08-19",
+      "description": "Vente",
+      "id": 16,
+      "payment_status": "retard",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 1250.0,
+      "category": "ventes",
+      "created_at": "2025-08-13 00:44:59",
+      "date": "2025-08-13",
+      "description": "Vente",
+      "id": 15,
+      "payment_status": "paid",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 6400.0,
+      "category": "ventes",
+      "created_at": "2025-08-12 22:19:52",
+      "date": "2025-08-12",
+      "description": "Vente",
+      "id": 14,
+      "payment_status": "paid",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 1800.0,
+      "category": "ventes",
+      "created_at": "2025-08-12 15:45:53",
+      "date": "2025-08-12",
+      "description": "Vente",
+      "id": 13,
+      "payment_status": "paid",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 6000.0,
+      "category": "ventes",
+      "created_at": "2025-08-09 01:08:50",
+      "date": "2025-08-09",
+      "description": "Vente",
+      "id": 9,
+      "payment_status": "paid",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 400.0,
+      "category": "business",
+      "created_at": "2025-08-08 23:59:43",
+      "date": "2025-08-08",
+      "description": "Frais de mairie",
+      "id": 3,
+      "payment_status": "",
+      "subcategory": "Divers",
+      "type": "expense"
+    },
+    {
+      "amount": 1250.0,
+      "category": "ventes",
+      "created_at": "2025-08-08 23:41:11",
+      "date": "2025-08-08",
+      "description": "Vente",
+      "id": 8,
+      "payment_status": "paid",
+      "subcategory": "",
+      "type": "income"
+    },
+    {
+      "amount": 5000.0,
+      "category": "business",
+      "created_at": "2025-08-08 11:11:32",
+      "date": "2025-08-08",
+      "description": "Salaire Isselmou",
+      "id": 2,
+      "payment_status": "",
+      "subcategory": "Salaires",
+      "type": "expense"
+    },
+    {
+      "amount": 5000.0,
+      "category": "business",
+      "created_at": "2025-08-08 11:11:14",
+      "date": "2025-08-08",
+      "description": "Location batiment",
+      "id": 1,
+      "payment_status": "",
+      "subcategory": "Loyer",
+      "type": "expense"
+    }
+  ]
+}

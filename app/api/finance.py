@@ -350,7 +350,6 @@ def get_transactions():
     auth_check = require_auth()
     if auth_check:
         return auth_check
-
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
@@ -358,46 +357,46 @@ def get_transactions():
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
 
-        # Build filters for both tables
+        # Build filters for each source
         cap_where = 'WHERE 1=1'
         exp_where = 'WHERE 1=1'
-        params = []
-        params2 = []
+        sales_where = 'WHERE 1=1'
+
+        params = []   # for capital
+        params2 = []  # for expenses
+        params3 = []  # for sales
+
         if start_date:
             cap_where += ' AND DATE(entry_date) >= ?'
             exp_where += ' AND DATE(expense_date) >= ?'
+            sales_where += ' AND DATE(sale_date) >= ?'
             params.append(start_date)
             params2.append(start_date)
+            params3.append(start_date)
         if end_date:
             cap_where += ' AND DATE(entry_date) <= ?'
             exp_where += ' AND DATE(expense_date) <= ?'
+            sales_where += ' AND DATE(sale_date) <= ?'
             params.append(end_date)
             params2.append(end_date)
-
-        # Use UNION ALL with aligned columns and include subcategory + created_at for stable ordering
-        sales_where = 'WHERE 1=1'
-        params3 = []
-        if start_date:
-            sales_where += ' AND DATE(sale_date) >= ?'
-            params3.append(start_date)
-        if end_date:
-            sales_where += ' AND DATE(sale_date) <= ?'
             params3.append(end_date)
 
+        # Use UNION ALL with aligned columns and include payment_status so sales can carry their status
+        # Columns: id, date, created_at, amount, description, type, category, subcategory, payment_status
         query = f'''
             SELECT id, DATE(entry_date) AS date, created_at, amount, source AS description,
-                   'income' AS type, 'capital' AS category, 'capital' AS subcategory
+                   'income' AS type, 'capital' AS category, 'capital' AS subcategory, '' AS payment_status
             FROM capital_entries
             {cap_where}
             UNION ALL
             SELECT id, DATE(expense_date) AS date, created_at, amount, description,
-                   'expense' AS type, category, COALESCE(subcategory, '') AS subcategory
+                   'expense' AS type, category, COALESCE(subcategory, '') AS subcategory, '' AS payment_status
             FROM expenses
             {exp_where}
             UNION ALL
-         SELECT id, DATE(sale_date) AS date, created_at, total_amount AS amount,
-             'Vente' AS description, 'income' AS type, 'ventes' AS category, '' AS subcategory
-            FROM sales
+            SELECT s.id, DATE(s.sale_date) AS date, s.created_at, s.total_amount AS amount,
+                   'Vente' AS description, 'income' AS type, 'ventes' AS category, '' AS subcategory, s.status AS payment_status
+            FROM sales s
             {sales_where}
             ORDER BY date DESC, created_at DESC
         '''
@@ -411,100 +410,72 @@ def get_transactions():
         logger.error(f"Error fetching transactions: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la récupération des transactions'}), 500
 
+
 @finance_bp.route('/cash-register', methods=['POST'])
-def create_cash_register():
-    """Create or update daily cash register"""
+def upsert_cash_register():
+    """Create or update a cash register entry for a given date."""
     auth_check = require_auth()
     if auth_check:
         return auth_check
-    
-    data = request.get_json()
+
+    data = request.get_json() or {}
     register_date = data.get('register_date', date.today().isoformat())
-    
+    opening_balance = float(data.get('opening_balance', 0))
+    closing_balance = float(data.get('closing_balance', opening_balance))
+    total_sales = float(data.get('total_sales', 0))
+    total_expenses = float(data.get('total_expenses', 0))
+    cash_in = float(data.get('cash_in', 0))
+    cash_out = float(data.get('cash_out', 0))
+
     try:
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        
-        # Check if register already exists for this date
-        cursor.execute('SELECT id, is_closed FROM cash_register WHERE register_date = ?', (register_date,))
+
+        # Check if a register already exists for the date
+        cursor.execute('SELECT id FROM cash_register WHERE register_date = ?', (register_date,))
         existing = cursor.fetchone()
-        
-        if existing and existing[1]:  # If already closed
-            return jsonify({'success': False, 'message': 'La caisse de ce jour est déjà fermée'}), 400
-        
-        # Calculate totals from sales and expenses for the day
-        cursor.execute('''
-            SELECT COALESCE(SUM(total_amount), 0) FROM sales 
-            WHERE DATE(sale_date) = ?
-        ''', (register_date,))
-        total_sales = cursor.fetchone()[0]
-        
-        cursor.execute('''
-            SELECT COALESCE(SUM(amount), 0) FROM expenses 
-            WHERE DATE(expense_date) = ? AND category = 'business'
-        ''', (register_date,))
-        total_expenses = cursor.fetchone()[0]
-        
-        # Get previous day's closing balance as opening balance
-        cursor.execute('''
-            SELECT closing_balance FROM cash_register 
-            WHERE register_date < ? AND is_closed = 1
-            ORDER BY register_date DESC LIMIT 1
-        ''', (register_date,))
-        previous_balance = cursor.fetchone()
-        opening_balance = previous_balance[0] if previous_balance else 0
-        
-        # Calculate cash in/out
-        cash_in = float(data.get('cash_in', 0)) + total_sales
-        cash_out = float(data.get('cash_out', 0)) + total_expenses
-        closing_balance = opening_balance + cash_in - cash_out
-        
         if existing:
-            # Update existing register
-            cursor.execute('''
-                UPDATE cash_register 
-                SET opening_balance = ?, closing_balance = ?, total_sales = ?, 
-                    total_expenses = ?, cash_in = ?, cash_out = ?, notes = ?
-                WHERE id = ?
-            ''', (opening_balance, closing_balance, total_sales, total_expenses,
-                  cash_in, cash_out, data.get('notes', ''), existing[0]))
             register_id = existing[0]
-        else:
-            # Create new register
             cursor.execute('''
-                INSERT INTO cash_register 
-                (register_date, opening_balance, closing_balance, total_sales, 
-                 total_expenses, cash_in, cash_out, notes, created_by)
+                UPDATE cash_register
+                SET opening_balance = ?, closing_balance = ?, total_sales = ?, total_expenses = ?,
+                    cash_in = ?, cash_out = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            ''', (opening_balance, closing_balance, total_sales, total_expenses, cash_in, cash_out, data.get('notes', ''), register_id))
+            operation = 'update'
+        else:
+            cursor.execute('''
+                INSERT INTO cash_register
+                (register_date, opening_balance, closing_balance, total_sales, total_expenses, cash_in, cash_out, notes, created_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (register_date, opening_balance, closing_balance, total_sales,
-                  total_expenses, cash_in, cash_out, data.get('notes', ''), session['user_id']))
+            ''', (register_date, opening_balance, closing_balance, total_sales, total_expenses, cash_in, cash_out, data.get('notes', ''), session['user_id']))
             register_id = cursor.lastrowid
-        
+            operation = 'insert'
+
         conn.commit()
         conn.close()
-        
+
         # Log the register operation
-        action = 'update_cash_register' if existing else 'create_cash_register'
+        action = 'update_cash_register' if operation == 'update' else 'create_cash_register'
         db_manager.log_user_action(
             session['user_id'],
             action,
             (lambda cur: f"Caisse {register_date}: solde {closing_balance} {cur}")((db_manager.get_app_settings().get('currency') or 'MRU')),
         )
-        
+
         # Add to sync queue
-        operation = 'update' if existing else 'insert'
         db_manager.add_to_sync_queue('cash_register', register_id, operation, {
             'register_date': register_date,
             'closing_balance': closing_balance
         })
-        
+
         return jsonify({
             'success': True,
             'register_id': register_id,
             'closing_balance': closing_balance,
             'message': 'Caisse mise à jour avec succès'
         })
-        
+
     except Exception as e:
         logger.error(f"Error creating cash register: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la création de la caisse'}), 500
@@ -1017,7 +988,11 @@ def get_client_debts():
         conn = db_manager.get_connection()
         cursor = conn.cursor()
 
-        status = (request.args.get('status') or 'pending').lower()
+        # Do not force a status filter when requesting overdue debts.
+        # If the caller provides an explicit status, respect it; otherwise
+        # default to showing 'pending' only when not asking for overdue entries
+        status_param = request.args.get('status')
+        status = status_param.lower() if status_param else None
         overdue = (request.args.get('overdue', 'false').lower() == 'true')
 
         # Base query with computed fields
@@ -1028,12 +1003,22 @@ def get_client_debts():
         )
         params = []
 
-        if status in ('pending', 'paid'):
+        # If caller explicitly asked for a status filter, apply it.
+        if status in ('pending', 'paid', 'retard'):
             query += ' AND status = ?'
             params.append(status)
 
+        # If requesting overdue entries, filter by due_date < today and remaining > 0.
+        # Do not implicitly restrict to status='pending' here — overdue rows may have been
+        # updated to status='retard' and should be returned.
         if overdue:
             query += " AND due_date IS NOT NULL AND DATE(due_date) < DATE('now') AND remaining_amount > 0"
+
+        # If no status was requested and overdue is False, default to showing pending debts
+        # to preserve previous behavior for the non-overdue listing.
+        if not status and not overdue:
+            query += ' AND status = ?'
+            params.append('pending')
 
         query += ' ORDER BY due_date ASC NULLS LAST'
 

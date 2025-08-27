@@ -155,7 +155,7 @@
                                 <button @click="printInvoice(sale)" class="text-purple-600 hover:text-purple-900">
                                     <i class="fas fa-print"></i>
                                 </button>
-                                <button x-show="sale.status === 'pending'" @click="markSalePaid(sale)" class="text-emerald-600 hover:text-emerald-800 ml-3" :title="t('sales_mark_paid')">
+                                <button x-show="sale.status === 'pending' || sale.status === 'retard'" @click="markSalePaid(sale)" class="text-emerald-600 hover:text-emerald-800 ml-3" :title="t('sales_mark_paid')">
                                     <i class="fas fa-check-circle"></i>
                                 </button>
                                 <button x-show="window.AppConfig?.userRole === 'admin'" @click="openDeleteSale(sale)" class="text-red-600 hover:text-red-800 ml-3" :title="t('sales_delete')">
@@ -479,15 +479,21 @@ function salesManager() {
             setTimeout(() => { this.toasts = this.toasts.filter(x => x.id !== t.id); }, timeout);
         },
     loadData() {
-    apiFetch('/api/sales?limit=100000')
-                .then(data => { if (data.success) { this.sales = (data.sales||[]).map(s=>({
-                    id: s.id,
-                    customer_name: s.customer_name || s.customer || 'Client',
-            sale_date: s.sale_date || s.date,
-                    total: Number(s.total_amount ?? s.total ?? 0),
-                    payment_method: s.payment_method || 'cash',
-                    status: (s.is_credit ? 'pending' : 'paid')
-                })); } })
+            apiFetch('/api/sales?limit=100000')
+                .then(data => { if (data.success) { this.sales = (data.sales||[]).map(s => {
+                    // Compute authoritative status: prefer server 'status', then infer from is_credit.
+                    let statusVal = 'paid';
+                    if (s.status) statusVal = String(s.status).toLowerCase();
+                    else if (s.is_credit) statusVal = 'pending';
+                    return {
+                        id: s.id,
+                        customer_name: s.customer_name || s.customer || 'Client',
+                        sale_date: s.sale_date || s.date,
+                        total: Number(s.total_amount ?? s.total ?? 0),
+                        payment_method: s.payment_method || 'cash',
+                        status: statusVal
+                    };
+                }); } })
                 .catch(err => console.error('Error loading sales:', err));
 
             apiFetch('/api/sales/stats')

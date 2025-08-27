@@ -1,0 +1,26 @@
+{
+  "stats": {
+    "cash_balance": 33100.0,
+    "low_stock_count": 1,
+    "low_stock_items": [
+      {
+        "category": "Outils",
+        "current_stock": 4,
+        "id": 2,
+        "name": "Tournevis cruciforme",
+        "reorder_level": 5,
+        "sku": null
+      }
+    ],
+    "overdue_debts": 1800.0,
+    "overdue_debts_count": 1,
+    "pending_debts": 0.0,
+    "pending_debts_count": 0,
+    "sales_change": 0.0,
+    "today_sales": 25000.0,
+    "today_sales_count": 1,
+    "total_products": 8,
+    "total_revenue": 43500.0
+  },
+  "success": true
+}

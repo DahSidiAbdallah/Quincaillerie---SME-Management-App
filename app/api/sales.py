@@ -65,12 +65,15 @@ def create_sale():
         # Create sale record
         is_credit = data['paid_amount'] < data['total_amount']
         sale_date = data.get('sale_date', date.today().isoformat())
+
+        # Determine initial status: credit sales start as 'pending' (en attente), otherwise 'paid'
+        status = 'pending' if is_credit else 'paid'
         
         cursor.execute('''
             INSERT INTO sales 
             (sale_date, customer_name, customer_phone, total_amount, paid_amount, 
-             payment_method, is_credit, credit_due_date, notes, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             payment_method, is_credit, credit_due_date, status, notes, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             sale_date,
             data.get('customer_name', ''),
@@ -80,6 +83,7 @@ def create_sale():
             data.get('payment_method', 'cash'),
             is_credit,
             data.get('credit_due_date') if is_credit else None,
+            status,
             data.get('notes', ''),
             session['user_id']
         ))
