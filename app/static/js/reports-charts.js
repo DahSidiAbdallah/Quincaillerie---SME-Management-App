@@ -112,7 +112,7 @@
 
         try {
             // dashboard analytics
-            const da = await apiFetch(`/api/reports/dashboard-analytics${q}`).catch(()=>null);
+            const da = await apiFetch(`/api/reports/dashboard-analytics${q}`).catch((err)=>{ console.error('dashboard-analytics load error', err); return null; });
             if (da?.analytics) {
                 const prod = da.analytics.product_performance || [];
                 const cat = da.analytics.category_distribution || [];
@@ -146,7 +146,7 @@
             }
 
             // profit analysis
-            const pa = await apiFetch(`/api/reports/profit-analysis${q}`).catch(()=>null);
+            const pa = await apiFetch(`/api/reports/profit-analysis${q}`).catch((err)=>{ console.error('profit-analysis load error', err); return null; });
             if (pa?.profit_by_period && manager.profitChart) {
                 const labels = pa.profit_by_period.map(p=>p.period);
                 const profits = pa.profit_by_period.map(p=>p.profit || 0);
@@ -157,7 +157,7 @@
             }
 
             // customer analysis
-            const ca = await apiFetch(`/api/reports/customer-analysis${q}`).catch(()=>null);
+            const ca = await apiFetch(`/api/reports/customer-analysis${q}`).catch((err)=>{ console.error('customer-analysis load error', err); return null; });
             if (ca?.customers && manager.customerChart) {
                 const top = (ca.customers || []).slice(0,10);
                 const labels = top.map(c=>c.name||c.id);

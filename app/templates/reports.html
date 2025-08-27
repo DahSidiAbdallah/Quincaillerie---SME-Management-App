@@ -442,10 +442,26 @@
         // Lightweight reports manager for Alpine x-data
         return {
             activeReport: 'sales',
-            filters: { period: 'today', start_date: '', end_date: '' },
+            // default to month so the reports show meaningful data on first load
+            filters: { period: 'month', start_date: '', end_date: '' },
             isLoading: false,
             hasSalesData: false,
             reportData: { sales: {}, inventory: {}, financial: {} },
+            // live state for activities and AI; initialize to avoid Alpine expression errors
+            activities: [],
+            ai: {
+                summary: '',
+                summaryError: false,
+                forecastSummary: '',
+                forecastDays: 7,
+                forecastError: false,
+                restockSuggestions: [],
+                priceSuggestions: [],
+                showRestock: false,
+                showPrice: false,
+                restockError: false,
+                priceError: false
+            },
             salesChart: null,
             productChart: null,
             categoryChart: null,
@@ -470,9 +486,10 @@
                 const tab = params.get('tab');
                 if (tab) this.activeReport = tab;
 
-                const now = new Date();
-                if (!this.filters.start_date) this.filters.start_date = now.toISOString().split('T')[0];
-                if (!this.filters.end_date) this.filters.end_date = now.toISOString().split('T')[0];
+                // Initialize start/end from the chosen period so we don't default to a single empty 'today' range
+                const dr = this.getDateRangeParams();
+                if (!this.filters.start_date) this.filters.start_date = dr.startDate;
+                if (!this.filters.end_date) this.filters.end_date = dr.endDate; // keep simple state for custom inputs
 
                 // Load initial data
                 this.loadReportData().then(async () => { 
@@ -482,6 +499,13 @@
                     }
                     // in case ReportsCharts wasn't available, attempt to call existing initCharts if present
                     if (!window.ReportsCharts && typeof this.initCharts === 'function') await this.initCharts();
+                    // If the page opened directly on Activities or AI tab, load their data immediately
+                    if (this.activeReport === 'activities') {
+                        try { await this.loadActivities(); } catch(e){ console.error('initial loadActivities failed', e); }
+                    }
+                    if (this.activeReport === 'ai_insights') {
+                        try { await this.loadAI(); } catch(e){ console.error('initial loadAI failed', e); }
+                    }
                 });
             },
 
@@ -489,6 +513,13 @@
                 this.activeReport = type;
                 this.loadReportData().then(async ()=>{
                     if (window.ReportsCharts && typeof window.ReportsCharts.scheduleUpdateReportsCharts === 'function') await window.ReportsCharts.scheduleUpdateReportsCharts(this);
+                    // load activities or AI insights when their tab is activated so they populate immediately
+                    if (type === 'activities') {
+                        try { await this.loadActivities(); } catch(e){ console.error('setActiveReport loadActivities failed', e); }
+                    }
+                    if (type === 'ai_insights') {
+                        try { await this.loadAI(); } catch(e){ console.error('setActiveReport loadAI failed', e); }
+                    }
                 });
             },
 
@@ -521,11 +552,11 @@
                 }
 
                 if (this.activeReport === 'inventory') {
-                    tasks.push(apiFetch('/api/inventory/stats').then(d=>{ if (d?.success) this.reportData.inventory = { total_products: Number(d.stats.total||0), low_stock: Number(d.stats.low_stock||0), out_of_stock: Number(d.stats.out_of_stock||0), stock_value: Number(d.stats.inventory_value||d.stats.total_value||0) }; }).catch(()=>{}));
+                    tasks.push(apiFetch('/api/inventory/stats').then(d=>{ if (d?.success) this.reportData.inventory = { total_products: Number(d.stats.total||0), low_stock: Number(d.stats.low_stock||0), out_of_stock: Number(d.stats.out_of_stock||0), stock_value: Number(d.stats.inventory_value||d.stats.total_value||0) }; }).catch((err)=>{ console.error('inventory stats load error', err); }));
                 }
 
                 if (this.activeReport === 'financial') {
-                    tasks.push(apiFetch('/api/finance/financial-summary').then(d=>{ if (d?.success) this.reportData.financial = d.financial_summary || {}; }).catch(()=>{}));
+                    tasks.push(apiFetch('/api/finance/financial-summary').then(d=>{ if (d?.success) this.reportData.financial = d.financial_summary || {}; }).catch((err)=>{ console.error('financial summary load error', err); }));
                 }
 
                 return Promise.all(tasks).finally(()=>{ this.isLoading = false; });
@@ -556,7 +587,7 @@
                 try {
                     const dr = this.getDateRangeParams();
                     const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}&limit=100`;
-                    const data = await apiFetch('/api/dashboard/activities' + q).catch(()=>null);
+                    const data = await apiFetch('/api/dashboard/activities' + q).catch((err)=>{ console.error('dashboard activities load error', err); return null; });
                     if (data?.success) this.activities = data.activities || [];
                     else this.activities = [];
                 } catch (e) { console.error('loadActivities error', e); this.activities = []; }
@@ -566,23 +597,60 @@
                 try {
                     const dr = this.getDateRangeParams();
                     const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}`;
-                    // forecast
-                    const f = await apiFetch('/api/ai/sales-forecast' + q).catch(()=>null);
-                    if (f?.success && f.forecast) { this.ai.forecastSummary = f.forecast.summary || ''; this.ai.forecastDays = f.forecast.days || 7; } else { this.ai.forecastSummary = ''; }
-                    // summary
-                    const s = await apiFetch('/api/ai/summary-assistant' + q).catch(()=>null);
-                    if (s?.success) { this.ai.summary = s.summary?.text || ''; } else { this.ai.summary = this.ai.summary || ''; }
-                    // suggestions
+
+                    // Forecast: accept either `forecastDays` or legacy `days` field and prefer the model-provided summary string
+                    try {
+                        const f = await apiFetch('/api/ai/sales-forecast' + q).catch((err)=>{ console.error('ai sales-forecast load error', err); return null; });
+                        if (f?.success && f.forecast) {
+                            this.ai.forecastSummary = f.forecast.summary || '';
+                            this.ai.forecastDays = f.forecast.forecastDays || f.forecast.days || 7;
+                            this.ai.forecastError = false;
+                        } else {
+                            this.ai.forecastSummary = '';
+                            this.ai.forecastDays = this.ai.forecastDays || 7;
+                            this.ai.forecastError = true;
+                        }
+                    } catch (err) {
+                        console.error('Error fetching ai sales-forecast', err);
+                        this.ai.forecastSummary = '';
+                        this.ai.forecastDays = this.ai.forecastDays || 7;
+                        this.ai.forecastError = true;
+                    }
+
+                    // Natural language summary assistant
+                    try {
+                        const s = await apiFetch('/api/ai/summary-assistant' + q).catch((err)=>{ console.error('ai summary-assistant load error', err); return null; });
+                        if (s?.success && s.summary) {
+                            // API returns { summary: { text: '...' } }
+                            this.ai.summary = s.summary.text || '';
+                            this.ai.summaryError = false;
+                        } else {
+                            // leave previous summary if present, else empty
+                            this.ai.summary = this.ai.summary || '';
+                            this.ai.summaryError = true;
+                        }
+                    } catch (err) {
+                        console.error('Error fetching ai summary-assistant', err);
+                        this.ai.summary = this.ai.summary || '';
+                        this.ai.summaryError = true;
+                    }
+
+                    // suggestions (restock / price)
                     await this.loadRestockSuggestions();
                     await this.loadPriceSuggestions();
-                } catch (e) { console.error('loadAI error', e); this.ai.summaryError = true; }
+
+                } catch (e) {
+                    console.error('loadAI error', e);
+                    this.ai.summaryError = true;
+                    this.ai.forecastError = true;
+                }
             },
 
             async loadRestockSuggestions() {
                 try {
                     const dr = this.getDateRangeParams();
                     const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}`;
-                    const d = await apiFetch('/api/ai/restock-suggestions' + q).catch(()=>null);
+                    const d = await apiFetch('/api/ai/restock-suggestions' + q).catch((err)=>{ console.error('ai restock-suggestions load error', err); return null; });
                     if (d?.success) { this.ai.restockSuggestions = d.suggestions || []; this.ai.restockError = false; }
                     else { this.ai.restockSuggestions = []; this.ai.restockError = true; }
                 } catch (e) { console.error('restock suggestions error', e); this.ai.restockError = true; }
@@ -592,7 +660,7 @@
                 try {
                     const dr = this.getDateRangeParams();
                     const q = `?start_date=${encodeURIComponent(dr.startDate)}&end_date=${encodeURIComponent(dr.endDate)}`;
-                    const d = await apiFetch('/api/ai/price-suggestions' + q).catch(()=>null);
+                    const d = await apiFetch('/api/ai/price-suggestions' + q).catch((err)=>{ console.error('ai price-suggestions load error', err); return null; });
                     if (d?.success) { this.ai.priceSuggestions = d.suggestions || []; this.ai.priceError = false; }
                     else { this.ai.priceSuggestions = []; this.ai.priceError = true; }
                 } catch (e) { console.error('price suggestions error', e); this.ai.priceError = true; }
