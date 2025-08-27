@@ -172,6 +172,35 @@
             install();
         })();
     </script>
+
+    <script>
+        // Ask SW to prefetch small resources after the app becomes idle
+        window.addEventListener('load', function() {
+            try {
+                // wait a moment to avoid delaying first paint
+                setTimeout(function() {
+                    if (typeof requestSWPrefetch === 'function') requestSWPrefetch();
+                }, 1200);
+            } catch (e) {}
+        });
+
+        // Ensure Chart canvases resize properly within responsive containers
+        window.addEventListener('resize', function() {
+            try {
+                if (window.__chartLifecycle && window.__chartLifecycle.byId) {
+                    Object.keys(window.__chartLifecycle.byId).forEach(function(id) {
+                        try {
+                            var meta = window.__chartLifecycle.byId[id];
+                            var canvas = meta && meta.canvas;
+                            if (canvas && canvas._chartInstance && typeof canvas._chartInstance.resize === 'function') {
+                                canvas._chartInstance.resize();
+                            }
+                        } catch (e) {}
+                    });
+                }
+            } catch (e) {}
+        });
+    </script>
     
     <!-- Alpine.js for reactive components -->
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -316,25 +345,45 @@
             .no-print { display: none !important; }
         }
 
-        /* PWA install button */
+        /* PWA install button (respect safe area on iOS and larger touch targets) */
         .install-button {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+            right: 16px;
             z-index: 1000;
-            padding: 10px 15px;
+            padding: 12px 16px;
             background-color: #1f2937;
             color: white;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
             display: flex;
             align-items: center;
-            gap: 8px;
-            transition: all 0.3s ease;
+            gap: 10px;
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
         }
-        .install-button:hover {
+        .install-button:hover, .install-button:active {
             background-color: #374151;
             transform: translateY(-2px);
+        }
+
+        /* Chart container helper for responsive canvases */
+        .chart-container {
+            width: 100% !important;
+            max-width: 100%;
+            overflow: hidden;
+        }
+        .chart-container canvas {
+            width: 100% !important;
+            height: auto !important;
+            display: block;
+        }
+
+        /* Larger touch targets for action buttons on small screens */
+        @media (max-width: 768px) {
+            .btn, button, .rounded-md { padding: 12px 16px; font-size: 1rem; }
+            .nav-action { padding: 10px 12px; }
         }
     </style>
     

@@ -1,49 +1,27 @@
 // Service Worker for Quincaillerie Management App
-const CACHE_NAME = 'quincaillerie-v1.1.0'; // Updated version
+const CACHE_NAME = 'quincaillerie-v1.2.0'; // bump version for improved caching
 const OFFLINE_URL = '/offline.html';
 
-// Resources to cache for offline functionality
-const STATIC_CACHE_URLS = [
+// Minimal set of URLs to pre-cache - keep this small to speed install on slow networks
+const PRECACHE_URLS = [
     '/',
     '/static/manifest.json',
     '/offline.html',
     '/static/js/common.js',
-    '/static/js/pwa-installer.js',
-    '/static/js/offline-handler.js',
-    '/static/icon-72x72.png',
-    '/static/icon-96x96.png',
-    '/static/icon-128x128.png',
-    '/static/icon-144x144.png',
-    '/static/icon-152x152.png',
-    '/static/icon-192x192.png',
-    '/static/icon-384x384.png',
-    '/static/icon-512x512.png',
-    '/static/apple-touch-icon.png',
-    '/static/splash/splash-640x1136.png',
-    '/static/splash/splash-750x1334.png',
-    '/static/splash/splash-1242x2208.png',
-    '/static/splash/splash-1125x2436.png',
-    // Tailwind CSS (CDN)
-    'https://cdn.tailwindcss.com',
-    // Alpine.js (CDN)
-    'https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js',
-    // Chart.js (CDN)
-    'https://cdn.jsdelivr.net/npm/chart.js',
-    // Core application routes
-    '/dashboard',
-    '/inventory',
-    '/sales',
-    '/finance',
-    '/reports',
-    '/login',
-    // API endpoints for offline data
-    '/api/dashboard/stats',
-    '/api/inventory/products',
-    '/api/sales/recent',
-    '/api/finance/summary',
-    '/api/customers',
-    '/api/customers/list'
+    '/static/js/offline-handler.js'
 ];
+
+// Prefetch list: small set of API or small assets to warm cache after activation
+const PREFETCH_URLS = [
+    '/api/dashboard/stats',
+    '/api/inventory/products?limit=20',
+    '/static/icon-192x192.png'
+];
+
+// Runtime caches
+const RUNTIME_CACHE = 'quincaillerie-runtime-v1';
+const IMAGE_CACHE = 'quincaillerie-images-v1';
+const FONT_CACHE = 'quincaillerie-fonts-v1';
 
 // API endpoints that should be cached for offline access
 const API_CACHE_PATTERNS = [
@@ -57,20 +35,14 @@ const API_CACHE_PATTERNS = [
 // Install event - cache static resources
 self.addEventListener('install', event => {
     console.log('Service Worker: Installing...');
-    
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                console.log('Service Worker: Caching static files');
-                return cache.addAll(STATIC_CACHE_URLS);
+                console.log('Service Worker: Precaching core files');
+                return cache.addAll(PRECACHE_URLS);
             })
-            .then(() => {
-                console.log('Service Worker: Static files cached successfully');
-                return self.skipWaiting();
-            })
-            .catch(error => {
-                console.error('Service Worker: Error caching static files:', error);
-            })
+            .then(() => self.skipWaiting())
+            .catch(error => console.error('Service Worker: Precaching failed', error))
     );
 });
 
@@ -92,6 +64,8 @@ self.addEventListener('activate', event => {
             })
             .then(() => {
                 console.log('Service Worker: Activated successfully');
+                // warm a few small resources in the background
+                event.waitUntil(prefetchResources());
                 return self.clients.claim();
             })
     );
@@ -158,6 +132,20 @@ async function handleNavigationRequest(request) {
             status: 503,
             headers: { 'Content-Type': 'text/html' }
         });
+    }
+}
+
+// Trim cache helper - keep n entries (simple LRU approx using cache.keys())
+async function trimCache(cacheName, maxItems) {
+    try {
+        const cache = await caches.open(cacheName);
+        const keys = await cache.keys();
+        if (keys.length <= maxItems) return;
+        for (let i = 0; i < keys.length - maxItems; i++) {
+            await cache.delete(keys[i]);
+        }
+    } catch (e) {
+        console.warn('Service Worker: trimCache error', e);
     }
 }
 
@@ -364,6 +352,26 @@ function isStaticResource(request) {
            url.hostname === 'cdn.jsdelivr.net';
 }
 
+// Prefetch small resources to warm runtime cache
+async function prefetchResources() {
+    try {
+        const cache = await caches.open(RUNTIME_CACHE);
+        for (const u of PREFETCH_URLS) {
+            try {
+                const res = await fetch(u, { cache: 'no-store' });
+                if (res && res.ok) await cache.put(u, res.clone());
+            } catch (e) {
+                // ignore individual failures
+            }
+        }
+        // Trim image cache if it's too large
+        await trimCache(IMAGE_CACHE, 60);
+        await trimCache(FONT_CACHE, 20);
+    } catch (e) {
+        console.warn('Service Worker: prefetchResources failed', e);
+    }
+}
+
 // Background sync event
 self.addEventListener('sync', event => {
     console.log('Service Worker: Background sync triggered:', event.tag);
@@ -506,6 +514,11 @@ self.addEventListener('message', event => {
             getCacheSize().then(size => {
                 event.ports[0].postMessage({ size });
             });
+            break;
+
+        case 'PREFETCH':
+            // Trigger prefetching of small resources to warm runtime cache
+            prefetchResources();
             break;
             
         default:

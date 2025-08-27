@@ -13,122 +13,101 @@ document.addEventListener('DOMContentLoaded', () => {
     checkInstallationSupport();
 });
 
-// Service worker registration
+// Service worker registration (idempotent)
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-            .then(registration => {
+    (async function registerSW() {
+        try {
+            const existing = await navigator.serviceWorker.getRegistration('/sw.js');
+            if (existing) {
+                console.log('Service Worker already registered');
+            } else {
+                const registration = await navigator.serviceWorker.register('/sw.js');
                 console.log('Service Worker registered with scope:', registration.scope);
-                
+
                 // Register for background sync if available
                 if ('SyncManager' in window) {
                     navigator.serviceWorker.ready.then(registration => {
-                        // Register sync when user goes online
                         window.addEventListener('online', () => {
                             registration.sync.register('sync-queued-requests')
-                                .catch(error => {
-                                    console.error('Background sync registration error:', error);
-                                });
+                                .catch(error => console.error('Background sync registration error:', error));
                         });
-                        
-                        // Try to register periodic sync if supported
+
                         if ('periodicSync' in registration) {
-                            navigator.permissions.query({
-                                name: 'periodic-background-sync',
-                            }).then(status => {
-                                if (status.state === 'granted') {
-                                    registration.periodicSync.register('daily-sync', {
-                                        minInterval: 24 * 60 * 60 * 1000, // One day
-                                    }).then(() => {
-                                        console.log('Periodic background sync registered');
-                                    }).catch(error => {
-                                        console.error('Periodic background sync registration error:', error);
-                                    });
-                                }
-                            });
+                            navigator.permissions.query({ name: 'periodic-background-sync' })
+                                .then(status => {
+                                    if (status.state === 'granted') {
+                                        registration.periodicSync.register('daily-sync', { minInterval: 24 * 60 * 60 * 1000 })
+                                            .then(() => console.log('Periodic background sync registered'))
+                                            .catch(err => console.error('Periodic background sync registration error:', err));
+                                    }
+                                }).catch(() => {});
                         }
-                    });
+                    }).catch(() => {});
                 }
-                
-                // Check for updates
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    console.log('Service Worker update found!');
-                    
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            // New version available
-                            showUpdateNotification();
-                        }
-                    });
-                });
-            })
-            .catch(error => {
-                console.error('Service Worker registration failed:', error);
-            });
-            
-        // Listen for controller change
+            }
+        } catch (error) {
+            console.error('Service Worker registration failed:', error);
+        }
+
+        // Listen for controller change once
         navigator.serviceWorker.addEventListener('controllerchange', () => {
             console.log('Service Worker controller changed - page will reload');
             window.location.reload();
         });
-        
+
         // Listen for messages from service worker
         navigator.serviceWorker.addEventListener('message', event => {
-            const data = event.data;
-            
+            const data = event && event.data ? event.data : {};
             switch (data.type) {
                 case 'SYNC_COMPLETED':
                     showSyncNotification(data.syncedCount, data.failedCount);
-                    // Refresh data in the UI if applicable
-                    if (typeof refreshAppData === 'function') {
-                        refreshAppData();
-                    }
+                    if (typeof refreshAppData === 'function') refreshAppData();
                     break;
-                    
+
                 case 'PROCESS_PENDING_OPERATIONS':
-                    // Call the offline handler to process pending operations
                     if (window.offlineData && window.offlineData.processPendingOperations) {
                         window.offlineData.processPendingOperations()
                             .then(result => {
                                 if (result.processed > 0) {
                                     showSyncNotification(result.processed, result.failed);
-                                    // Refresh data in the UI if applicable
-                                    if (typeof refreshAppData === 'function') {
-                                        refreshAppData();
-                                    }
+                                    if (typeof refreshAppData === 'function') refreshAppData();
                                 }
                             })
                             .catch(err => console.error('Error processing pending operations:', err));
                     }
                     break;
-                
+
                 case 'AUTH_REQUIRED':
-                    // Redirect to login page if authentication is required
                     showToast('Veuillez vous connecter pour synchroniser les données', 'warning', 5000);
-                    // Wait a moment before redirecting to allow the user to see the message
-                    setTimeout(() => {
-                        window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
-                    }, 2000);
+                    setTimeout(() => { window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname); }, 1500);
                     break;
-                    
+
                 case 'CACHE_UPDATED':
                     console.log('Cache updated:', data);
                     break;
-                    
+
                 case 'OFFLINE_STATUS':
                     updateOfflineStatus(data.isOffline);
                     break;
-                    
+
                 case 'UPDATE_AVAILABLE':
                     showUpdateNotification();
                     break;
-                    
+
                 default:
                     console.log('Unknown message from Service Worker:', data.type, data);
             }
         });
-    });
+    })();
+}
+
+// Allow main thread to ask SW to prefetch resources
+function requestSWPrefetch() {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistration('/sw.js').then(reg => {
+        if (!reg || !reg.active) return;
+        try { reg.active.postMessage({ type: 'PREFETCH' }); } catch (e) {}
+    }).catch(() => {});
 }
 
 // App installation
