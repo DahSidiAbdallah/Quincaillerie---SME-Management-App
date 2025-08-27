@@ -249,7 +249,23 @@
                     <button @click="loadActivities()" class="text-sm text-blue-600 hover:text-blue-800">Rafraîchir</button>
                 </div>
                 <div class="space-y-3">
-                    <template x-for="(act, idx) in activities" :key="act.id ?? idx">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center space-x-2">
+                            <label for="activity-filter-select" class="text-sm text-gray-700">Filtrer:</label>
+                            <select id="activity-filter-select" x-model="activityFilter" @change="applyActivityFilter()" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                                <option value="all">Tous</option>
+                                <option value="structured">Structurés (avec lien)</option>
+                                <option value="unstructured">Non structurés (à vérifier)</option>
+                            </select>
+                            <label for="min-score-input" class="text-sm text-gray-700 ml-3">Score min</label>
+                            <input id="min-score-input" type="number" x-model.number="minCandidateScore" min="0" max="100" step="0.1" @change="applyActivityFilter()" class="w-20 border border-gray-300 rounded px-2 py-1 text-sm">
+                        </div>
+                        <div>
+                            <button @click="findMatchesForAll()" class="text-sm text-blue-600 hover:text-blue-800 mr-3">Chercher correspondances (heuristique)</button>
+                            <button @click="bulkPrepopulateMatches()" class="text-sm text-green-600 hover:text-green-800">Associer automatiquement (pré-remplissage heuristique)</button>
+                        </div>
+                    </div>
+                    <template x-for="(act, idx) in filteredActivities" :key="act.id ?? idx">
                         <div class="flex items-start space-x-3 p-3 rounded border border-gray-100">
                             <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center"
                                  :class="{
@@ -262,8 +278,30 @@
                                 <span class="text-xs font-semibold" x-text="act.type.substring(0,1).toUpperCase()"></span>
                             </div>
                             <div class="flex-1">
-                                <p class="text-sm text-gray-900"><span class="font-medium" x-text="act.title"></span> - <span x-text="act.description"></span></p>
+                                <p class="text-sm text-gray-900">
+                                    <span class="font-medium" x-text="act.title"></span>
+                                    -
+                                    <template x-if="act.table_affected === 'sales' && act.record_id">
+                                        <a :href="`/sales/${act.record_id}`" class="text-blue-600 hover:underline" x-text="act.description" :aria-label="`Voir la vente ${act.record_id}`"></a>
+                                    </template>
+                                    <template x-if="!(act.table_affected === 'sales' && act.record_id)">
+                                        <span x-text="act.description"></span>
+                                    </template>
+                                </p>
                                 <p class="text-xs text-gray-500" x-text="`${act.time_ago} par ${act.user}`"></p>
+                                <div class="mt-2" x-show="!act.table_affected || !act.record_id">
+                                    <button @click="findMatches(act)" class="text-xs text-gray-600 underline mr-2">Trouver correspondances</button>
+                                </div>
+                                <div class="mt-2" x-show="act._matches && act._matches.length">
+                                    <div class="text-xs text-gray-700">Correspondances proposées:</div>
+                                    <template x-for="m in act._matches" :key="m.id">
+                                        <div class="flex items-center space-x-2 mt-1">
+                                            <div class="text-xs text-gray-600">#<span x-text="m.id"></span> - <span x-text="m.customer_name"></span> (<span x-text="m.total_amount"></span>)</div>
+                                            <div class="text-xs text-gray-500 ml-2">Score: <span x-text="m.score"></span></div>
+                                            <button @click="confirmMatch(act, m)" class="text-xs text-green-600 underline">Associer</button>
+                                        </div>
+                                    </template>
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -590,8 +628,12 @@
                     const data = await apiFetch('/api/dashboard/activities' + q).catch((err)=>{ console.error('dashboard activities load error', err); return null; });
                     if (data?.success) this.activities = data.activities || [];
                     else this.activities = [];
+                    // Ensure the filtered view is populated after loading
+                    try { this.applyActivityFilter(); } catch(e) { console.error('applyActivityFilter failed', e); }
                 } catch (e) { console.error('loadActivities error', e); this.activities = []; }
             },
+
+            minCandidateScore: 50,
 
             async loadAI() {
                 try {
@@ -706,6 +748,77 @@
             exportToExcel(){ this.exportWithFilters(); },
             exportToPDF(){ window.print(); },
             scheduleReport(){ if (typeof window.showNotification === 'function') window.showNotification('Programmation du rapport...', 'info'); }
+            ,
+            // Activity filtering and matching helpers
+            activityFilter: 'all',
+            filteredActivities: [],
+            applyActivityFilter() {
+                if (!this.activities) { this.filteredActivities = []; return; }
+                const minScore = Number(this.minCandidateScore || 0);
+                if (this.activityFilter === 'all') this.filteredActivities = this.activities;
+                else if (this.activityFilter === 'structured') this.filteredActivities = this.activities.filter(a => a.table_affected && a.record_id);
+                else if (this.activityFilter === 'unstructured') this.filteredActivities = this.activities.filter(a => {
+                    if (a.table_affected && a.record_id) return false;
+                    // if matches exist, respect min score
+                    if (a._matches && a._matches.length) {
+                        return a._matches.some(m => (m.score || 0) >= minScore);
+                    }
+                    return true;
+                });
+            },
+
+            async findMatches(act) {
+                try {
+                    const resp = await apiFetch(`/api/dashboard/activities/matches?id=${act.id}`);
+                    if (resp?.success) {
+                        act._matches = resp.candidates || [];
+                        act._parsed = resp.parsed || {};
+                    } else {
+                        act._matches = [];
+                    }
+                } catch (e) { console.error('findMatches error', e); act._matches = []; }
+            },
+
+            async findMatchesForAll() {
+                try {
+                    for (const act of (this.activities || [])) {
+                        if (!act.table_affected || !act.record_id) await this.findMatches(act);
+                    }
+                } catch (e) { console.error('findMatchesForAll error', e); }
+            },
+
+            async bulkPrepopulateMatches() {
+                // Call server endpoint to run heuristics for unstructured activities and pre-fill meta/_matches locally
+                try {
+                    const resp = await apiFetch('/api/dashboard/activities/bulk-match', { method: 'POST' });
+                    if (resp?.success && resp.results) {
+                        // Merge results into local activities
+                        const map = {};
+                        for (const r of resp.results) map[r.activity_id] = r.candidates || [];
+                        for (const act of (this.activities || [])) {
+                            if (!act.table_affected || !act.record_id) {
+                                const cand = map[act.id];
+                                if (cand) act._matches = cand;
+                            }
+                        }
+                        this.applyActivityFilter();
+                    }
+                } catch (e) { console.error('bulkPrepopulateMatches error', e); }
+            },
+
+            async confirmMatch(act, candidate) {
+                try {
+                    const body = JSON.stringify({ activity_id: act.id, table_affected: 'sales', record_id: candidate.id });
+                    const resp = await apiFetch('/api/dashboard/activities/confirm-match', { method: 'POST', headers: {'Content-Type':'application/json'}, body });
+                    if (resp?.success) {
+                        // Update the activity locally
+                        act.table_affected = 'sales';
+                        act.record_id = candidate.id;
+                        act._matches = [];
+                        this.applyActivityFilter();
+                    }
+                } catch (e) { console.error('confirmMatch error', e); }
+            }
         };
     }
         

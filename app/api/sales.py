@@ -162,8 +162,8 @@ def create_sale():
         db_manager.log_user_action(
             session['user_id'],
             'create_sale',
-            # Use current currency from settings for human-readable log
-            (lambda cur: f'Vente créée: {data["total_amount"]} {cur} à {data.get("customer_name", "Client")}')( (db_manager.get_app_settings().get('currency') or 'MRU') ),
+            # Include sale id in the human-readable log and current currency
+            (lambda cur: f'Vente créée #{sale_id}: {data["total_amount"]} {cur} à {data.get("customer_name", "Client")}')( (db_manager.get_app_settings().get('currency') or 'MRU') ),
         )
         
         # Add to sync queue
@@ -184,6 +184,14 @@ def create_sale():
     except Exception as e:
         logger.error(f"Error creating sale: {e}")
         return jsonify({'success': False, 'message': 'Erreur lors de la création de la vente'}), 500
+
+
+@sales_bp.route('/create', methods=['POST'])
+def create_sale_alias():
+    """Alias endpoint to support clients that POST to /api/sales/create (offline sync compatibility).
+    Delegates to the main create_sale handler so behavior and logging remain identical.
+    """
+    return create_sale()
 
 @sales_bp.route('/sales', methods=['GET'])
 def get_sales():
@@ -588,7 +596,7 @@ def delete_sale(sale_id):
             db_manager.log_user_action(
                 session['user_id'],
                 'delete_sale',
-                f'Suppression vente #{sale_id}'
+                f'Suppression vente #{sale_id} par utilisateur #{session.get("user_id")}'
             )
             try:
                 db_manager.add_to_sync_queue('sales', sale_id, 'delete', {})

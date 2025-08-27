@@ -618,32 +618,40 @@ class DatabaseManager:
         cursor = conn.cursor()
 
         try:
-            def fetch(col_name: str):
-                try:
-                    cursor.execute(
-                        f'''
-                        SELECT 
-                            a.id, a.action_type, a.description, a.{col_name} AS created_at,
-                            u.username
-                        FROM user_activity_log a
-                        JOIN users u ON a.user_id = u.id
-                        ORDER BY a.{col_name} DESC
-                        LIMIT ?
-                        ''',
-                        (limit,),
-                    )
-                    return cursor.fetchall()
-                except Exception:
-                    return []
+            # Inspect available columns to pick a safe timestamp for ordering
+            cursor.execute("PRAGMA table_info(user_activity_log)")
+            cols = [c[1] for c in cursor.fetchall()]
 
-            rows = fetch('action_time')
-            if not rows:
-                rows = fetch('created_at')
+            # Preferential timestamp columns
+            preferred = None
+            for name in ('action_time', 'created_at', 'created_at_timestamp', 'timestamp'):
+                if name in cols:
+                    preferred = name
+                    break
+
+            if preferred:
+                select_time = f"a.{preferred} AS created_at"
+                order_by = f"a.{preferred} DESC"
+            else:
+                # Fall back to id ordering when no timestamp is available
+                select_time = 'a.id AS created_at'
+                order_by = 'a.id DESC'
+
+            query = f'''
+                SELECT a.id, a.action_type, a.description, {select_time}, u.username
+                FROM user_activity_log a
+                JOIN users u ON a.user_id = u.id
+                ORDER BY {order_by}
+                LIMIT ?
+            '''
+
+            cursor.execute(query, (limit,))
+            rows = cursor.fetchall()
 
             activities = []
             for row in rows:
                 activity = dict(row)
-                # Format date
+                # Format date safe if present
                 if 'created_at' in activity and activity['created_at']:
                     try:
                         action_time = datetime.fromisoformat(str(activity['created_at']).replace('Z', '+00:00'))
@@ -1368,16 +1376,19 @@ class DatabaseManager:
                 daily_values.append(daily_data.get(date, 0))
             
             # Weekly sales data (for longer trends)
+            # SQLite does not reliably support the '-4 weeks' modifier in all builds,
+            # so compute the start date in Python (28 days) and pass it as a parameter.
+            start_4w = (end_date - timedelta(days=28)).strftime('%Y-%m-%d')
             cursor.execute('''
                 SELECT 
                     strftime('%Y-%W', sale_date) as week,
                     SUM(total_amount) as total
                 FROM sales
-                WHERE sale_date >= date(?, '-4 weeks')
+                WHERE DATE(sale_date) >= DATE(?)
                 AND is_deleted = 0
                 GROUP BY week
                 ORDER BY week
-            ''', (end_date.strftime('%Y-%m-%d'),))
+            ''', (start_4w,))
             
             weekly_data = {}
             for row in cursor.fetchall():

@@ -234,3 +234,4 @@ netifaces==0.11.0  # Network interface information
 
 # System information
 psutil==5.9.5  # System and process utilities
+rapidfuzz==2.13.7

@@ -444,9 +444,24 @@
         }
         
         if (data && data.success) {
-            if (period === 'weekly' && data.weekly) {
-                newLabels = data.weekly.labels;
-                newData = data.weekly.data;
+            // User-request: show the "Ventes des 7 Derniers Jours" series when the
+            // Hebdomadaire tab is selected. Prefer the daily 7-day series for the
+            // weekly view (visual parity with "Journalier"). Fall back to the
+            // precomputed weekly aggregation only if daily data isn't available.
+            if (period === 'weekly') {
+                // For the weekly tab, prefer the precomputed weekly aggregation
+                // (last 4 weeks) so the chart shows sales amount per week.
+                if (data.weekly) {
+                    newLabels = data.weekly.labels;
+                    newData = data.weekly.data;
+                } else if (data.daily) {
+                    // Fallback: if weekly not available, fall back to daily 7-day series
+                    newLabels = data.daily.labels;
+                    newData = data.daily.data;
+                } else {
+                    newLabels = ['Sem 1', 'Sem 2', 'Sem 3', 'Sem 4'];
+                    newData = [0, 0, 0, 0];
+                }
             } else if (data.daily) {
                 newLabels = data.daily.labels;
                 newData = data.daily.data;
