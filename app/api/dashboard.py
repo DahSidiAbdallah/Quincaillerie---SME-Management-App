@@ -33,6 +33,14 @@ def get_dashboard_stats():
         pending_debts = db_manager.get_pending_debts()
         pending_debts_count = pending_debts.get('count', 0)
         pending_debts_amount = pending_debts.get('total', 0) or 0
+        # Get overdue debts (explicitly overdue by due_date < today)
+        try:
+            overdue_debts = db_manager.get_overdue_debts()
+            overdue_debts_count = int(overdue_debts.get('count', 0))
+            overdue_debts_amount = float(overdue_debts.get('total', 0) or 0)
+        except Exception:
+            overdue_debts_count = 0
+            overdue_debts_amount = 0.0
 
         # Get total revenue
         total_revenue = db_manager.get_total_revenue() or 0
@@ -88,6 +96,8 @@ def get_dashboard_stats():
                 'total_revenue': float(total_revenue or 0),
                 'pending_debts_count': int(pending_debts_count or 0),
                 'pending_debts': float(pending_debts_amount or 0),
+                'overdue_debts_count': overdue_debts_count,
+                'overdue_debts': overdue_debts_amount,
                 'cash_balance': float(cash_balance or 0),
                 'sales_change': round(float(sales_change), 1)
             }

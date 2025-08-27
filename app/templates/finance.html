@@ -20,7 +20,6 @@
         <button @click="setTab('receivables')"
             :class="activeTab==='receivables' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'"
             class="px-3 py-1 rounded-md" data-i18n="finance_tab_receivables">Créances en retard</button>
-        <span x-show="activeTab==='receivables'" class="ml-2 text-xs text-gray-500">(filtré: en retard)</span>
         </div>
         </div>
 
@@ -564,7 +563,8 @@
             },
             chartsInitialized: false,
             chartError: null,
-            activeTab: 'summary',
+            // Default to receivables so overdue items show immediately
+            activeTab: 'receivables',
             summary: {
                 total_revenue: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
                 total_expenses: '0,00 ' + (window.AppConfig?.currentCurrency || 'MRU'),
@@ -725,6 +725,11 @@
                 if (tab === 'receivables') {
                     this.activeTab = 'receivables';
                     this.loadReceivables(filter === 'overdue');
+                } else {
+                    // If no tab specified and the default UI is receivables, load overdue receivables
+                    if (!tab && this.activeTab === 'receivables') {
+                        this.loadReceivables(true);
+                    }
                 }
 
                 // Bootstrap data in parallel

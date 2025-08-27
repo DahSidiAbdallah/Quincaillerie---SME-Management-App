@@ -1053,6 +1053,37 @@ class DatabaseManager:
         finally:
             conn.close()
 
+    def get_overdue_debts(self):
+        """Get overdue client debts (remaining_amount > 0 and due_date before today).
+        Uses client_debts table when available. Returns dict with 'total' and 'count'.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            # Defensive: ensure column names exist; most installs have due_date and remaining_amount
+            cursor.execute("PRAGMA table_info(client_debts)")
+            cols = [c[1] for c in cursor.fetchall()]
+            if 'due_date' in cols and 'remaining_amount' in cols:
+                cursor.execute('''
+                    SELECT SUM(remaining_amount) as total, COUNT(*) as count
+                    FROM client_debts
+                    WHERE remaining_amount > 0 AND due_date IS NOT NULL AND DATE(due_date) < DATE('now')
+                ''')
+            else:
+                # Fallback: if client_debts table or columns missing, return zeros
+                return {'total': 0, 'count': 0}
+
+            result = cursor.fetchone()
+            return {
+                'total': float(result['total']) if result and result['total'] else 0,
+                'count': result['count'] if result else 0
+            }
+        except Exception as e:
+            logger.error(f"Error fetching overdue debts: {e}")
+            return {'total': 0, 'count': 0}
+        finally:
+            conn.close()
+
     def add_to_sync_queue(self, table_name, record_id, operation, data=None):
         """Add operation to a local sync queue (offline-first). Safe no-op if table doesn't exist.
         Table schema (created on first use):
