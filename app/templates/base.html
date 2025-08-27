@@ -12,6 +12,17 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Quincaillerie">
     <meta name="description" content="Application de gestion pour quincailleries et PME - Inventaire, ventes, finances">
+    <!-- Preconnect to common CDNs to reduce DNS/TCP/SSL latency -->
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+
+    <!-- Preload critical images and local chart script to improve LCP and startup time -->
+    <link rel="preload" as="image" href="{{ url_for('static', filename='images/product-placeholder.svg') }}" importance="high">
+    <link rel="preload" as="image" href="{{ url_for('static', filename='apple-touch-icon.png') }}" importance="high">
+    <link rel="preload" as="script" href="{{ url_for('static', filename='js/chart.umd.min.js') }}">
+    <!-- Preload remote icon stylesheet (crossorigin) so browser can start fetching earlier -->
+    <link rel="preload" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
     
     <!-- iOS icons and splash screens -->
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
@@ -34,17 +45,21 @@
                 if (ev && ev.filename && ev.filename.indexOf('/static/js/chart.umd.min.js') !== -1) {
                     console.warn('[ChartMonitor] Captured error originating in Chart.js', ev.message, ev.error && ev.error.stack);
                 }
-            } catch (e) {}
+            } catch (e) { console.warn('[ChartMonitor] error handling window.onerror', e); }
         });
         window.addEventListener('unhandledrejection', function(ev) {
-            try {
-                var reason = ev && ev.reason && ev.reason.stack ? ev.reason.stack : (ev && ev.reason ? ev.reason : null);
-                if (reason && String(reason).indexOf('chart.umd.min.js') !== -1) {
-                    console.warn('[ChartMonitor] Unhandled rejection related to Chart.js', reason);
-                }
-            } catch (e) {}
+                try {
+                    var reason = null;
+                    if (ev && ev.reason) {
+                        if (ev.reason.stack) reason = ev.reason.stack;
+                        else reason = ev.reason;
+                    }
+                    if (reason && String(reason).indexOf('chart.umd.min.js') !== -1) {
+                        console.warn('[ChartMonitor] Unhandled rejection related to Chart.js', reason);
+                    }
+                } catch (e) { console.warn('[ChartMonitor] error handling unhandledrejection', e); }
         });
-        // Install detailed Chart lifecycle instrumentation to capture creation/destroy/draw stacks
+        // Install lightweight Chart lifecycle instrumentation to avoid crashing when canvas missing
         (function installChartLifecycleInstrumentation() {
             function install() {
                 try {
@@ -52,116 +67,50 @@
                         setTimeout(install, 50);
                         return;
                     }
-                    // Guard update and notifyPlugins to avoid internal calls when canvas is missing
-                    try {
-                        if (Chart.prototype && typeof Chart.prototype.update === 'function') {
-                            var origUpdate = Chart.prototype.update;
-                            Chart.prototype.update = function() {
-                                try {
-                                    if (!this || !this.canvas || typeof this.canvas.getContext !== 'function') {
-                                        console.warn('[ChartGuard] Skipping update: canvas missing', { id: this && this.id, canvas: this && this.canvas });
-                                        return;
-                                    }
-                                } catch (e) { console.warn('[ChartGuard] error checking canvas before update', e); return; }
-                                return origUpdate.apply(this, arguments);
-                            };
-                        }
-                    } catch (e) {}
-                    try {
-                        if (Chart.prototype && typeof Chart.prototype.notifyPlugins === 'function') {
-                            var origNotify = Chart.prototype.notifyPlugins;
-                            Chart.prototype.notifyPlugins = function(hook, args) {
-                                try {
-                                    if (!this || !this.canvas || typeof this.canvas.getContext !== 'function') {
-                                        console.warn('[ChartGuard] Skipping notifyPlugins:', hook, { id: this && this.id, canvas: this && this.canvas });
-                                        return;
-                                    }
-                                } catch (e) { console.warn('[ChartGuard] error checking canvas before notifyPlugins', e); return; }
-                                return origNotify.apply(this, arguments);
-                            };
-                        }
-                    } catch (e) {}
+                    window.__chartLifecycle = window.__chartLifecycle || { byId: {}, byCanvas: new Map() };
 
-                    // global map to track chart metadata
-                    window.__chartLifecycle = window.__chartLifecycle || { byId: {}, byCanvas: new WeakMap() };
-
-                    // Wrap constructor: log creation stack and canvas
-                    var OrigChart = Chart;
-                    function WrappedChart(ctxOrNode, config) {
-                        // capture stack
-                        var stack = (new Error()).stack;
-                        try {
-                            var canvasEl = null;
+                    if (Chart.prototype && typeof Chart.prototype.update === 'function') {
+                        var origUpdate = Chart.prototype.update;
+                        Chart.prototype.update = function() {
                             try {
-                                // If first arg is a canvas or context, normalize
-                                if (ctxOrNode && ctxOrNode.canvas) canvasEl = ctxOrNode.canvas;
-                                else if (ctxOrNode && ctxOrNode.getContext) canvasEl = ctxOrNode;
-                            } catch (e) {}
-                            var instance = new OrigChart(ctxOrNode, config);
-                            try {
-                                var id = instance && instance.id;
-                                window.__chartLifecycle.byId[id] = { createdAt: Date.now(), stack: stack, canvas: canvasEl };
-                                if (canvasEl) window.__chartLifecycle.byCanvas.set(canvasEl, { id: id, createdAt: Date.now(), stack: stack });
-                                console.log('[ChartLifecycle] created', { id: id, canvas: canvasEl, stack: stack && stack.split('\n')[1] });
-                            } catch (e) {
-                                console.warn('[ChartLifecycle] created (failed to record metadata)', e);
-                            }
-                            return instance;
-                        } catch (err) {
-                            console.error('[ChartLifecycle] Error creating Chart instance', err, { stack: stack });
-                            throw err;
-                        }
+                                if (!this || !this.canvas || typeof this.canvas.getContext !== 'function') {
+                                    console.warn('[ChartGuard] Skipping update: canvas missing', { id: this && this.id });
+                                    return;
+                                }
+                            } catch (e) { console.warn('[ChartGuard] error checking canvas before update', e); return; }
+                            return origUpdate.apply(this, arguments);
+                        };
                     }
-                    // copy static properties
-                    Object.keys(OrigChart).forEach(function(k){ try { WrappedChart[k] = OrigChart[k]; } catch(e){} });
-                    WrappedChart.prototype = OrigChart.prototype;
-                    Chart = WrappedChart; // reassign global Chart
 
-                    // Wrap destroy to log
+                    if (Chart.prototype && typeof Chart.prototype.draw === 'function') {
+                        var origDraw = Chart.prototype.draw;
+                        Chart.prototype.draw = function() {
+                            try {
+                                if (!this || !this.canvas || typeof this.canvas.getContext !== 'function') {
+                                    console.warn('[ChartGuard] Skipping draw: canvas or getContext missing', { id: this && this.id });
+                                    return;
+                                }
+                            } catch (e) { console.warn('[ChartGuard] error checking canvas before draw', e); return; }
+                            try {
+                                return origDraw.apply(this, arguments);
+                            } catch (err) {
+                                console.error('[ChartGuard] Error during Chart.draw()', err, { id: this && this.id });
+                                throw err;
+                            }
+                        };
+                    }
+
                     if (Chart.prototype && typeof Chart.prototype.destroy === 'function') {
                         var origDestroy = Chart.prototype.destroy;
                         Chart.prototype.destroy = function() {
                             try {
                                 var id = this && this.id;
                                 var canvas = this && this.canvas;
-                                console.log('[ChartLifecycle] destroy called', { id: id, canvas: canvas });
                                 if (canvas && window.__chartLifecycle && window.__chartLifecycle.byCanvas) {
-                                    try { window.__chartLifecycle.byCanvas.set(canvas, { destroyedAt: Date.now(), id: id }); } catch(e){}
+                                    try { window.__chartLifecycle.byCanvas.set(canvas, { destroyedAt: Date.now(), id: id }); } catch(e) { console.warn('[ChartLifecycle] failed to mark canvas destroyed', e); }
                                 }
-                            } catch (e) {}
+                            } catch (e) { console.warn('[ChartLifecycle] error during destroy wrapper', e); }
                             return origDestroy.apply(this, arguments);
-                        };
-                    }
-
-                    // Wrap draw to guard and log more context when skipping
-                    if (Chart.prototype && typeof Chart.prototype.draw === 'function') {
-                        var origDraw = Chart.prototype.draw;
-                        Chart.prototype.draw = function() {
-                            try {
-                                var canvas = this && this.canvas;
-                                var ok = canvas && typeof canvas.getContext === 'function';
-                                if (!ok) {
-                                    var id = this && this.id;
-                                    var meta = (canvas && window.__chartLifecycle && window.__chartLifecycle.byCanvas && window.__chartLifecycle.byCanvas.get(canvas)) || null;
-                                    console.warn('[ChartDrawGuard] Skipping draw: canvas or getContext missing', { id: id, canvas: canvas, meta: meta });
-                                    // also try to surface a creation stack for this id if available
-                                    try {
-                                        if (id && window.__chartLifecycle && window.__chartLifecycle.byId && window.__chartLifecycle.byId[id]) {
-                                            console.warn('[ChartDrawGuard] creation stack:', window.__chartLifecycle.byId[id].stack);
-                                        }
-                                    } catch (e) {}
-                                    return;
-                                }
-                            } catch (e) {
-                                console.warn('[ChartDrawGuard] error while checking canvas before draw', e);
-                                return;
-                            }
-                            try {
-                                return origDraw.apply(this, arguments);
-                            } catch (err) {
-                                console.error('[ChartDrawGuard] Error during Chart.draw()', err, { id: this && this.id, canvas: this && this.canvas });
-                                throw err;
-                            }
                         };
                     }
 
@@ -181,7 +130,7 @@
                 setTimeout(function() {
                     if (typeof requestSWPrefetch === 'function') requestSWPrefetch();
                 }, 1200);
-            } catch (e) {}
+            } catch (e) { console.warn('[base.html] suppressed error', e); }
         });
 
         // Ensure Chart canvases resize properly within responsive containers
@@ -195,10 +144,10 @@
                             if (canvas && canvas._chartInstance && typeof canvas._chartInstance.resize === 'function') {
                                 canvas._chartInstance.resize();
                             }
-                        } catch (e) {}
+                        } catch (e) { console.warn('[base.html] suppressed error', e); }
                     });
                 }
-            } catch (e) {}
+            } catch (e) { console.warn('[base.html] suppressed error', e); }
         });
     </script>
     
@@ -398,7 +347,7 @@
                     document.documentElement.setAttribute('data-theme', 'dark');
                     document.documentElement.classList.add('dark');
                 }
-            } catch (e) { /* no-op */ }
+            } catch (e) { console.warn('[base.html] suppressed error', e); }
         })();
         // Apply stored language ASAP to avoid flash of wrong language
         (function() {
@@ -408,7 +357,7 @@
                     document.documentElement.setAttribute('lang', lang);
                     document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
                 }
-            } catch (e) {}
+            } catch (e) { console.warn('[base.html] suppressed error', e); }
         })();
     </script>
 </head>
@@ -797,12 +746,11 @@
         // Global notification system
         window.showNotification = function(message, type = 'info') {
             const notification = document.createElement('div');
-            notification.className = `fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 ${
-                type === 'success' ? 'bg-green-500 text-white' :
-                type === 'error' ? 'bg-red-500 text-white' :
-                type === 'warning' ? 'bg-yellow-500 text-black' :
-                'bg-blue-500 text-white'
-            }`;
+            var notifClass = 'bg-blue-500 text-white';
+            if (type === 'success') notifClass = 'bg-green-500 text-white';
+            else if (type === 'error') notifClass = 'bg-red-500 text-white';
+            else if (type === 'warning') notifClass = 'bg-yellow-500 text-black';
+            notification.className = 'fixed top-4 right-4 p-4 rounded-md shadow-lg z-50 ' + notifClass;
             notification.textContent = message;
             
             document.body.appendChild(notification);
@@ -868,9 +816,7 @@
                 const intPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
                 const fracPart = parts[1];
                 return `${intPart},${fracPart} ${window.AppConfig.currentCurrency || 'MRU'}`;
-            } catch (e) {
-                return `0,00 ${window.AppConfig.currentCurrency || 'MRU'}`;
-            }
+            } catch (e) { console.warn('[base.html] formatCurrency error', e); return `0,00 ${window.AppConfig.currentCurrency || 'MRU'}`; }
         }
     </script>
     
