@@ -99,7 +99,7 @@ babel==2.14.0
 ujson==5.11.0
 
 # Math & Statistics
-matplotlib==3.9.0
+matplotlib==3.9.4
 seaborn==0.13.2
 
 # Memory optimization
