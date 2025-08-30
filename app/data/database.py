@@ -187,6 +187,18 @@ class DatabaseManager:
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_name ON products(name)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_sku ON products(sku)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_products_barcode ON products(barcode)')
+            # Ensure historic DBs have image_url column (migration)
+            cursor.execute('PRAGMA table_info(products)')
+            prod_cols = [col[1] for col in cursor.fetchall()]
+            if 'image_url' not in prod_cols:
+                cursor.execute("ALTER TABLE products ADD COLUMN image_url TEXT")
+                # If older DBs used image_path, migrate values
+                if 'image_path' in prod_cols:
+                    try:
+                        cursor.execute("UPDATE products SET image_url = image_path WHERE image_path IS NOT NULL")
+                    except Exception:
+                        # If update fails for any reason, continue without blocking init
+                        pass
             
             # Stock Movements table (for inventory tracking)
             cursor.execute('''

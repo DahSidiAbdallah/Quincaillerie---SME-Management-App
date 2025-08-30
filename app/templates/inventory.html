@@ -339,6 +339,7 @@
                     <thead class="bg-gray-50">
                         <tr>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                            <th scope="col" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Produit</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Code/Référence</th>
                             <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Catégorie</th>
@@ -1306,14 +1307,26 @@
         const stockClass = getStockClass(stockLevel);
         
         const isAdmin = window.AppConfig?.userRole === 'admin';
+        
+        // Get image path or use placeholder
+        const imagePath = product.image_path || '/static/images/product-placeholder.svg';
+        
         div.innerHTML = `
             <div class="flex items-start justify-between mb-3">
                 <div class="flex-1">
-                    <h3 class="text-lg font-semibold text-gray-900 mb-1">${product.name}</h3>
-                    <p class="text-xs text-gray-500 mb-1">${product.code || 'N/A'}</p>
-                    <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full mt-1 mb-2">
-                        ${product.category}
-                    </span>
+                    <!-- Product Image Thumbnail -->
+                    <div class="flex items-center mb-3">
+                    <img src="${imagePath}" alt="${product.name}" 
+                        class="w-16 h-16 object-contain rounded-lg mr-3 border border-gray-200 cursor-pointer bg-white p-1"
+                             onclick="openProductImageModal(${product.id}, '${product.name.replace(/'/g, "\\'")}')">
+                        <div class="flex-1">
+                            <h3 class="text-lg font-semibold text-gray-900 mb-1">${product.name}</h3>
+                            <p class="text-xs text-gray-500 mb-1">${product.code || 'N/A'}</p>
+                            <span class="inline-block bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full mt-1 mb-2">
+                                ${product.category}
+                            </span>
+                        </div>
+                    </div>
                 </div>
                 <div class="flex flex-col space-y-2 items-end">
                     <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-800" title="Modifier">
@@ -1368,7 +1381,7 @@
                     console.error(`Error creating row for product at index ${idx}:`, rowErr, product);
                     // Insert a minimal fallback row so the table remains usable
                     const fallback = document.createElement('tr');
-                    fallback.innerHTML = `<td class="px-6 py-4" colspan="7">Erreur lors de l\'affichage de ce produit</td>`;
+                    fallback.innerHTML = `<td class="px-6 py-4" colspan="8">Erreur lors de l\'affichage de ce produit</td>`;
                     tbody.appendChild(fallback);
                 }
             });
@@ -1400,6 +1413,17 @@
                 <td class="px-4 py-4">
                     <div class="product-selection hidden" style="display:none;">
                         <input type="checkbox" class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" onchange="selectProduct(${product.id}, this.checked)">
+                    </div>
+                </td>
+                <td class="px-4 py-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0 h-12 w-12">
+                       <img class="h-12 w-12 rounded-lg object-contain cursor-pointer border border-gray-200 hover:border-gray-300 transition-colors bg-white p-1"
+                           src="${product.image_path || '/static/images/product-placeholder.svg'}"
+                                 alt="${product.name}"
+                                 onclick="openProductImageModal(${product.id}, '${product.name.replace(/'/g, "\\'")}')"
+                                 onerror="this.src='/static/images/product-placeholder.svg'">
+                        </div>
                     </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
@@ -1444,7 +1468,7 @@
         } catch (err) {
             console.error('createProductRow error for product:', product, err);
             // Return a minimal fallback row
-            tr.innerHTML = `<td class="px-6 py-4" colspan="7">Erreur lors de l\'affichage du produit</td>`;
+            tr.innerHTML = `<td class="px-6 py-4" colspan="8">Erreur lors de l\'affichage du produit</td>`;
         }
 
         return tr;
