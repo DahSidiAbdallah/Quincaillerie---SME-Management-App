@@ -105,8 +105,6 @@ seaborn==0.13.2
 # Memory optimization
 pympler==1.0.1
 
-# Network utilities
-netifaces==0.11.0
 
 # System information
 psutil==5.9.8
