@@ -42,7 +42,7 @@ python-magic==0.4.27
 chardet==5.2.0
 
 # Email Support
-Flask-Mail==0.9.1
+Flask-Mail==0.10.0
 
 # Background Tasks
 celery==5.3.6
